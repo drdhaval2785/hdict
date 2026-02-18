@@ -3,7 +3,6 @@ import 'package:hdict/core/database/database_helper.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
 import 'package:hdict/features/settings/dictionary_management_screen.dart';
 import 'package:flutter_html/flutter_html.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:hdict/features/about/about_screen.dart';
 import 'package:hdict/features/help/manual_screen.dart';
 import 'package:hdict/features/settings/settings_screen.dart';
@@ -628,41 +627,41 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ],
             ),
             const Divider(height: 32),
-            Html(
-              data: settings.isTapOnMeaningEnabled
-                  ? HtmlLookupWrapper.wrapWords(def['definition'])
-                  : def['definition'],
-              style: {
-                "body": Style(
-                  fontSize: FontSize(settings.fontSize),
-                  lineHeight: LineHeight.em(1.5),
-                  margin: Margins.zero,
-                  padding: HtmlPaddings.zero,
-                  color: settings.textColor,
-                  fontFamily: settings.fontFamily,
-                ),
-              },
-              onLinkTap: (url, attributes, element) async {
-                if (url != null) {
-                  if (url.startsWith('look_up:')) {
-                    _showWordPopup(url.substring(8));
-                  } else {
-                    final uri = Uri.tryParse(url);
-                    if (uri != null && await canLaunchUrl(uri)) {
-                      await launchUrl(uri);
+            SelectionArea(
+              child: Html(
+                data: settings.isTapOnMeaningEnabled
+                    ? HtmlLookupWrapper.wrapWords(def['definition'])
+                    : def['definition'],
+                style: {
+                  "body": Style(
+                    fontSize: FontSize(settings.fontSize),
+                    lineHeight: LineHeight.em(1.5),
+                    margin: Margins.zero,
+                    padding: HtmlPaddings.zero,
+                    color: settings.textColor,
+                    fontFamily: settings.fontFamily,
+                  ),
+                  "a": Style(
+                    color: settings.textColor,
+                    textDecoration: TextDecoration.none,
+                  ),
+                },
+                onLinkTap: (url, attributes, element) {
+                  debugPrint("Link tapped: $url");
+                  if (url != null && url.startsWith('look_up:')) {
+                    final encodedWord = url.substring(8);
+                    try {
+                      final word = encodedWord.contains('%')
+                          ? Uri.decodeComponent(encodedWord)
+                          : encodedWord;
+                      _showWordPopup(word);
+                    } catch (e) {
+                      debugPrint("Error decoding: $e");
+                      _showWordPopup(encodedWord);
                     }
                   }
-                }
-              },
-              onAnchorTap: (url, attributes, element) {
-                if (url != null && url.startsWith('look_up:')) {
-                  _showWordPopup(url.substring(8));
-                }
-              },
-              onCssParseError: (css, error) {
-                debugPrint(error.toString());
-                return null;
-              },
+                },
+              ),
             ),
             if (settings.isTapOnMeaningEnabled)
               const Padding(
@@ -694,6 +693,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      useSafeArea: true,
+      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width),
       builder: (context) => Container(
         width: double.infinity,
         height: MediaQuery.of(context).size.height * 0.5,

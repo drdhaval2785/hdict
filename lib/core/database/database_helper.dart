@@ -343,8 +343,17 @@ class DatabaseHelper {
         ''';
         return await db.rawQuery(sql, [query, limit]);
       } else if (fuzzy) {
+        // Try exact match first
+        final List<Map<String, dynamic>> exactMatch = await db.query(
+          'word_index',
+          columns: ['word', 'dict_id', 'offset', 'length'],
+          where: 'word = ?',
+          whereArgs: [query],
+          limit: limit,
+        );
+        if (exactMatch.isNotEmpty) return exactMatch;
+
         // Simple fuzzy: prefix match OR contains match
-        // Use UNION to avoid "MATCH in requested context" error with OR
         final String sql = '''
           SELECT word, dict_id, offset, length FROM word_index WHERE word MATCH ?
           UNION
@@ -353,6 +362,16 @@ class DatabaseHelper {
         ''';
         return await db.rawQuery(sql, ['$query*', '%$query%', limit]);
       } else {
+        // Try exact match first
+        final List<Map<String, dynamic>> exactMatch = await db.query(
+          'word_index',
+          columns: ['word', 'dict_id', 'offset', 'length'],
+          where: 'word = ?',
+          whereArgs: [query],
+          limit: limit,
+        );
+        if (exactMatch.isNotEmpty) return exactMatch;
+
         final String sql = '''
           SELECT word, dict_id, offset, length 
           FROM word_index 

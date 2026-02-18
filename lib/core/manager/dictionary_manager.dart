@@ -221,16 +221,114 @@ class DictionaryManager {
         throw Exception('Extraction completed but no .ifo file path received.');
       }
 
-      // --- Main Isolate continues with parsing and DB insertion (50% to 100%) ---
+      // Delegate the rest of the work to the shared logic
+      yield* _processDictionaryFiles(ifoPathFromIsolate, dictsDir);
+    } catch (e, s) {
+      debugPrint('Error in importDictionaryStream: $e\n$s');
+      yield ImportProgress(
+        message: 'Error: $e',
+        value: 0.0,
+        error: e.toString(),
+        isCompleted: true,
+      );
+    } finally {
+      receivePort.close();
+      // Clean up temp extraction directory (permanent files already copied)
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
+    }
+  }
+
+  /// Imports a dictionary from a set of individual files.
+  Stream<ImportProgress> importMultipleFilesStream(
+    List<String> filePaths,
+  ) async* {
+    yield ImportProgress(message: 'Preparing files...', value: 0.0);
+
+    final appDocDir = await getApplicationDocumentsDirectory();
+    final dictsDir = Directory(p.join(appDocDir.path, 'dictionaries'));
+    if (!await dictsDir.exists()) {
+      await dictsDir.create(recursive: true);
+    }
+
+    // Group files by base name and find the .ifo file
+    String? ifoPath;
+    for (final path in filePaths) {
+      if (path.endsWith('.ifo')) {
+        ifoPath = path;
+        break;
+      }
+    }
+
+    if (ifoPath == null) {
+      yield ImportProgress(
+        message: 'Error: No .ifo file selected',
+        value: 0.0,
+        error: 'No .ifo file selected',
+        isCompleted: true,
+      );
+      return;
+    }
+
+    // Verify other required files (.idx, .dict/.dict.dz) exist with the same base name
+    final basePath = p.withoutExtension(ifoPath);
+    final idxPossiblePaths = ['$basePath.idx'];
+    final dictPossiblePaths = ['$basePath.dict', '$basePath.dict.dz'];
+
+    bool hasIdx = false;
+    for (final pth in idxPossiblePaths) {
+      if (await File(pth).exists()) {
+        hasIdx = true;
+        break;
+      }
+    }
+    if (!hasIdx) {
+      yield ImportProgress(
+        message: 'Error: Matching .idx file not found',
+        value: 0.0,
+        error: 'Matching .idx file not found',
+        isCompleted: true,
+      );
+      return;
+    }
+
+    bool hasDict = false;
+    for (final pth in dictPossiblePaths) {
+      if (await File(pth).exists()) {
+        hasDict = true;
+        break;
+      }
+    }
+    if (!hasDict) {
+      yield ImportProgress(
+        message: 'Error: Matching .dict/.dict.dz file not found',
+        value: 0.0,
+        error: 'Matching .dict/.dict.dz file not found',
+        isCompleted: true,
+      );
+      return;
+    }
+
+    // Delegate to the shared processing logic
+    yield* _processDictionaryFiles(ifoPath, dictsDir);
+  }
+
+  /// Shared logic for processing extracted or selected dictionary files.
+  Stream<ImportProgress> _processDictionaryFiles(
+    String ifoPath,
+    Directory dictsDir,
+  ) async* {
+    try {
       yield ImportProgress(
         message: 'Processing dictionary files...',
         value: 0.55,
       );
 
-      final basePath = p.withoutExtension(ifoPathFromIsolate);
+      final basePath = p.withoutExtension(ifoPath);
       final idxPath = '$basePath.idx';
-      // support both .dict and .dict.dz
       String dictPath = '$basePath.dict';
+
       if (!await File(dictPath).exists()) {
         if (await File('$basePath.dict.dz').exists()) {
           dictPath = '$basePath.dict.dz';
@@ -239,11 +337,10 @@ class DictionaryManager {
             value: 0.6,
           );
           final dzBytes = await File(dictPath).readAsBytes();
-
-          // Offload GZIP decompression
           final dictBytes = await compute(_decompressGzip, dzBytes);
 
-          dictPath = '$basePath.dict'; // New path
+          // Write decompressed file in the same directory as .ifo
+          dictPath = '$basePath.dict';
           await File(dictPath).writeAsBytes(dictBytes);
           yield ImportProgress(message: 'Decompression complete.', value: 0.65);
         } else {
@@ -270,47 +367,37 @@ class DictionaryManager {
         value: 0.75,
       );
       final ifoParser = IfoParser();
-      await ifoParser.parse(ifoPathFromIsolate);
+      await ifoParser.parse(ifoPath);
 
-      // 3.5 Move dictionary files to a permanent location
+      // 3.5 Move files to permanent location
       yield ImportProgress(message: 'Saving dictionary files...', value: 0.78);
       final bookName = ifoParser.bookName ?? 'Unknown Dictionary';
-      // Create a sanitized directory name from the book name
       final sanitizedName = bookName
           .replaceAll(RegExp(r'[^a-zA-Z0-9_\-\s]'), '')
           .replaceAll(RegExp(r'\s+'), '_')
           .toLowerCase();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final permanentDirName = '${sanitizedName}_$timestamp';
-      final permanentDir = Directory(p.join(dictsDir.path, permanentDirName));
+      final permanentDir = Directory(
+        p.join(dictsDir.path, '${sanitizedName}_$timestamp'),
+      );
       await permanentDir.create(recursive: true);
 
-      // Move .dict, .idx, .ifo files to permanent location
-      final dictFileName = p.basename(dictPath);
-      final idxFileName = p.basename(idxPath);
-      final ifoFileName = p.basename(ifoPathFromIsolate);
-
-      final permanentDictPath = p.join(permanentDir.path, dictFileName);
-      final permanentIdxPath = p.join(permanentDir.path, idxFileName);
-      final permanentIfoPath = p.join(permanentDir.path, ifoFileName);
+      final permanentDictPath = p.join(permanentDir.path, p.basename(dictPath));
+      final permanentIdxPath = p.join(permanentDir.path, p.basename(idxPath));
+      final permanentIfoPath = p.join(permanentDir.path, p.basename(ifoPath));
 
       await File(dictPath).copy(permanentDictPath);
       await File(idxPath).copy(permanentIdxPath);
-      await File(ifoPathFromIsolate).copy(permanentIfoPath);
+      await File(ifoPath).copy(permanentIfoPath);
 
       String? permanentSynPath;
       if (synPath != null) {
-        final synFileName = p.basename(synPath);
-        permanentSynPath = p.join(permanentDir.path, synFileName);
+        permanentSynPath = p.join(permanentDir.path, p.basename(synPath));
         await File(synPath).copy(permanentSynPath);
       }
 
-      // 4. Insert into DB with the permanent path
-      yield ImportProgress(
-        message: 'Inserting dictionary into database...',
-        value: 0.8,
-      );
-
+      // 4. Insert into DB
+      yield ImportProgress(message: 'Inserting into database...', value: 0.8);
       final dictId = await _dbHelper.insertDictionary(
         bookName,
         permanentDictPath,
@@ -319,7 +406,7 @@ class DictionaryManager {
       // 5. Index Words
       yield ImportProgress(message: 'Indexing words...', value: 0.85);
       final idxParser = IdxParser(ifoParser);
-      final stream = idxParser.parse(idxPath);
+      final stream = idxParser.parse(permanentIdxPath);
 
       List<Map<String, dynamic>> batch = [];
       List<({int offset, int length})> wordOffsets = [];
@@ -341,12 +428,10 @@ class DictionaryManager {
                 (wordCount /
                     (ifoParser.wordCount == 0 ? 100000 : ifoParser.wordCount) *
                     0.05),
-          ); // 85% to 90%
+          );
         }
       }
-      if (batch.isNotEmpty) {
-        await _dbHelper.batchInsertWords(dictId, batch);
-      }
+      if (batch.isNotEmpty) await _dbHelper.batchInsertWords(dictId, batch);
 
       // 6. Index Synonyms
       if (permanentSynPath != null) {
@@ -354,8 +439,6 @@ class DictionaryManager {
         final synParser = SynParser();
         final synStream = synParser.parse(permanentSynPath);
         List<Map<String, dynamic>> synBatch = [];
-        int synCount = 0;
-
         await for (final syn in synStream) {
           final originalIndex = syn['original_word_index'] as int;
           if (originalIndex < wordOffsets.length) {
@@ -365,34 +448,18 @@ class DictionaryManager {
               'offset': originalInfo.offset,
               'length': originalInfo.length,
             });
-            synCount++;
           }
-
           if (synBatch.length >= 5000) {
             await _dbHelper.batchInsertWords(dictId, synBatch);
             synBatch.clear();
-            yield ImportProgress(
-              message: 'Indexing synonyms... ($synCount synonyms)',
-              value:
-                  0.9 +
-                  (synCount /
-                      (ifoParser.synWordCount == 0
-                          ? 100000
-                          : ifoParser.synWordCount) *
-                      0.05),
-            ); // 90% to 95%
           }
         }
-        if (synBatch.isNotEmpty) {
+        if (synBatch.isNotEmpty)
           await _dbHelper.batchInsertWords(dictId, synBatch);
-        }
       }
 
-      // Update word count in dictionaries table
       final finalWordCount = await _dbHelper.getWordCountForDict(dictId);
       await _dbHelper.updateDictionaryWordCount(dictId, finalWordCount);
-
-      // Get sample words for verification
       final sampleWords = await _dbHelper.getSampleWords(dictId);
 
       yield ImportProgress(
@@ -403,19 +470,13 @@ class DictionaryManager {
         sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
       );
     } catch (e, s) {
-      debugPrint('Error in importDictionaryStream: $e\n$s');
+      debugPrint('Error in _processDictionaryFiles: $e\n$s');
       yield ImportProgress(
         message: 'Error: $e',
         value: 0.0,
         error: e.toString(),
         isCompleted: true,
       );
-    } finally {
-      receivePort.close();
-      // Clean up temp extraction directory (permanent files already copied)
-      if (await tempDir.exists()) {
-        await tempDir.delete(recursive: true);
-      }
     }
   }
 
@@ -428,25 +489,12 @@ class DictionaryManager {
   }
 
   Future<void> deleteDictionary(int id) async {
-    // 1. Get dictionary info to find path
     final dicts = await _dbHelper.getDictionaries();
     final dict = dicts.firstWhere((d) => d['id'] == id, orElse: () => {});
-
     if (dict.isNotEmpty) {
-      final path = dict['path'] as String;
-      // The path stored is the .dict path inside a permanent directory.
-      // Delete the entire parent directory which contains .dict, .idx, .ifo.
-      final parentDir = File(path).parent;
-      if (await parentDir.exists()) {
-        try {
-          await parentDir.delete(recursive: true);
-        } catch (e) {
-          debugPrint('Error deleting dictionary directory: $e');
-        }
-      }
+      final parentDir = File(dict['path'] as String).parent;
+      if (await parentDir.exists()) await parentDir.delete(recursive: true);
     }
-
-    // 2. Remove from DB
     await _dbHelper.deleteDictionary(id);
   }
 

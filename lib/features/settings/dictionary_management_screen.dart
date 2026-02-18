@@ -157,18 +157,27 @@ class _DictionaryManagementScreenState
   }
 
   Future<void> _importDictionary() async {
-    // Pick file
+    // Pick file(s)
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['zip', 'tar', 'gz', 'bz2'],
+      allowedExtensions: [
+        'zip',
+        'tar',
+        'gz',
+        'bz2',
+        'ifo',
+        'idx',
+        'dict',
+        'dz',
+        'syn',
+      ],
+      allowMultiple: true,
     );
 
-    if (result != null) {
-      String path = result.files.single.path!;
-
-      // Show progress dialog
+    if (result != null && result.files.isNotEmpty) {
       if (!mounted) return;
 
+      // Show progress dialog
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -196,23 +205,26 @@ class _DictionaryManagementScreenState
       );
 
       try {
-        final stream = _dictionaryManager.importDictionaryStream(path);
+        Stream<ImportProgress> stream;
+
+        // If multiple files were picked, or if it looks like individual dictionary components
+        if (result.files.length > 1 ||
+            result.files.any(
+              (f) => f.extension == 'ifo' || f.extension == 'idx',
+            )) {
+          final paths = result.files.map((f) => f.path!).toList();
+          stream = _dictionaryManager.importMultipleFilesStream(paths);
+        } else {
+          // Single file picked - assume it's an archive
+          stream = _dictionaryManager.importDictionaryStream(
+            result.files.single.path!,
+          );
+        }
+
         await for (final progress in stream) {
-          // Update dialog state?
-          // StatefulBuilder in dialog creates its own context/state, but we can also rely on parent state
-          // and rebuild dialog? No, dialogs are separate routes.
-          // Better approach: Update a ValueNotifier or just simple setState in parent if we render progress in body.
-          // But since I want a dialog, I used StatefulBuilder. But I need to pass the values to it.
-
-          // Actually, simpler approach:
-          // use a ValueNotifier for progress and pass it to the dialog widget.
-
           _progressNotifier.value = progress;
-
-          if (progress.isCompleted) {
-            if (progress.error != null) {
-              throw Exception(progress.error);
-            }
+          if (progress.isCompleted && progress.error != null) {
+            throw Exception(progress.error);
           }
         }
 

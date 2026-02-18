@@ -397,15 +397,42 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
-              child: Html(
-                data: context.read<SettingsProvider>().isTapOnMeaningEnabled
-                    ? HtmlLookupWrapper.wrapWords(currentWord['meaning'])
-                    : currentWord['meaning'],
-                onLinkTap: (url, _, __) {
-                  if (url != null && url.startsWith('look_up:')) {
-                    _showWordPopup(url.substring(8));
-                  }
-                },
+              child: SelectionArea(
+                child: Html(
+                  data: context.read<SettingsProvider>().isTapOnMeaningEnabled
+                      ? HtmlLookupWrapper.wrapWords(currentWord['meaning'])
+                      : currentWord['meaning'],
+                  style: {
+                    "body": Style(
+                      fontSize: FontSize(
+                        context.read<SettingsProvider>().fontSize,
+                      ),
+                      lineHeight: LineHeight.em(1.5),
+                      margin: Margins.zero,
+                      padding: HtmlPaddings.zero,
+                      color: context.read<SettingsProvider>().textColor,
+                      fontFamily: context.read<SettingsProvider>().fontFamily,
+                    ),
+                    "a": Style(
+                      color: context.read<SettingsProvider>().textColor,
+                      textDecoration: TextDecoration.none,
+                    ),
+                  },
+                  onLinkTap: (url, attributes, element) {
+                    debugPrint("FlashCard Link tapped: $url");
+                    if (url != null && url.startsWith('look_up:')) {
+                      final encodedWord = url.substring(8);
+                      try {
+                        final word = encodedWord.contains('%')
+                            ? Uri.decodeComponent(encodedWord)
+                            : encodedWord;
+                        _showWordPopup(word);
+                      } catch (e) {
+                        _showWordPopup(encodedWord);
+                      }
+                    }
+                  },
+                ),
               ),
             ),
           ),
@@ -450,6 +477,8 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      useSafeArea: true,
+      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width),
       builder: (context) => Container(
         width: double.infinity,
         height: MediaQuery.of(context).size.height * 0.5,
@@ -538,26 +567,41 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
               ),
             ),
             const Divider(height: 32),
-            Html(
-              data: settings.isTapOnMeaningEnabled
-                  ? HtmlLookupWrapper.wrapWords(def['definition'])
-                  : def['definition'],
-              style: {
-                "body": Style(
-                  fontSize: FontSize(settings.fontSize),
-                  lineHeight: LineHeight.em(1.5),
-                  margin: Margins.zero,
-                  padding: HtmlPaddings.zero,
-                  color: settings.textColor,
-                  fontFamily: settings.fontFamily,
-                ),
-              },
-              onLinkTap: (url, _, __) {
-                if (url != null && url.startsWith('look_up:')) {
-                  Navigator.pop(context); // Close current popup
-                  _showWordPopup(url.substring(8)); // Open new one
-                }
-              },
+            SelectionArea(
+              child: Html(
+                data: settings.isTapOnMeaningEnabled
+                    ? HtmlLookupWrapper.wrapWords(def['definition'])
+                    : def['definition'],
+                style: {
+                  "body": Style(
+                    fontSize: FontSize(settings.fontSize),
+                    lineHeight: LineHeight.em(1.5),
+                    margin: Margins.zero,
+                    padding: HtmlPaddings.zero,
+                    color: settings.textColor,
+                    fontFamily: settings.fontFamily,
+                  ),
+                  "a": Style(
+                    color: settings.textColor,
+                    textDecoration: TextDecoration.none,
+                  ),
+                },
+                onLinkTap: (url, attributes, element) {
+                  debugPrint("FlashCard Popup Link tapped: $url");
+                  if (url != null && url.startsWith('look_up:')) {
+                    final encodedWord = url.substring(8);
+                    Navigator.pop(this.context);
+                    try {
+                      final word = encodedWord.contains('%')
+                          ? Uri.decodeComponent(encodedWord)
+                          : encodedWord;
+                      _showWordPopup(word);
+                    } catch (e) {
+                      _showWordPopup(encodedWord);
+                    }
+                  }
+                },
+              ),
             ),
           ],
         ),

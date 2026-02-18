@@ -5,6 +5,7 @@ import 'package:hdict/core/parser/ifo_parser.dart';
 import 'package:hdict/core/parser/idx_parser.dart';
 import 'package:hdict/core/parser/syn_parser.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
+import 'package:hdict/core/utils/html_lookup_wrapper.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
@@ -130,6 +131,44 @@ author=Tester
       expect(synonyms[0]['original_word_index'], 0);
       expect(synonyms[1]['word'], 'exam');
       expect(synonyms[1]['original_word_index'], 1);
+    });
+  });
+
+  group('HtmlLookupWrapper Tests', () {
+    test('wrapWords handles Devanagari with marks correctly', () {
+      const input = 'शतपत्त्र कमल';
+      final output = HtmlLookupWrapper.wrapWords(input);
+
+      // शतपत्त्र should be wrapped as one word including marks
+      expect(
+        output,
+        contains(
+          '<a href="look_up:%E0%A4%B6%E0%A4%A4%E0%A4%AA%E0%A4%A4%E0%A5%8D%E0%A4%A4%E0%A5%8D%E0%A4%B0">शतपत्त्र</a>',
+        ),
+      );
+      expect(
+        output,
+        contains('<a href="look_up:%E0%A4%95%E0%A4%AE%E0%A4%B2">कमल</a>'),
+      );
+    });
+
+    test('wrapWords preserves line breaks as <br>', () {
+      const input = 'line1\nline2';
+      final output = HtmlLookupWrapper.wrapWords(input);
+
+      expect(output, contains('line1</a><br>'));
+      expect(output, contains('line2</a>'));
+    });
+
+    test('wrapWords handles URI encoding for special characters', () {
+      const input = 'word#1';
+      final output = HtmlLookupWrapper.wrapWords(input);
+
+      // # is not \p{L}\p{N}\p{M}, so it should be a boundary
+      expect(
+        output,
+        contains('<a href="look_up:word">word</a>#<a href="look_up:1">1</a>'),
+      );
     });
   });
 }
