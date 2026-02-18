@@ -400,7 +400,7 @@ class DictionaryManager {
         value: 1.0,
         isCompleted: true,
         dictId: dictId,
-        sampleWords: sampleWords,
+        sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
       );
     } catch (e, s) {
       debugPrint('Error in importDictionaryStream: $e\n$s');

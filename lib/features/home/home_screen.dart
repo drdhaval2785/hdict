@@ -8,7 +8,9 @@ import 'package:hdict/features/about/about_screen.dart';
 import 'package:hdict/features/help/manual_screen.dart';
 import 'package:hdict/features/settings/settings_screen.dart';
 import 'package:hdict/features/flash_cards/flash_cards_screen.dart';
+import 'package:hdict/core/utils/html_lookup_wrapper.dart';
 import 'package:hdict/features/settings/search_history_screen.dart';
+import 'package:hdict/features/flash_cards/score_history_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:hdict/features/settings/settings_provider.dart';
 import 'dart:async';
@@ -191,6 +193,49 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               onTap: () => Navigator.pop(context),
             ),
             ListTile(
+              leading: const Icon(Icons.history),
+              title: const Text('Search History'),
+              onTap: () async {
+                Navigator.pop(context);
+                final selectedWord = await Navigator.push<String>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SearchHistoryScreen(),
+                  ),
+                );
+                if (selectedWord != null) {
+                  _onWordSelected(selectedWord);
+                  _searchController.text = selectedWord;
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.flash_on),
+              title: const Text('Flash Cards'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const FlashCardsScreen(),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.assessment),
+              title: const Text('Flash Card Scores'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ScoreHistoryScreen(),
+                  ),
+                );
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.library_books),
               title: const Text('Manage Dictionaries'),
               onTap: () {
@@ -214,36 +259,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     builder: (context) => const SettingsScreen(),
                   ),
                 );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.flash_on),
-              title: const Text('Flash Cards'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const FlashCardsScreen(),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.history),
-              title: const Text('Search History'),
-              onTap: () async {
-                Navigator.pop(context);
-                final selectedWord = await Navigator.push<String>(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const SearchHistoryScreen(),
-                  ),
-                );
-                if (selectedWord != null) {
-                  _onWordSelected(selectedWord);
-                  _searchController.text = selectedWord;
-                }
               },
             ),
             ListTile(
@@ -614,7 +629,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
             const Divider(height: 32),
             Html(
-              data: def['definition'],
+              data: settings.isTapOnMeaningEnabled
+                  ? HtmlLookupWrapper.wrapWords(def['definition'])
+                  : def['definition'],
               style: {
                 "body": Style(
                   fontSize: FontSize(settings.fontSize),
@@ -678,6 +695,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
+        width: double.infinity,
         height: MediaQuery.of(context).size.height * 0.5,
         decoration: BoxDecoration(
           color: settings.backgroundColor,

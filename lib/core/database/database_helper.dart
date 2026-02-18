@@ -180,17 +180,21 @@ class DatabaseHelper {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
-  /// Returns a few sample words from a dictionary for verification.
-  Future<List<String>> getSampleWords(int dictId, {int limit = 5}) async {
+  /// Returns a few sample words with metadata from a dictionary for verification/flash cards.
+  Future<List<Map<String, dynamic>>> getSampleWords(
+    int dictId, {
+    int limit = 5,
+  }) async {
     final db = await database;
     final results = await db.query(
       'word_index',
-      columns: ['word'],
+      columns: ['word', 'offset', 'length'],
       where: 'dict_id = ?',
       whereArgs: [dictId],
+      orderBy: 'RANDOM()',
       limit: limit,
     );
-    return results.map((r) => r['word'] as String).toList();
+    return results;
   }
 
   Future<void> updateDictionaryEnabled(int id, bool isEnabled) async {

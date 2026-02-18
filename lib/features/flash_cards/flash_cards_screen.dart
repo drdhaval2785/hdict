@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:hdict/core/database/database_helper.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
+import 'package:hdict/core/utils/html_lookup_wrapper.dart';
+import 'package:hdict/features/flash_cards/score_history_screen.dart';
+import 'package:hdict/features/settings/settings_provider.dart';
 import 'package:flutter_html/flutter_html.dart';
+import 'package:provider/provider.dart';
 import 'dart:math';
 
 class FlashCardsScreen extends StatefulWidget {
@@ -52,15 +56,20 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
       _isLoading = true;
     });
 
-    final List<Map<String, dynamic>> allAvailableWords = [];
+    final List<Map<String, dynamic>> allAvailableWordMetas = [];
     for (var dictId in _selectedDictIds) {
-      final words = await _dbHelper.getSampleWords(dictId, limit: 100);
-      for (var word in words) {
-        allAvailableWords.add({'word': word, 'dict_id': dictId});
+      final metas = await _dbHelper.getSampleWords(dictId, limit: 100);
+      for (var meta in metas) {
+        allAvailableWordMetas.add({
+          'word': meta['word'],
+          'dict_id': dictId,
+          'offset': meta['offset'],
+          'length': meta['length'],
+        });
       }
     }
 
-    if (allAvailableWords.length < 10) {
+    if (allAvailableWordMetas.length < 10) {
       setState(() {
         _isLoading = false;
       });
@@ -75,45 +84,49 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
     }
 
     final random = Random();
-    final List<Map<String, dynamic>> selectedWords = [];
+    final List<Map<String, dynamic>> selectedWordMetas = [];
     final Set<int> usedIndices = {};
 
-    while (selectedWords.length < 10) {
-      int index = random.nextInt(allAvailableWords.length);
+    while (selectedWordMetas.length < 10) {
+      int index = random.nextInt(allAvailableWordMetas.length);
       if (!usedIndices.contains(index)) {
         usedIndices.add(index);
-        final wordData = allAvailableWords[index];
-
-        // Fetch full meaning for later verification
-        final dictResults = await _dbHelper.searchWords(
-          wordData['word'],
-          limit: 1,
-        );
-        if (dictResults.isNotEmpty) {
-          final result = dictResults.first;
-          final dict = await _dbHelper.getDictionaryById(wordData['dict_id']);
-          if (dict != null) {
-            String dictPath = dict['path'];
-            if (dictPath.endsWith('.ifo')) {
-              dictPath = dictPath.replaceAll('.ifo', '.dict');
-            }
-            final reader = DictReader(dictPath);
-            final meaning = await reader.readEntry(
-              result['offset'],
-              result['length'],
-            );
-            selectedWords.add({
-              'word': wordData['word'],
-              'meaning': meaning,
-              'dict_name': dict['name'],
-            });
-          }
-        }
+        selectedWordMetas.add(allAvailableWordMetas[index]);
       }
     }
 
+    // Fetch full meanings in parallel for faster loading
+    final List<Map<String, dynamic>> selectedWords = await Future.wait(
+      selectedWordMetas.map((meta) async {
+        final dict = await _dbHelper.getDictionaryById(meta['dict_id']);
+        if (dict != null) {
+          String dictPath = dict['path'];
+          if (dictPath.endsWith('.ifo')) {
+            dictPath = dictPath.replaceAll('.ifo', '.dict');
+          }
+          final reader = DictReader(dictPath);
+          final meaning = await reader.readEntry(
+            meta['offset'],
+            meta['length'],
+          );
+          return {
+            'word': meta['word'],
+            'meaning': meaning,
+            'dict_name': dict['name'],
+          };
+        }
+        return {};
+      }),
+    );
+
+    // Filter out any potential empty results
+    final filteredWords = selectedWords
+        .where((w) => w.isNotEmpty)
+        .toList()
+        .cast<Map<String, dynamic>>();
+
     setState(() {
-      _quizWords = selectedWords;
+      _quizWords = filteredWords;
       _isQuizStarted = true;
       _currentIndex = 0;
       _score = 0;
@@ -137,7 +150,8 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
   }
 
   Future<void> _finishQuiz() async {
-    await _dbHelper.addFlashCardScore(_score, 10);
+    // We will save to DB after review mode instead of here,
+    // to allow user to change their guess based on the results.
     if (mounted) {
       _showResultsDialog();
     }
@@ -238,6 +252,27 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
             ),
           ),
           Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 24.0,
+              vertical: 8.0,
+            ),
+            child: OutlinedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ScoreHistoryScreen(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.history),
+              label: const Text('View Score History'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 50),
+              ),
+            ),
+          ),
+          Padding(
             padding: const EdgeInsets.all(24.0),
             child: ElevatedButton(
               onPressed: _startQuiz,
@@ -327,10 +362,34 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
                   color: wasCorrect ? Colors.green : Colors.red,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  wasCorrect
-                      ? 'You marked this Correct'
-                      : 'You marked this Incorrect',
+                Expanded(
+                  child: Text(
+                    wasCorrect ? 'Correct Guess' : 'Incorrect Guess',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: wasCorrect ? Colors.green : Colors.red,
+                    ),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _results[_currentIndex] = !wasCorrect;
+                      if (!wasCorrect) {
+                        _score++;
+                      } else {
+                        _score--;
+                      }
+                    });
+                  },
+                  icon: Icon(
+                    wasCorrect ? Icons.undo : Icons.check_circle_outline,
+                    size: 18,
+                  ),
+                  label: Text(
+                    wasCorrect ? 'Mark Incorrect' : 'Mark Correct',
+                    style: const TextStyle(fontSize: 12),
+                  ),
                 ),
               ],
             ),
@@ -338,7 +397,16 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
-              child: Html(data: currentWord['meaning']),
+              child: Html(
+                data: context.read<SettingsProvider>().isTapOnMeaningEnabled
+                    ? HtmlLookupWrapper.wrapWords(currentWord['meaning'])
+                    : currentWord['meaning'],
+                onLinkTap: (url, _, __) {
+                  if (url != null && url.startsWith('look_up:')) {
+                    _showWordPopup(url.substring(8));
+                  }
+                },
+              ),
             ),
           ),
           Padding(
@@ -359,6 +427,8 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
                       if (_currentIndex < 9) {
                         setState(() => _currentIndex++);
                       } else {
+                        // Save score to database at the very end
+                        _dbHelper.addFlashCardScore(_score, 10);
                         setState(() => _isQuizStarted = false);
                       }
                     },
@@ -369,6 +439,128 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showWordPopup(String word) async {
+    final settings = context.read<SettingsProvider>();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        width: double.infinity,
+        height: MediaQuery.of(context).size.height * 0.5,
+        decoration: BoxDecoration(
+          color: settings.backgroundColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: IconButton(
+                icon: const Icon(Icons.keyboard_arrow_down),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+            Expanded(
+              child: FutureBuilder<List<Map<String, dynamic>>>(
+                future: () async {
+                  final results = await _dbHelper.searchWords(word, limit: 1);
+                  if (results.isEmpty) return <Map<String, dynamic>>[];
+                  final result = results.first;
+                  final dict = await _dbHelper.getDictionaryById(
+                    result['dict_id'],
+                  );
+                  if (dict == null) return <Map<String, dynamic>>[];
+
+                  String dictPath = dict['path'];
+                  if (dictPath.endsWith('.ifo')) {
+                    dictPath = dictPath.replaceAll('.ifo', '.dict');
+                  }
+                  final reader = DictReader(dictPath);
+                  final content = await reader.readEntry(
+                    result['offset'],
+                    result['length'],
+                  );
+
+                  return <Map<String, dynamic>>[
+                    {
+                      'word': word,
+                      'dict_name': dict['name'],
+                      'definition': content,
+                    },
+                  ];
+                }(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return const Center(child: Text('No definition found.'));
+                  }
+                  return _buildDefinitionContentInPopup(
+                    Theme.of(context),
+                    snapshot.data!.first,
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDefinitionContentInPopup(
+    ThemeData theme,
+    Map<String, dynamic> def,
+  ) {
+    final settings = context.watch<SettingsProvider>();
+
+    return Container(
+      color: settings.backgroundColor,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              def['word'],
+              style: theme.textTheme.headlineMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: settings.fontColor,
+                fontFamily: settings.fontFamily,
+                fontSize: settings.fontSize + 8,
+              ),
+            ),
+            const Divider(height: 32),
+            Html(
+              data: settings.isTapOnMeaningEnabled
+                  ? HtmlLookupWrapper.wrapWords(def['definition'])
+                  : def['definition'],
+              style: {
+                "body": Style(
+                  fontSize: FontSize(settings.fontSize),
+                  lineHeight: LineHeight.em(1.5),
+                  margin: Margins.zero,
+                  padding: HtmlPaddings.zero,
+                  color: settings.textColor,
+                  fontFamily: settings.fontFamily,
+                ),
+              },
+              onLinkTap: (url, _, __) {
+                if (url != null && url.startsWith('look_up:')) {
+                  Navigator.pop(context); // Close current popup
+                  _showWordPopup(url.substring(8)); // Open new one
+                }
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
