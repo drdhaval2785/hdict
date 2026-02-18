@@ -6,6 +6,11 @@ import 'package:flutter_html/flutter_html.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:hdict/features/about/about_screen.dart';
 import 'package:hdict/features/help/manual_screen.dart';
+import 'package:hdict/features/settings/settings_screen.dart';
+import 'package:hdict/features/flash_cards/flash_cards_screen.dart';
+import 'package:hdict/features/settings/search_history_screen.dart';
+import 'package:provider/provider.dart';
+import 'package:hdict/features/settings/settings_provider.dart';
 import 'dart:async';
 
 /// The main search screen of the hdict app.
@@ -37,6 +42,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Future<void> _onWordSelected(String word) async {
+    // Save to history
+    await _dbHelper.addSearchHistory(word);
+
     setState(() {
       _isLoading = true;
       _selectedWord = word;
@@ -44,8 +52,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     });
 
     try {
+      final settings = context.read<SettingsProvider>();
       // 1. Search for all occurrences of this word in different dictionaries
-      final results = await _dbHelper.searchWords(word);
+      final results = await _dbHelper.searchWords(
+        word,
+        fuzzy: settings.isFuzzySearchEnabled,
+      );
 
       // 2. Fetch definitions for each occurrence
       final Map<int, List<Map<String, dynamic>>> groupedResults = {};
@@ -122,6 +134,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _checkDictionaries();
+    _cleanHistory();
+  }
+
+  Future<void> _cleanHistory() async {
+    final settings = context.read<SettingsProvider>();
+    await _dbHelper.deleteOldSearchHistory(settings.historyRetentionDays);
   }
 
   Future<void> _checkDictionaries() async {
@@ -173,7 +191,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               onTap: () => Navigator.pop(context),
             ),
             ListTile(
-              leading: const Icon(Icons.settings_outlined),
+              leading: const Icon(Icons.library_books),
               title: const Text('Manage Dictionaries'),
               onTap: () {
                 Navigator.pop(context);
@@ -183,6 +201,49 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     builder: (context) => const DictionaryManagementScreen(),
                   ),
                 ).then((_) => _checkDictionaries());
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('Settings'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SettingsScreen(),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.flash_on),
+              title: const Text('Flash Cards'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const FlashCardsScreen(),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.history),
+              title: const Text('Search History'),
+              onTap: () async {
+                Navigator.pop(context);
+                final selectedWord = await Navigator.push<String>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SearchHistoryScreen(),
+                  ),
+                );
+                if (selectedWord != null) {
+                  _onWordSelected(selectedWord);
+                  _searchController.text = selectedWord;
+                }
               },
             ),
             ListTile(
@@ -196,7 +257,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 );
               },
             ),
-            const Spacer(),
             ListTile(
               leading: const Icon(Icons.info_outline),
               title: const Text('About Us'),
@@ -294,7 +354,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             if (textEditingValue.text.isEmpty) {
               return const Iterable<String>.empty();
             }
-            return await _dbHelper.getPrefixSuggestions(textEditingValue.text);
+            final settings = context.read<SettingsProvider>();
+            return await _dbHelper.getPrefixSuggestions(
+              textEditingValue.text,
+              fuzzy: settings.isFuzzySearchEnabled,
+            );
           },
           onSelected: (String selection) {
             _onWordSelected(selection);
@@ -342,9 +406,44 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     itemCount: options.length,
                     itemBuilder: (BuildContext context, int index) {
                       final String option = options.elementAt(index);
-                      return ListTile(
-                        title: Text(option),
-                        onTap: () => onSelected(option),
+                      final settings = context.read<SettingsProvider>();
+
+                      return FutureBuilder<List<Map<String, dynamic>>>(
+                        future: _dbHelper.searchWords(
+                          option,
+                          limit: 1,
+                          fuzzy: false,
+                        ),
+                        builder: (context, snapshot) {
+                          String preview = '';
+                          if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+                            final def =
+                                snapshot.data!.first['definition'] ?? '';
+                            // Strip HTML and get first N lines
+                            preview = def.replaceAll(RegExp(r'<[^>]*>'), '');
+                            final lines = preview.split('\n');
+                            preview = lines
+                                .take(settings.previewLines)
+                                .join(' ')
+                                .trim();
+                            if (preview.length > 100) {
+                              preview = '${preview.substring(0, 97)}...';
+                            }
+                          }
+
+                          return ListTile(
+                            title: Text(option),
+                            subtitle: preview.isNotEmpty
+                                ? Text(
+                                    preview,
+                                    maxLines: settings.previewLines,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodySmall,
+                                  )
+                                : null,
+                            onTap: () => onSelected(option),
+                          );
+                        },
                       );
                     },
                   ),
@@ -449,7 +548,31 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           tabs: _currentDefinitions.map((def) {
             String name = def['dict_name'];
             if (name.length > 13) name = '${name.substring(0, 10)}...';
-            return Tab(text: name);
+            return Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(name),
+                  const SizedBox(width: 4),
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _currentDefinitions.remove(def);
+                        if (_currentDefinitions.isEmpty) {
+                          _selectedWord = null;
+                        } else {
+                          _tabController = TabController(
+                            length: _currentDefinitions.length,
+                            vsync: this,
+                          );
+                        }
+                      });
+                    },
+                    child: const Icon(Icons.close, size: 14),
+                  ),
+                ],
+              ),
+            );
           }).toList(),
         ),
         Expanded(
@@ -465,44 +588,155 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildDefinitionContent(ThemeData theme, Map<String, dynamic> def) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
+    final settings = context.watch<SettingsProvider>();
+
+    return Container(
+      color: settings.backgroundColor,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    def['word'],
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: settings.fontColor,
+                      fontFamily: settings.fontFamily,
+                      fontSize: settings.fontSize + 8,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 32),
+            Html(
+              data: def['definition'],
+              style: {
+                "body": Style(
+                  fontSize: FontSize(settings.fontSize),
+                  lineHeight: LineHeight.em(1.5),
+                  margin: Margins.zero,
+                  padding: HtmlPaddings.zero,
+                  color: settings.textColor,
+                  fontFamily: settings.fontFamily,
+                ),
+              },
+              onLinkTap: (url, attributes, element) async {
+                if (url != null) {
+                  if (url.startsWith('look_up:')) {
+                    _showWordPopup(url.substring(8));
+                  } else {
+                    final uri = Uri.tryParse(url);
+                    if (uri != null && await canLaunchUrl(uri)) {
+                      await launchUrl(uri);
+                    }
+                  }
+                }
+              },
+              onAnchorTap: (url, attributes, element) {
+                if (url != null && url.startsWith('look_up:')) {
+                  _showWordPopup(url.substring(8));
+                }
+              },
+              onCssParseError: (css, error) {
+                debugPrint(error.toString());
+                return null;
+              },
+            ),
+            if (settings.isTapOnMeaningEnabled)
+              const Padding(
+                padding: EdgeInsets.only(top: 24.0),
                 child: Text(
-                  def['word'],
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+                  'Tap on words/links to look them up.',
+                  style: TextStyle(
+                    fontStyle: FontStyle.italic,
+                    color: Colors.grey,
+                    fontSize: 12,
                   ),
                 ),
               ),
-            ],
-          ),
-          const Divider(height: 32),
-          Html(
-            data: def['definition'],
-            style: {
-              "body": Style(
-                fontSize: FontSize(16.0),
-                lineHeight: LineHeight.em(1.5),
-                margin: Margins.zero,
-                padding: HtmlPaddings.zero,
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showWordPopup(String word) async {
+    final settings = context.read<SettingsProvider>();
+    if (!settings.isOpenPopupOnTap) {
+      _onWordSelected(word);
+      _searchController.text = word;
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.5,
+        decoration: BoxDecoration(
+          color: settings.backgroundColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: IconButton(
+                icon: const Icon(Icons.keyboard_arrow_down),
+                onPressed: () => Navigator.pop(context),
               ),
-            },
-            onLinkTap: (url, attributes, element) async {
-              if (url != null) {
-                final uri = Uri.tryParse(url);
-                if (uri != null && await canLaunchUrl(uri)) {
-                  await launchUrl(uri);
-                }
-              }
-            },
-          ),
-        ],
+            ),
+            Expanded(
+              child: FutureBuilder<List<Map<String, dynamic>>>(
+                future: () async {
+                  final results = await _dbHelper.searchWords(word, limit: 1);
+                  if (results.isEmpty) return <Map<String, dynamic>>[];
+                  final result = results.first;
+                  final dict = await _dbHelper.getDictionaryById(
+                    result['dict_id'],
+                  );
+                  if (dict == null) return <Map<String, dynamic>>[];
+
+                  String dictPath = dict['path'];
+                  if (dictPath.endsWith('.ifo')) {
+                    dictPath = dictPath.replaceAll('.ifo', '.dict');
+                  }
+                  final reader = DictReader(dictPath);
+                  final content = await reader.readEntry(
+                    result['offset'],
+                    result['length'],
+                  );
+
+                  return <Map<String, dynamic>>[
+                    {
+                      'word': word,
+                      'dict_name': dict['name'],
+                      'definition': content,
+                    },
+                  ];
+                }(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return const Center(child: Text('No definition found.'));
+                  }
+                  return _buildDefinitionContent(
+                    Theme.of(context),
+                    snapshot.data!.first,
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

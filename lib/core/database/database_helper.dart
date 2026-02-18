@@ -30,7 +30,7 @@ class DatabaseHelper {
     String path = join(documentsDirectory.path, 'novalex.db');
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -50,8 +50,6 @@ class DatabaseHelper {
     ''');
 
     // 2. Create word_index FTS5 virtual table
-    // Note: FTS5 might not be available on all older Android versions, but standard on modern ones.
-    // 'tokenize = unicode61' handles unicode characters correctly.
     await db.execute('''
       CREATE VIRTUAL TABLE word_index USING fts5(
         word,
@@ -59,6 +57,25 @@ class DatabaseHelper {
         offset UNINDEXED,
         length UNINDEXED,
         tokenize = 'unicode61'
+      )
+    ''');
+
+    // 3. Create search_history table
+    await db.execute('''
+      CREATE TABLE search_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        word TEXT NOT NULL,
+        timestamp INTEGER NOT NULL
+      )
+    ''');
+
+    // 4. Create flash_card_scores table
+    await db.execute('''
+      CREATE TABLE flash_card_scores (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        score INTEGER NOT NULL,
+        total INTEGER NOT NULL,
+        timestamp INTEGER NOT NULL
       )
     ''');
   }
@@ -112,6 +129,24 @@ class DatabaseHelper {
       } catch (e) {
         debugPrint('Column display_order might already exist: $e');
       }
+    }
+
+    if (oldVersion < 4) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS search_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          word TEXT NOT NULL,
+          timestamp INTEGER NOT NULL
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS flash_card_scores (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          score INTEGER NOT NULL,
+          total INTEGER NOT NULL,
+          timestamp INTEGER NOT NULL
+        )
+      ''');
     }
   }
 
@@ -208,6 +243,56 @@ class DatabaseHelper {
     return null;
   }
 
+  // --- Search History ---
+
+  Future<void> addSearchHistory(String word) async {
+    final db = await database;
+    // Remove if exists to move it to top
+    await db.delete('search_history', where: 'word = ?', whereArgs: [word]);
+    await db.insert('search_history', {
+      'word': word,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getSearchHistory() async {
+    final db = await database;
+    return await db.query('search_history', orderBy: 'timestamp DESC');
+  }
+
+  Future<void> clearSearchHistory() async {
+    final db = await database;
+    await db.delete('search_history');
+  }
+
+  Future<void> deleteOldSearchHistory(int days) async {
+    final db = await database;
+    final int cutOff = DateTime.now()
+        .subtract(Duration(days: days))
+        .millisecondsSinceEpoch;
+    await db.delete(
+      'search_history',
+      where: 'timestamp < ?',
+      whereArgs: [cutOff],
+    );
+  }
+
+  // --- Flash Card Scores ---
+
+  Future<void> addFlashCardScore(int score, int total) async {
+    final db = await database;
+    await db.insert('flash_card_scores', {
+      'score': score,
+      'total': total,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getFlashCardScores() async {
+    final db = await database;
+    return await db.query('flash_card_scores', orderBy: 'timestamp DESC');
+  }
+
   // --- Indexing ---
 
   /// Batched insertion for high performance.
@@ -238,6 +323,7 @@ class DatabaseHelper {
   Future<List<Map<String, dynamic>>> searchWords(
     String query, {
     int limit = 50,
+    bool fuzzy = false,
   }) async {
     final db = await database;
 
@@ -245,8 +331,6 @@ class DatabaseHelper {
 
     try {
       if (hasWildcards) {
-        // Use GLOB on the virtual table (Standard SQL filtering)
-        // GLOB is slower than MATCH but necessary for infix/suffix wildcards.
         final String sql = '''
           SELECT word, dict_id, offset, length 
           FROM word_index 
@@ -254,8 +338,17 @@ class DatabaseHelper {
           LIMIT ?
         ''';
         return await db.rawQuery(sql, [query, limit]);
+      } else if (fuzzy) {
+        // Simple fuzzy: prefix match OR contains match
+        // Use UNION to avoid "MATCH in requested context" error with OR
+        final String sql = '''
+          SELECT word, dict_id, offset, length FROM word_index WHERE word MATCH ?
+          UNION
+          SELECT word, dict_id, offset, length FROM word_index WHERE word LIKE ?
+          LIMIT ?
+        ''';
+        return await db.rawQuery(sql, ['$query*', '%$query%', limit]);
       } else {
-        // Exact match via FTS5 MATCH operator for maximum speed (near O(1) disk lookup)
         final String sql = '''
           SELECT word, dict_id, offset, length 
           FROM word_index 
@@ -275,17 +368,34 @@ class DatabaseHelper {
   Future<List<String>> getPrefixSuggestions(
     String prefix, {
     int limit = 10,
+    bool fuzzy = false,
   }) async {
     final db = await database;
     try {
-      final String sql = '''
-        SELECT DISTINCT word FROM word_index 
-        WHERE word MATCH ? 
-        ORDER BY word ASC
-        LIMIT ?
-      ''';
-      final results = await db.rawQuery(sql, ['$prefix*', limit]);
-      return results.map((r) => r['word'] as String).toList();
+      if (fuzzy) {
+        final String sql = '''
+          SELECT word FROM word_index WHERE word MATCH ?
+          UNION
+          SELECT word FROM word_index WHERE word LIKE ?
+          ORDER BY word ASC
+          LIMIT ?
+        ''';
+        final results = await db.rawQuery(sql, [
+          '$prefix*',
+          '%$prefix%',
+          limit,
+        ]);
+        return results.map((r) => r['word'] as String).toList();
+      } else {
+        final String sql = '''
+          SELECT DISTINCT word FROM word_index 
+          WHERE word MATCH ? 
+          ORDER BY word ASC
+          LIMIT ?
+        ''';
+        final results = await db.rawQuery(sql, ['$prefix*', limit]);
+        return results.map((r) => r['word'] as String).toList();
+      }
     } catch (e) {
       return [];
     }

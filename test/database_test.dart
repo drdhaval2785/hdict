@@ -43,6 +43,23 @@ void main() {
         )
       ''');
 
+      await db.execute('''
+        CREATE TABLE search_history (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          word TEXT NOT NULL,
+          timestamp INTEGER NOT NULL
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE flash_card_scores (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          score INTEGER NOT NULL,
+          total INTEGER NOT NULL,
+          timestamp INTEGER NOT NULL
+        )
+      ''');
+
       // Inject the test database
       DatabaseHelper.setDatabase(db);
       dbHelper = DatabaseHelper();
@@ -106,6 +123,52 @@ void main() {
       expect(suggestions.length, 2);
       expect(suggestions, contains('apple'));
       expect(suggestions, contains('application'));
+    });
+
+    test('Fuzzy Search and Suggestions', () async {
+      int dictId = 1;
+      List<Map<String, dynamic>> words = [
+        {'word': 'apple', 'offset': 100, 'length': 50},
+        {'word': 'banana', 'offset': 300, 'length': 40},
+      ];
+      await dbHelper.batchInsertWords(dictId, words);
+
+      // Fuzzy search "ple" should find "apple" via LIKE
+      List<Map<String, dynamic>> results = await dbHelper.searchWords(
+        'ple',
+        fuzzy: true,
+      );
+      expect(results.any((r) => r['word'] == 'apple'), isTrue);
+
+      // Fuzzy suggestions for "nan" should find "banana"
+      List<String> suggestions = await dbHelper.getPrefixSuggestions(
+        'nan',
+        fuzzy: true,
+      );
+      expect(suggestions, contains('banana'));
+    });
+
+    test('Search History Management', () async {
+      await dbHelper.addSearchHistory('apple');
+      await dbHelper.addSearchHistory('banana');
+
+      List<Map<String, dynamic>> history = await dbHelper.getSearchHistory();
+      expect(history.length, 2);
+      expect(history.any((h) => h['word'] == 'apple'), isTrue);
+
+      await dbHelper.clearSearchHistory();
+      history = await dbHelper.getSearchHistory();
+      expect(history.isEmpty, isTrue);
+    });
+
+    test('Flash Card Score Management', () async {
+      await dbHelper.addFlashCardScore(8, 10);
+      await dbHelper.addFlashCardScore(10, 10);
+
+      List<Map<String, dynamic>> scores = await dbHelper.getFlashCardScores();
+      expect(scores.length, 2);
+      expect(scores.any((s) => s['score'] == 8), isTrue);
+      expect(scores.any((s) => s['score'] == 10), isTrue);
     });
   });
 }

@@ -39,6 +39,21 @@ class ManualScreen extends StatelessWidget {
           ),
           _buildSection(
             theme,
+            '⚙️ Settings',
+            'Customize fonts, colors, and search behavior in the Settings menu. You can also adjust search history retention.',
+          ),
+          _buildSection(
+            theme,
+            '⚡ Flash Cards',
+            'Test your knowledge! Select dictionaries and guess meanings for 10 random words. Review meanings after the session.',
+          ),
+          _buildSection(
+            theme,
+            '📜 Search History',
+            'Access your previous searches from the Search History menu. Tap any term to look it up again.',
+          ),
+          _buildSection(
+            theme,
             '🌐 Links',
             'Definition text may contain clickable links. Tap on them to open the resource in your web browser.',
           ),

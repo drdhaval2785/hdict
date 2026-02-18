@@ -64,6 +64,15 @@ class AboutScreen extends StatelessWidget {
                   color: Colors.grey,
                 ),
               ),
+              const SizedBox(height: 24),
+              const Text(
+                'Dedicated to Hiral.',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFFFFAB40),
+                ),
+              ),
             ],
           ),
         ),
