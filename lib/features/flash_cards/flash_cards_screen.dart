@@ -477,6 +477,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      barrierColor: Colors.transparent,
       useSafeArea: true,
       constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width),
       builder: (context) => Container(
