@@ -36,6 +36,7 @@ void main() {
       await db.execute('''
         CREATE VIRTUAL TABLE word_index USING fts5(
           word,
+          content,
           dict_id UNINDEXED,
           offset UNINDEXED,
           length UNINDEXED,
@@ -108,6 +109,43 @@ void main() {
       results = await dbHelper.searchWords('a?ple');
       expect(results.length, 1);
       expect(results.first['word'], 'apple');
+    });
+
+    test('Search within Definitions', () async {
+      int dictId = 1;
+      List<Map<String, dynamic>> words = [
+        {
+          'word': 'apple',
+          'content': 'A red fruit that grows on trees.',
+          'offset': 100,
+          'length': 50,
+        },
+        {
+          'word': 'banana',
+          'content': 'A long yellow fruit.',
+          'offset': 300,
+          'length': 40,
+        },
+      ];
+      await dbHelper.batchInsertWords(dictId, words);
+
+      // Search for 'fruit' with searchDefinitions: true
+      List<Map<String, dynamic>> results = await dbHelper.searchWords(
+        'fruit',
+        searchDefinitions: true,
+      );
+      expect(results.length, 2);
+      expect(results.any((r) => r['word'] == 'apple'), isTrue);
+      expect(results.any((r) => r['word'] == 'banana'), isTrue);
+
+      // Search for 'red' (only in apple)
+      results = await dbHelper.searchWords('red', searchDefinitions: true);
+      expect(results.length, 1);
+      expect(results.first['word'], 'apple');
+
+      // Search for 'orange' (none)
+      results = await dbHelper.searchWords('orange', searchDefinitions: true);
+      expect(results.isEmpty, isTrue);
     });
 
     test('Autocomplete Prefix Suggestions', () async {

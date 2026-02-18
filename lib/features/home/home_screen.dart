@@ -33,6 +33,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   List<Map<String, dynamic>> _currentDefinitions = [];
   bool _isLoading = false;
   String? _selectedWord;
+  String _lastSearchQuery = '';
   TabController? _tabController;
 
   @override
@@ -49,6 +50,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     setState(() {
       _isLoading = true;
       _selectedWord = word;
+      _lastSearchQuery = word;
       _currentDefinitions = [];
     });
 
@@ -58,6 +60,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       final results = await _dbHelper.searchWords(
         word,
         fuzzy: settings.isFuzzySearchEnabled,
+        searchDefinitions: settings.isSearchWithinDefinitionsEnabled,
       );
 
       // 2. Fetch definitions for each occurrence
@@ -542,7 +545,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
 
     if (_currentDefinitions.length == 1) {
-      return _buildDefinitionContent(theme, _currentDefinitions.first);
+      return _buildDefinitionContent(
+        theme,
+        _currentDefinitions.first,
+        highlightQuery: _lastSearchQuery,
+      );
     }
 
     // Double check TabController consistency
@@ -593,7 +600,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           child: TabBarView(
             controller: _tabController,
             children: _currentDefinitions
-                .map((def) => _buildDefinitionContent(theme, def))
+                .map(
+                  (def) => _buildDefinitionContent(
+                    theme,
+                    def,
+                    highlightQuery: _lastSearchQuery,
+                  ),
+                )
                 .toList(),
           ),
         ),
@@ -601,81 +614,105 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildDefinitionContent(ThemeData theme, Map<String, dynamic> def) {
+  Widget _buildDefinitionContent(
+    ThemeData theme,
+    Map<String, dynamic> def, {
+    String? highlightQuery,
+  }) {
     final settings = context.watch<SettingsProvider>();
 
-    return Container(
-      color: settings.backgroundColor,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    def['word'],
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: settings.fontColor,
+    String definitionHtml = def['definition'];
+    if (settings.isTapOnMeaningEnabled) {
+      definitionHtml = HtmlLookupWrapper.wrapWords(definitionHtml);
+    }
+    if (highlightQuery != null && highlightQuery.isNotEmpty) {
+      final isDark =
+          ThemeData.estimateBrightnessForColor(settings.backgroundColor) ==
+          Brightness.dark;
+      definitionHtml = HtmlLookupWrapper.highlightText(
+        definitionHtml,
+        highlightQuery,
+        highlightColor: isDark ? '#ff9800' : '#ffeb3b',
+        textColor: 'black',
+      );
+    }
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      },
+      behavior: HitTestBehavior.translucent,
+      child: Container(
+        color: settings.backgroundColor,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      def['word'],
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: settings.fontColor,
+                        fontFamily: settings.fontFamily,
+                        fontSize: settings.fontSize + 8,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 32),
+              SelectionArea(
+                child: Html(
+                  data: definitionHtml,
+                  style: {
+                    "body": Style(
+                      fontSize: FontSize(settings.fontSize),
+                      lineHeight: LineHeight.em(1.5),
+                      margin: Margins.zero,
+                      padding: HtmlPaddings.zero,
+                      color: settings.textColor,
                       fontFamily: settings.fontFamily,
-                      fontSize: settings.fontSize + 8,
+                    ),
+                    "a": Style(
+                      color: settings.textColor,
+                      textDecoration: TextDecoration.none,
+                    ),
+                  },
+                  onLinkTap: (url, attributes, element) {
+                    debugPrint("Link tapped: $url");
+                    if (url != null && url.startsWith('look_up:')) {
+                      final encodedWord = url.substring(8);
+                      try {
+                        final word = encodedWord.contains('%')
+                            ? Uri.decodeComponent(encodedWord)
+                            : encodedWord;
+                        _showWordPopup(word);
+                      } catch (e) {
+                        debugPrint("Error decoding: $e");
+                        _showWordPopup(encodedWord);
+                      }
+                    }
+                  },
+                ),
+              ),
+              if (settings.isTapOnMeaningEnabled)
+                const Padding(
+                  padding: EdgeInsets.only(top: 24.0),
+                  child: Text(
+                    'Tap on words/links to look them up.',
+                    style: TextStyle(
+                      fontStyle: FontStyle.italic,
+                      color: Colors.grey,
+                      fontSize: 12,
                     ),
                   ),
                 ),
-              ],
-            ),
-            const Divider(height: 32),
-            SelectionArea(
-              child: Html(
-                data: settings.isTapOnMeaningEnabled
-                    ? HtmlLookupWrapper.wrapWords(def['definition'])
-                    : def['definition'],
-                style: {
-                  "body": Style(
-                    fontSize: FontSize(settings.fontSize),
-                    lineHeight: LineHeight.em(1.5),
-                    margin: Margins.zero,
-                    padding: HtmlPaddings.zero,
-                    color: settings.textColor,
-                    fontFamily: settings.fontFamily,
-                  ),
-                  "a": Style(
-                    color: settings.textColor,
-                    textDecoration: TextDecoration.none,
-                  ),
-                },
-                onLinkTap: (url, attributes, element) {
-                  debugPrint("Link tapped: $url");
-                  if (url != null && url.startsWith('look_up:')) {
-                    final encodedWord = url.substring(8);
-                    try {
-                      final word = encodedWord.contains('%')
-                          ? Uri.decodeComponent(encodedWord)
-                          : encodedWord;
-                      _showWordPopup(word);
-                    } catch (e) {
-                      debugPrint("Error decoding: $e");
-                      _showWordPopup(encodedWord);
-                    }
-                  }
-                },
-              ),
-            ),
-            if (settings.isTapOnMeaningEnabled)
-              const Padding(
-                padding: EdgeInsets.only(top: 24.0),
-                child: Text(
-                  'Tap on words/links to look them up.',
-                  style: TextStyle(
-                    fontStyle: FontStyle.italic,
-                    color: Colors.grey,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -696,68 +733,141 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       barrierColor: Colors.transparent,
       useSafeArea: true,
       constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width),
-      builder: (context) => Container(
-        width: double.infinity,
-        height: MediaQuery.of(context).size.height * 0.5,
-        decoration: BoxDecoration(
-          color: settings.backgroundColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: IconButton(
-                icon: const Icon(Icons.keyboard_arrow_down),
-                onPressed: () => Navigator.pop(context),
+      builder: (context) {
+        final theme = Theme.of(context);
+        return GestureDetector(
+          onTap: () {
+            Navigator.of(context).popUntil((route) => route.isFirst);
+          },
+          behavior: HitTestBehavior.translucent,
+          child: Container(
+            width: double.infinity,
+            height: MediaQuery.of(context).size.height * 0.5,
+            decoration: BoxDecoration(
+              color: settings.backgroundColor,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(20),
               ),
             ),
-            Expanded(
-              child: FutureBuilder<List<Map<String, dynamic>>>(
-                future: () async {
-                  final results = await _dbHelper.searchWords(word, limit: 1);
-                  if (results.isEmpty) return <Map<String, dynamic>>[];
-                  final result = results.first;
-                  final dict = await _dbHelper.getDictionaryById(
-                    result['dict_id'],
-                  );
-                  if (dict == null) return <Map<String, dynamic>>[];
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer,
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(20),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.info_outline,
+                        size: 20,
+                        color: Colors.orange,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          word,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.keyboard_arrow_down),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: FutureBuilder<List<Map<String, dynamic>>>(
+                    future: () async {
+                      // Get all exact matches for this word across all dictionaries
+                      final candidates = await _dbHelper.searchWords(word);
+                      final List<Map<String, dynamic>> defs = [];
 
-                  String dictPath = dict['path'];
-                  if (dictPath.endsWith('.ifo')) {
-                    dictPath = dictPath.replaceAll('.ifo', '.dict');
-                  }
-                  final reader = DictReader(dictPath);
-                  final content = await reader.readEntry(
-                    result['offset'],
-                    result['length'],
-                  );
+                      for (final res in candidates) {
+                        if (res['word'].toLowerCase() != word.toLowerCase()) {
+                          continue;
+                        }
 
-                  return <Map<String, dynamic>>[
-                    {
-                      'word': word,
-                      'dict_name': dict['name'],
-                      'definition': content,
+                        final dict = await _dbHelper.getDictionaryById(
+                          res['dict_id'],
+                        );
+                        if (dict == null) continue;
+
+                        String dictPath = dict['path'];
+                        if (dictPath.endsWith('.ifo')) {
+                          dictPath = dictPath.replaceAll('.ifo', '.dict');
+                        }
+                        final reader = DictReader(dictPath);
+                        final content = await reader.readEntry(
+                          res['offset'],
+                          res['length'],
+                        );
+
+                        defs.add({
+                          'word': res['word'],
+                          'dict_name': dict['name'],
+                          'definition': content,
+                        });
+                      }
+                      return defs;
+                    }(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                        return const Center(
+                          child: Text('No definition found.'),
+                        );
+                      }
+
+                      final defs = snapshot.data!;
+                      if (defs.length == 1) {
+                        return _buildDefinitionContent(theme, defs.first);
+                      }
+
+                      return DefaultTabController(
+                        length: defs.length,
+                        child: Column(
+                          children: [
+                            TabBar(
+                              isScrollable: true,
+                              labelColor: theme.colorScheme.primary,
+                              unselectedLabelColor: Colors.grey,
+                              tabs: defs
+                                  .map((d) => Tab(text: d['dict_name']))
+                                  .toList(),
+                            ),
+                            Expanded(
+                              child: TabBarView(
+                                children: defs
+                                    .map(
+                                      (d) => _buildDefinitionContent(theme, d),
+                                    )
+                                    .toList(),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
                     },
-                  ];
-                }(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                    return const Center(child: Text('No definition found.'));
-                  }
-                  return _buildDefinitionContent(
-                    Theme.of(context),
-                    snapshot.data!.first,
-                  );
-                },
-              ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

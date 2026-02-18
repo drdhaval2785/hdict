@@ -12,6 +12,7 @@ class SettingsProvider with ChangeNotifier {
   static const String _keyTapMeaning = 'tap_meaning';
   static const String _keyOpenPopup = 'open_popup';
   static const String _keyHistoryDays = 'history_days';
+  static const String _keySearchWithinDefinitions = 'search_within_definitions';
 
   String _fontFamily = 'Roboto';
   double _fontSize = 16.0;
@@ -23,6 +24,7 @@ class SettingsProvider with ChangeNotifier {
   bool _isTapOnMeaningEnabled = true;
   bool _isOpenPopupOnTap = true;
   int _historyRetentionDays = 30;
+  bool _isSearchWithinDefinitionsEnabled = false;
 
   String get fontFamily => _fontFamily;
   double get fontSize => _fontSize;
@@ -34,6 +36,8 @@ class SettingsProvider with ChangeNotifier {
   bool get isTapOnMeaningEnabled => _isTapOnMeaningEnabled;
   bool get isOpenPopupOnTap => _isOpenPopupOnTap;
   int get historyRetentionDays => _historyRetentionDays;
+  bool get isSearchWithinDefinitionsEnabled =>
+      _isSearchWithinDefinitionsEnabled;
 
   SettingsProvider() {
     _loadSettings();
@@ -51,6 +55,8 @@ class SettingsProvider with ChangeNotifier {
     _isTapOnMeaningEnabled = prefs.getBool(_keyTapMeaning) ?? true;
     _isOpenPopupOnTap = prefs.getBool(_keyOpenPopup) ?? true;
     _historyRetentionDays = prefs.getInt(_keyHistoryDays) ?? 30;
+    _isSearchWithinDefinitionsEnabled =
+        prefs.getBool(_keySearchWithinDefinitions) ?? false;
     notifyListeners();
   }
 
@@ -121,6 +127,13 @@ class SettingsProvider with ChangeNotifier {
     _historyRetentionDays = days;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_keyHistoryDays, days);
+    notifyListeners();
+  }
+
+  Future<void> setSearchWithinDefinitions(bool enabled) async {
+    _isSearchWithinDefinitionsEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keySearchWithinDefinitions, enabled);
     notifyListeners();
   }
 }

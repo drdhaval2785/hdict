@@ -11,6 +11,7 @@ import 'package:hdict/core/database/database_helper.dart';
 import 'package:hdict/core/parser/ifo_parser.dart';
 import 'package:hdict/core/parser/idx_parser.dart';
 import 'package:hdict/core/parser/syn_parser.dart';
+import 'package:hdict/core/parser/dict_reader.dart';
 
 // Top-level functions for compute
 List<int> _decompressGzip(List<int> bytes) {
@@ -42,6 +43,8 @@ class ImportProgress {
   final String? error;
   final String? ifoPath;
   final List<String>? sampleWords;
+  final int headwordCount;
+  final int definitionWordCount;
 
   ImportProgress({
     required this.message,
@@ -51,6 +54,8 @@ class ImportProgress {
     this.error,
     this.ifoPath,
     this.sampleWords,
+    this.headwordCount = 0,
+    this.definitionWordCount = 0,
   });
 }
 
@@ -171,7 +176,10 @@ class DictionaryManager {
       _client = client ?? http.Client();
 
   /// Imports a dictionary with progress updates.
-  Stream<ImportProgress> importDictionaryStream(String archivePath) async* {
+  Stream<ImportProgress> importDictionaryStream(
+    String archivePath, {
+    bool indexDefinitions = false,
+  }) async* {
     yield ImportProgress(message: 'Preparing...', value: 0.0);
 
     final appDocDir = await getApplicationDocumentsDirectory();
@@ -242,8 +250,9 @@ class DictionaryManager {
 
   /// Imports a dictionary from a set of individual files.
   Stream<ImportProgress> importMultipleFilesStream(
-    List<String> filePaths,
-  ) async* {
+    List<String> filePaths, {
+    bool indexDefinitions = false,
+  }) async* {
     yield ImportProgress(message: 'Preparing files...', value: 0.0);
 
     final appDocDir = await getApplicationDocumentsDirectory();
@@ -311,14 +320,19 @@ class DictionaryManager {
     }
 
     // Delegate to the shared processing logic
-    yield* _processDictionaryFiles(ifoPath, dictsDir);
+    yield* _processDictionaryFiles(
+      ifoPath,
+      dictsDir,
+      indexDefinitions: indexDefinitions,
+    );
   }
 
   /// Shared logic for processing extracted or selected dictionary files.
   Stream<ImportProgress> _processDictionaryFiles(
     String ifoPath,
-    Directory dictsDir,
-  ) async* {
+    Directory dictsDir, {
+    bool indexDefinitions = false,
+  }) async* {
     try {
       yield ImportProgress(
         message: 'Processing dictionary files...',
@@ -401,33 +415,59 @@ class DictionaryManager {
       final dictId = await _dbHelper.insertDictionary(
         bookName,
         permanentDictPath,
+        indexDefinitions: indexDefinitions,
       );
 
       // 5. Index Words
       yield ImportProgress(message: 'Indexing words...', value: 0.85);
       final idxParser = IdxParser(ifoParser);
       final stream = idxParser.parse(permanentIdxPath);
+      final dictReader = DictReader(permanentDictPath);
+      await dictReader.open();
 
       List<Map<String, dynamic>> batch = [];
-      List<({int offset, int length})> wordOffsets = [];
-      int wordCount = 0;
+      List<({int offset, int length, String content})> wordOffsets = [];
+      int headwordCount = 0;
+      int defWordCount = 0;
+
       await for (final entry in stream) {
-        batch.add(entry);
-        wordOffsets.add((
-          offset: entry['offset'] as int,
-          length: entry['length'] as int,
-        ));
-        wordCount++;
-        if (batch.length >= 5000) {
+        final String word = entry['word'];
+        final offset = entry['offset'] as int;
+        final length = entry['length'] as int;
+        final content = indexDefinitions
+            ? await dictReader.readAtIndex(offset, length)
+            : '';
+
+        batch.add({
+          'word': word,
+          'content': content,
+          'dict_id': dictId,
+          'offset': offset,
+          'length': length,
+        });
+
+        headwordCount++;
+        if (content.isNotEmpty) {
+          // Approximate word count by splitting on whitespace
+          defWordCount += content
+              .split(RegExp(r'\s+'))
+              .where((s) => s.isNotEmpty)
+              .length;
+        }
+
+        wordOffsets.add((offset: offset, length: length, content: content));
+        if (batch.length >= 2000) {
           await _dbHelper.batchInsertWords(dictId, batch);
           batch.clear();
           yield ImportProgress(
-            message: 'Indexing words... ($wordCount words)',
+            message: 'Indexing $headwordCount headwords...',
             value:
                 0.85 +
-                (wordCount /
+                (headwordCount /
                     (ifoParser.wordCount == 0 ? 100000 : ifoParser.wordCount) *
                     0.05),
+            headwordCount: headwordCount,
+            definitionWordCount: defWordCount,
           );
         }
       }
@@ -435,7 +475,12 @@ class DictionaryManager {
 
       // 6. Index Synonyms
       if (permanentSynPath != null) {
-        yield ImportProgress(message: 'Indexing synonyms...', value: 0.9);
+        yield ImportProgress(
+          message: 'Indexing synonyms...',
+          value: 0.9,
+          headwordCount: headwordCount,
+          definitionWordCount: defWordCount,
+        );
         final synParser = SynParser();
         final synStream = synParser.parse(permanentSynPath);
         List<Map<String, dynamic>> synBatch = [];
@@ -445,29 +490,43 @@ class DictionaryManager {
             final originalInfo = wordOffsets[originalIndex];
             synBatch.add({
               'word': syn['word'],
+              'content': originalInfo.content,
+              'dict_id': dictId,
               'offset': originalInfo.offset,
               'length': originalInfo.length,
             });
+            headwordCount++;
           }
-          if (synBatch.length >= 5000) {
+          if (synBatch.length >= 2000) {
             await _dbHelper.batchInsertWords(dictId, synBatch);
             synBatch.clear();
+            yield ImportProgress(
+              message: 'Indexing synonyms... ($headwordCount total headwords)',
+              value: 0.9 + (headwordCount / wordOffsets.length * 0.05),
+              headwordCount: headwordCount,
+              definitionWordCount: defWordCount,
+            );
           }
         }
-        if (synBatch.isNotEmpty)
+        if (synBatch.isNotEmpty) {
           await _dbHelper.batchInsertWords(dictId, synBatch);
+        }
       }
 
-      final finalWordCount = await _dbHelper.getWordCountForDict(dictId);
-      await _dbHelper.updateDictionaryWordCount(dictId, finalWordCount);
+      await dictReader.close();
+
+      await _dbHelper.updateDictionaryWordCount(dictId, headwordCount);
       final sampleWords = await _dbHelper.getSampleWords(dictId);
 
       yield ImportProgress(
-        message: 'Dictionary imported successfully!',
+        message: 'Import complete!',
         value: 1.0,
         isCompleted: true,
         dictId: dictId,
+        ifoPath: ifoPath,
         sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
+        headwordCount: headwordCount,
+        definitionWordCount: defWordCount,
       );
     } catch (e, s) {
       debugPrint('Error in _processDictionaryFiles: $e\n$s');
@@ -488,6 +547,13 @@ class DictionaryManager {
     await _dbHelper.updateDictionaryEnabled(id, isEnabled);
   }
 
+  Future<void> updateDictionaryIndexDefinitions(
+    int id,
+    bool indexDefinitions,
+  ) async {
+    await _dbHelper.updateDictionaryIndexDefinitions(id, indexDefinitions);
+  }
+
   Future<void> deleteDictionary(int id) async {
     final dicts = await _dbHelper.getDictionaries();
     final dict = dicts.firstWhere((d) => d['id'] == id, orElse: () => {});
@@ -500,6 +566,178 @@ class DictionaryManager {
 
   Future<void> reorderDictionaries(List<int> sortedIds) async {
     await _dbHelper.reorderDictionaries(sortedIds);
+  }
+
+  /// Re-indexes all currently imported dictionaries to populate the 'content' column.
+  /// This is useful after a schema update that adds the definition content to the search index.
+  Stream<ImportProgress> reIndexDictionariesStream() async* {
+    final dicts = await _dbHelper.getDictionaries();
+    int total = dicts.length;
+    int current = 0;
+
+    for (final dict in dicts) {
+      current++;
+      final dictId = dict['id'] as int;
+      final dictName = dict['name'] as String;
+      final dictPath = dict['path'] as String;
+      final indexDefinitions = (dict['index_definitions'] ?? 0) == 1;
+      final parentDir = File(dictPath).parent.path;
+
+      yield ImportProgress(
+        message: 'Re-indexing $dictName ($current/$total)...',
+        value: (current - 1) / total,
+      );
+
+      // Find .ifo and .idx files in the same directory
+      String? ifoPath;
+      String? idxPath;
+      String? synPath;
+
+      final dir = Directory(parentDir);
+      await for (final entity in dir.list()) {
+        if (entity is File) {
+          if (entity.path.endsWith('.ifo')) ifoPath = entity.path;
+          if (entity.path.endsWith('.idx')) idxPath = entity.path;
+          if (entity.path.endsWith('.syn')) synPath = entity.path;
+        }
+      }
+
+      if (ifoPath == null || idxPath == null) {
+        debugPrint('Missing required files for re-indexing $dictName');
+        continue;
+      }
+
+      // Clear existing index for this dictionary
+      final db = await _dbHelper.database;
+      await db.delete('word_index', where: 'dict_id = ?', whereArgs: [dictId]);
+
+      // Parse metadata
+      final ifoParser = IfoParser();
+      await ifoParser.parse(ifoPath);
+
+      // Re-index
+      yield* _processReindexing(
+        dictId,
+        dictPath,
+        idxPath,
+        synPath,
+        ifoParser,
+        (current - 1) / total,
+        1 / total,
+        indexDefinitions: indexDefinitions,
+      );
+    }
+
+    yield ImportProgress(
+      message: 'Re-indexing complete!',
+      value: 1.0,
+      isCompleted: true,
+    );
+  }
+
+  Stream<ImportProgress> _processReindexing(
+    int dictId,
+    String dictPath,
+    String idxPath,
+    String? synPath,
+    IfoParser ifoParser,
+    double baseProgress,
+    double progressScale, {
+    bool indexDefinitions = false,
+  }) async* {
+    final idxParser = IdxParser(ifoParser);
+    final idxStream = idxParser.parse(idxPath);
+    final dictReader = DictReader(dictPath);
+    await dictReader.open();
+
+    List<Map<String, dynamic>> batch = [];
+    List<({int offset, int length, String content})> wordOffsets = [];
+    int headwordCount = 0;
+    int defWordCount = 0;
+
+    await for (final entry in idxStream) {
+      final offset = entry['offset'] as int;
+      final length = entry['length'] as int;
+      final content = indexDefinitions
+          ? await dictReader.readAtIndex(offset, length)
+          : '';
+
+      batch.add({
+        'word': entry['word'],
+        'content': content,
+        'dict_id': dictId,
+        'offset': offset,
+        'length': length,
+      });
+
+      headwordCount++;
+      if (content.isNotEmpty) {
+        defWordCount += content
+            .split(RegExp(r'\s+'))
+            .where((s) => s.isNotEmpty)
+            .length;
+      }
+
+      wordOffsets.add((offset: offset, length: length, content: content));
+      if (batch.length >= 2000) {
+        await _dbHelper.batchInsertWords(dictId, batch);
+        batch.clear();
+        yield ImportProgress(
+          message: 'Indexing $headwordCount headwords...',
+          value:
+              baseProgress +
+              (headwordCount /
+                      (ifoParser.wordCount == 0
+                          ? 100000
+                          : ifoParser.wordCount) *
+                      0.8) *
+                  progressScale,
+          headwordCount: headwordCount,
+          definitionWordCount: defWordCount,
+        );
+      }
+    }
+    if (batch.isNotEmpty) await _dbHelper.batchInsertWords(dictId, batch);
+
+    if (synPath != null) {
+      final synParser = SynParser();
+      final synStream = synParser.parse(synPath);
+      List<Map<String, dynamic>> synBatch = [];
+      await for (final syn in synStream) {
+        final originalIndex = syn['original_word_index'] as int;
+        if (originalIndex < wordOffsets.length) {
+          final originalInfo = wordOffsets[originalIndex];
+          synBatch.add({
+            'word': syn['word'],
+            'content': originalInfo.content,
+            'dict_id': dictId,
+            'offset': originalInfo.offset,
+            'length': originalInfo.length,
+          });
+          headwordCount++;
+        }
+        if (synBatch.length >= 2000) {
+          await _dbHelper.batchInsertWords(dictId, synBatch);
+          synBatch.clear();
+          yield ImportProgress(
+            message: 'Indexing synonyms... ($headwordCount total headwords)',
+            value:
+                baseProgress +
+                (0.8 + (headwordCount / wordOffsets.length) * 0.2) *
+                    progressScale,
+            headwordCount: headwordCount,
+            definitionWordCount: defWordCount,
+          );
+        }
+      }
+      if (synBatch.isNotEmpty) {
+        await _dbHelper.batchInsertWords(dictId, synBatch);
+      }
+    }
+
+    await _dbHelper.updateDictionaryWordCount(dictId, headwordCount);
+
+    await dictReader.close();
   }
 
   /// Resolves the correct filename for a downloaded file.
@@ -569,7 +807,10 @@ class DictionaryManager {
   /// Downloads a dictionary from [url] and imports it in one step.
   ///
   /// Downloads to a temporary file, then delegates to [importDictionaryStream].
-  Stream<ImportProgress> downloadAndImportDictionaryStream(String url) async* {
+  Stream<ImportProgress> downloadAndImportDictionaryStream(
+    String url, {
+    bool indexDefinitions = false,
+  }) async* {
     yield ImportProgress(message: 'Connecting...', value: 0.0);
 
     final appDocDir = await getApplicationDocumentsDirectory();
@@ -618,7 +859,10 @@ class DictionaryManager {
       );
 
       // Now import the file
-      final importStream = importDictionaryStream(tempFile.path);
+      final importStream = importDictionaryStream(
+        tempFile.path,
+        indexDefinitions: indexDefinitions,
+      );
       await for (final importEvent in importStream) {
         if (importEvent.isCompleted) {
           yield ImportProgress(
@@ -641,12 +885,83 @@ class DictionaryManager {
         message: 'Download error: $e',
         value: 0.0,
         error: e.toString(),
-        isCompleted: true, // Mark compressed to stop UI spinner
+        isCompleted: true,
       );
     } finally {
       if (await tempDir.exists()) {
         await tempDir.delete(recursive: true);
       }
     }
+  }
+
+  /// Re-indexes a single dictionary.
+  Stream<ImportProgress> reIndexDictionaryStream(int dictId) async* {
+    final dict = await _dbHelper.getDictionaryById(dictId);
+    if (dict == null) {
+      yield ImportProgress(
+        message: 'Dictionary not found.',
+        value: 0.0,
+        isCompleted: true,
+        error: 'Dictionary not found',
+      );
+      return;
+    }
+
+    final dictName = dict['name'] as String;
+    final dictPath = dict['path'] as String;
+    final indexDefinitions = (dict['index_definitions'] ?? 0) == 1;
+    final parentDir = p.dirname(dictPath);
+
+    yield ImportProgress(message: 'Re-indexing $dictName...', value: 0.0);
+
+    // Find .ifo and .idx files in the same directory
+    String? ifoPath;
+    String? idxPath;
+    String? synPath;
+
+    final dir = Directory(parentDir);
+    await for (final entity in dir.list()) {
+      if (entity is File) {
+        if (entity.path.endsWith('.ifo')) ifoPath = entity.path;
+        if (entity.path.endsWith('.idx')) idxPath = entity.path;
+        if (entity.path.endsWith('.syn')) synPath = entity.path;
+      }
+    }
+
+    if (ifoPath == null || idxPath == null) {
+      yield ImportProgress(
+        message: 'Missing required files for re-indexing $dictName',
+        value: 0.0,
+        isCompleted: true,
+        error: 'Missing required files',
+      );
+      return;
+    }
+
+    // Clear existing index for this dictionary
+    final db = await _dbHelper.database;
+    await db.delete('word_index', where: 'dict_id = ?', whereArgs: [dictId]);
+
+    // Parse metadata
+    final ifoParser = IfoParser();
+    await ifoParser.parse(ifoPath);
+
+    // Re-index
+    yield* _processReindexing(
+      dictId,
+      dictPath,
+      idxPath,
+      synPath,
+      ifoParser,
+      0.0,
+      1.0,
+      indexDefinitions: indexDefinitions,
+    );
+
+    yield ImportProgress(
+      message: 'Re-indexing complete!',
+      value: 1.0,
+      isCompleted: true,
+    );
   }
 }

@@ -30,7 +30,7 @@ class DatabaseHelper {
     String path = join(documentsDirectory.path, 'novalex.db');
     return await openDatabase(
       path,
-      version: 4,
+      version: 6,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -44,6 +44,7 @@ class DatabaseHelper {
         name TEXT NOT NULL,
         path TEXT NOT NULL,
         is_enabled INTEGER DEFAULT 1,
+        index_definitions INTEGER DEFAULT 0,
         word_count INTEGER DEFAULT 0,
         display_order INTEGER DEFAULT 0
       )
@@ -53,6 +54,7 @@ class DatabaseHelper {
     await db.execute('''
       CREATE VIRTUAL TABLE word_index USING fts5(
         word,
+        content,
         dict_id UNINDEXED,
         offset UNINDEXED,
         length UNINDEXED,
@@ -148,16 +150,48 @@ class DatabaseHelper {
         )
       ''');
     }
+
+    if (oldVersion < 5) {
+      // Recreate word_index to include 'content' column
+      // We drop and recreate because adding a column to a virtual table (FTS5) is not directly supported via ALTER TABLE.
+      // The user will need to re-index dictionaries.
+      await db.execute('DROP TABLE IF EXISTS word_index');
+      await db.execute('''
+        CREATE VIRTUAL TABLE word_index USING fts5(
+          word,
+          content,
+          dict_id UNINDEXED,
+          offset UNINDEXED,
+          length UNINDEXED,
+          tokenize = 'unicode61'
+        )
+      ''');
+    }
+
+    if (oldVersion < 6) {
+      try {
+        await db.execute(
+          'ALTER TABLE dictionaries ADD COLUMN index_definitions INTEGER DEFAULT 0',
+        );
+      } catch (e) {
+        debugPrint('Column index_definitions might already exist: $e');
+      }
+    }
   }
 
   // --- Dictionary Management ---
 
-  Future<int> insertDictionary(String name, String path) async {
+  Future<int> insertDictionary(
+    String name,
+    String path, {
+    bool indexDefinitions = false,
+  }) async {
     final db = await database;
     return await db.insert('dictionaries', {
       'name': name,
       'path': path,
       'is_enabled': 1,
+      'index_definitions': indexDefinitions ? 1 : 0,
     });
   }
 
@@ -202,6 +236,19 @@ class DatabaseHelper {
     await db.update(
       'dictionaries',
       {'is_enabled': isEnabled ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<void> updateDictionaryIndexDefinitions(
+    int id,
+    bool indexDefinitions,
+  ) async {
+    final db = await database;
+    await db.update(
+      'dictionaries',
+      {'index_definitions': indexDefinitions ? 1 : 0},
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -310,6 +357,7 @@ class DatabaseHelper {
       for (var word in words) {
         batch.insert('word_index', {
           'word': word['word'],
+          'content': word['content'],
           'dict_id': dictId,
           'offset': word['offset'],
           'length': word['length'],
@@ -328,6 +376,7 @@ class DatabaseHelper {
     String query, {
     int limit = 50,
     bool fuzzy = false,
+    bool searchDefinitions = false,
   }) async {
     final db = await database;
 
@@ -335,13 +384,27 @@ class DatabaseHelper {
 
     try {
       if (hasWildcards) {
-        final String sql = '''
+        final String sql =
+            '''
           SELECT word, dict_id, offset, length 
           FROM word_index 
           WHERE word GLOB ? 
+          ${searchDefinitions ? "OR content MATCH ?" : ""}
           LIMIT ?
         ''';
-        return await db.rawQuery(sql, [query, limit]);
+        final List<Object?> args = [query];
+        if (searchDefinitions) args.add(query);
+        args.add(limit);
+        return await db.rawQuery(sql, args);
+      } else if (searchDefinitions) {
+        // If searching definitions, we ignore fuzzy headword logic for simplicity and performance
+        final String sql = '''
+          SELECT word, dict_id, offset, length 
+          FROM word_index 
+          WHERE word MATCH ? OR content MATCH ?
+          LIMIT ?
+        ''';
+        return await db.rawQuery(sql, [query, query, limit]);
       } else if (fuzzy) {
         // Try exact match first
         final List<Map<String, dynamic>> exactMatch = await db.query(

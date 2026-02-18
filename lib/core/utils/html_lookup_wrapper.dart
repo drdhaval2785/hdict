@@ -29,4 +29,40 @@ class HtmlLookupWrapper {
 
     return buffer.toString();
   }
+
+  /// Highlights occurrences of [query] in the [html] string.
+  /// Wraps matches in a `<span style="background-color: [highlightColor]; color: black; border-radius: 2px; padding: 0 2px;">`.
+  static String highlightText(
+    String html,
+    String query, {
+    String highlightColor = '#ffeb3b',
+    String textColor = 'black',
+  }) {
+    if (query.isEmpty) return html;
+
+    final tagRegExp = RegExp(r'<[^>]*>|[^<]+');
+    final queryRegExp = RegExp(
+      '(${RegExp.escape(query)})',
+      caseSensitive: false,
+      unicode: true,
+    );
+
+    final StringBuffer buffer = StringBuffer();
+    final matches = tagRegExp.allMatches(html);
+
+    for (final match in matches) {
+      final part = match.group(0)!;
+      if (part.startsWith('<')) {
+        buffer.write(part);
+      } else {
+        final highlighted = part.replaceAllMapped(queryRegExp, (m) {
+          final matchedText = m.group(1)!;
+          return '<span style="background-color: $highlightColor; color: $textColor; border-radius: 2px; padding: 0 2px;">$matchedText</span>';
+        });
+        buffer.write(highlighted);
+      }
+    }
+
+    return buffer.toString();
+  }
 }

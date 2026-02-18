@@ -44,11 +44,12 @@ class _DictionaryManagementScreenState
   }
 
   Future<void> _downloadDictionary() async {
+    bool indexDefinitions = false;
     final TextEditingController urlController = TextEditingController(
       text: 'http://download.huzheng.org',
     );
 
-    final String? urlString = await showDialog<String>(
+    final dynamic urlString = await showDialog<dynamic>(
       context: context,
       builder: (context) {
         return AlertDialog(
@@ -69,6 +70,22 @@ class _DictionaryManagementScreenState
                 ),
                 keyboardType: TextInputType.url,
               ),
+              const SizedBox(height: 8),
+              StatefulBuilder(
+                builder: (context, setState) {
+                  return CheckboxListTile(
+                    title: const Text('Index definitions for search'),
+                    subtitle: const Text(
+                      'Makes "Search within definitions" possible',
+                    ),
+                    value: indexDefinitions,
+                    contentPadding: EdgeInsets.zero,
+                    onChanged: (val) {
+                      setState(() => indexDefinitions = val ?? false);
+                    },
+                  );
+                },
+              ),
             ],
           ),
           actions: [
@@ -77,7 +94,10 @@ class _DictionaryManagementScreenState
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () => Navigator.pop(context, urlController.text),
+              onPressed: () => Navigator.pop(context, {
+                'url': urlController.text,
+                'index': indexDefinitions,
+              }),
               child: const Text('Download'),
             ),
           ],
@@ -85,7 +105,12 @@ class _DictionaryManagementScreenState
       },
     );
 
-    if (urlString != null && urlString.isNotEmpty) {
+    if (urlString != null &&
+        urlString is Map &&
+        urlString['url'] != null &&
+        (urlString['url'] as String).isNotEmpty) {
+      final String url = urlString['url'];
+      final bool index = urlString['index'] ?? false;
       if (!mounted) return;
 
       // Reuse the import progress dialog logic
@@ -100,14 +125,7 @@ class _DictionaryManagementScreenState
               content: ValueListenableBuilder<ImportProgress>(
                 valueListenable: _progressNotifier,
                 builder: (context, progress, child) {
-                  return Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      LinearProgressIndicator(value: progress.value),
-                      const SizedBox(height: 16),
-                      Text(progress.message, textAlign: TextAlign.center),
-                    ],
-                  );
+                  return _buildProgressContent(progress);
                 },
               ),
             ),
@@ -117,7 +135,8 @@ class _DictionaryManagementScreenState
 
       try {
         final stream = _dictionaryManager.downloadAndImportDictionaryStream(
-          urlString,
+          url,
+          indexDefinitions: index,
         );
         await for (final progress in stream) {
           _progressNotifier.value = progress;
@@ -156,7 +175,78 @@ class _DictionaryManagementScreenState
     }
   }
 
+  Future<void> _reIndexAll() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Re-index All Dictionaries?'),
+        content: const Text(
+          'This will populate the search index with definition content, enabling "Search within definitions". It may take a while depending on your dictionary sizes.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Re-index'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: const Text('Re-indexing Dictionaries'),
+            content: ValueListenableBuilder<ImportProgress>(
+              valueListenable: _progressNotifier,
+              builder: (context, progress, child) {
+                return _buildProgressContent(progress);
+              },
+            ),
+          ),
+        );
+      },
+    );
+
+    try {
+      final stream = _dictionaryManager.reIndexDictionariesStream();
+      await for (final progress in stream) {
+        _progressNotifier.value = progress;
+        if (progress.isCompleted && progress.error != null) {
+          throw Exception(progress.error);
+        }
+      }
+
+      if (mounted) {
+        Navigator.pop(context); // Close progress dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Re-indexing completed successfully!')),
+        );
+        await _loadDictionaries();
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close progress dialog
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Re-indexing failed: $e')));
+      }
+    }
+  }
+
   Future<void> _importDictionary() async {
+    bool indexDefinitions = false;
     // Pick file(s)
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -177,6 +267,41 @@ class _DictionaryManagementScreenState
     if (result != null && result.files.isNotEmpty) {
       if (!mounted) return;
 
+      // Optional: Ask for indexing preference if it's not a tiny dictionary
+      final bool? proceed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Import Options'),
+          content: StatefulBuilder(
+            builder: (context, setState) {
+              return CheckboxListTile(
+                title: const Text('Index definitions for search'),
+                subtitle: const Text(
+                  'Allows searching inside meanings. Uses more disk space.',
+                ),
+                value: indexDefinitions,
+                onChanged: (val) =>
+                    setState(() => indexDefinitions = val ?? false),
+              );
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Import'),
+            ),
+          ],
+        ),
+      );
+
+      if (proceed != true) return;
+
+      if (!mounted) return;
+
       // Show progress dialog
       showDialog(
         context: context,
@@ -189,14 +314,7 @@ class _DictionaryManagementScreenState
               content: ValueListenableBuilder<ImportProgress>(
                 valueListenable: _progressNotifier,
                 builder: (context, progress, child) {
-                  return Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      LinearProgressIndicator(value: progress.value),
-                      const SizedBox(height: 16),
-                      Text(progress.message, textAlign: TextAlign.center),
-                    ],
-                  );
+                  return _buildProgressContent(progress);
                 },
               ),
             ),
@@ -213,11 +331,15 @@ class _DictionaryManagementScreenState
               (f) => f.extension == 'ifo' || f.extension == 'idx',
             )) {
           final paths = result.files.map((f) => f.path!).toList();
-          stream = _dictionaryManager.importMultipleFilesStream(paths);
+          stream = _dictionaryManager.importMultipleFilesStream(
+            paths,
+            indexDefinitions: indexDefinitions,
+          );
         } else {
           // Single file picked - assume it's an archive
           stream = _dictionaryManager.importDictionaryStream(
             result.files.single.path!,
+            indexDefinitions: indexDefinitions,
           );
         }
 
@@ -267,6 +389,13 @@ class _DictionaryManagementScreenState
           'Manage Dictionaries',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Re-index for Definition Search',
+            icon: const Icon(Icons.refresh),
+            onPressed: _isLoading ? null : _reIndexAll,
+          ),
+        ],
       ),
       persistentFooterButtons: [
         Row(
@@ -381,11 +510,36 @@ class _DictionaryManagementScreenState
                             dict['name'],
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
-                          subtitle: Text(
-                            '${dict['word_count']} words',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${dict['word_count']} words',
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Icon(
+                                    dict['index_definitions'] == 1
+                                        ? Icons.manage_search
+                                        : Icons.search_off,
+                                    size: 14,
+                                    color: Colors.grey,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    dict['index_definitions'] == 1
+                                        ? 'Definitions indexed'
+                                        : 'Headwords only',
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(fontSize: 10),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -403,6 +557,14 @@ class _DictionaryManagementScreenState
                                       );
                                   _loadDictionaries();
                                 },
+                              ),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.settings_outlined,
+                                  size: 20,
+                                ),
+                                tooltip: 'Indexing settings',
+                                onPressed: () => _showIndexingDialog(dict),
                               ),
                               IconButton(
                                 icon: const Icon(
@@ -467,5 +629,133 @@ class _DictionaryManagementScreenState
       await _dictionaryManager.deleteDictionary(dict['id']);
       _loadDictionaries();
     }
+  }
+
+  void _showIndexingDialog(Map<String, dynamic> dict) async {
+    bool indexDefinitions = dict['index_definitions'] == 1;
+    final int dictId = dict['id'];
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Indexing Settings: ${dict['name']}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            StatefulBuilder(
+              builder: (context, setState) {
+                return CheckboxListTile(
+                  title: const Text('Index definitions for search'),
+                  subtitle: const Text(
+                    'Allows searching inside meanings for this dictionary.',
+                  ),
+                  value: indexDefinitions,
+                  onChanged: (val) async {
+                    final newValue = val ?? false;
+                    setState(() => indexDefinitions = newValue);
+                    await _dictionaryManager.updateDictionaryIndexDefinitions(
+                      dictId,
+                      newValue,
+                    );
+                    _loadDictionaries();
+                  },
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'If you change this setting, you must re-index this dictionary for it to take effect.',
+              style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _reIndexSpecific(dict);
+            },
+            icon: const Icon(Icons.refresh),
+            label: const Text('Re-index Now'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _reIndexSpecific(Map<String, dynamic> dict) async {
+    final dictId = dict['id'] as int;
+    final dictName = dict['name'] as String;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: Text('Re-indexing $dictName'),
+            content: ValueListenableBuilder<ImportProgress>(
+              valueListenable: _progressNotifier,
+              builder: (context, progress, child) {
+                return _buildProgressContent(progress);
+              },
+            ),
+          ),
+        );
+      },
+    );
+
+    try {
+      final stream = _dictionaryManager.reIndexDictionaryStream(dictId);
+      await for (final progress in stream) {
+        _progressNotifier.value = progress;
+        if (progress.isCompleted && progress.error != null) {
+          throw Exception(progress.error);
+        }
+      }
+
+      if (mounted) {
+        Navigator.pop(context); // Close progress dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$dictName re-indexed successfully!')),
+        );
+        await _loadDictionaries();
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close progress dialog
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Re-indexing failed: $e')));
+      }
+    }
+  }
+
+  Widget _buildProgressContent(ImportProgress progress) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        LinearProgressIndicator(value: progress.value),
+        const SizedBox(height: 16),
+        Text(progress.message, textAlign: TextAlign.center),
+        if (progress.headwordCount > 0) ...[
+          const SizedBox(height: 8),
+          Text(
+            '${progress.headwordCount} headwords indexed',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+          ),
+        ],
+        if (progress.definitionWordCount > 0)
+          Text(
+            '${progress.definitionWordCount} definition words indexed',
+            style: const TextStyle(fontSize: 11, color: Colors.grey),
+          ),
+      ],
+    );
   }
 }

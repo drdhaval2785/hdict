@@ -395,43 +395,49 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
             ),
           ),
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: SelectionArea(
-                child: Html(
-                  data: context.read<SettingsProvider>().isTapOnMeaningEnabled
-                      ? HtmlLookupWrapper.wrapWords(currentWord['meaning'])
-                      : currentWord['meaning'],
-                  style: {
-                    "body": Style(
-                      fontSize: FontSize(
-                        context.read<SettingsProvider>().fontSize,
+            child: GestureDetector(
+              onTap: () {
+                Navigator.of(context).popUntil((route) => route.isFirst);
+              },
+              behavior: HitTestBehavior.translucent,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: SelectionArea(
+                  child: Html(
+                    data: context.read<SettingsProvider>().isTapOnMeaningEnabled
+                        ? HtmlLookupWrapper.wrapWords(currentWord['meaning'])
+                        : currentWord['meaning'],
+                    style: {
+                      "body": Style(
+                        fontSize: FontSize(
+                          context.read<SettingsProvider>().fontSize,
+                        ),
+                        lineHeight: LineHeight.em(1.5),
+                        margin: Margins.zero,
+                        padding: HtmlPaddings.zero,
+                        color: context.read<SettingsProvider>().textColor,
+                        fontFamily: context.read<SettingsProvider>().fontFamily,
                       ),
-                      lineHeight: LineHeight.em(1.5),
-                      margin: Margins.zero,
-                      padding: HtmlPaddings.zero,
-                      color: context.read<SettingsProvider>().textColor,
-                      fontFamily: context.read<SettingsProvider>().fontFamily,
-                    ),
-                    "a": Style(
-                      color: context.read<SettingsProvider>().textColor,
-                      textDecoration: TextDecoration.none,
-                    ),
-                  },
-                  onLinkTap: (url, attributes, element) {
-                    debugPrint("FlashCard Link tapped: $url");
-                    if (url != null && url.startsWith('look_up:')) {
-                      final encodedWord = url.substring(8);
-                      try {
-                        final word = encodedWord.contains('%')
-                            ? Uri.decodeComponent(encodedWord)
-                            : encodedWord;
-                        _showWordPopup(word);
-                      } catch (e) {
-                        _showWordPopup(encodedWord);
+                      "a": Style(
+                        color: context.read<SettingsProvider>().textColor,
+                        textDecoration: TextDecoration.none,
+                      ),
+                    },
+                    onLinkTap: (url, attributes, element) {
+                      debugPrint("FlashCard Link tapped: $url");
+                      if (url != null && url.startsWith('look_up:')) {
+                        final encodedWord = url.substring(8);
+                        try {
+                          final word = encodedWord.contains('%')
+                              ? Uri.decodeComponent(encodedWord)
+                              : encodedWord;
+                          _showWordPopup(word);
+                        } catch (e) {
+                          _showWordPopup(encodedWord);
+                        }
                       }
-                    }
-                  },
+                    },
+                  ),
                 ),
               ),
             ),
@@ -490,40 +496,71 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
         child: Column(
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: IconButton(
-                icon: const Icon(Icons.keyboard_arrow_down),
-                onPressed: () => Navigator.pop(context),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(20),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.info_outline,
+                    size: 20,
+                    color: Colors.orange,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      word,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.keyboard_arrow_down),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
               ),
             ),
             Expanded(
               child: FutureBuilder<List<Map<String, dynamic>>>(
                 future: () async {
-                  final results = await _dbHelper.searchWords(word, limit: 1);
-                  if (results.isEmpty) return <Map<String, dynamic>>[];
-                  final result = results.first;
-                  final dict = await _dbHelper.getDictionaryById(
-                    result['dict_id'],
-                  );
-                  if (dict == null) return <Map<String, dynamic>>[];
+                  // Get all exact matches for this word across all dictionaries
+                  final candidates = await _dbHelper.searchWords(word);
+                  final List<Map<String, dynamic>> defs = [];
 
-                  String dictPath = dict['path'];
-                  if (dictPath.endsWith('.ifo')) {
-                    dictPath = dictPath.replaceAll('.ifo', '.dict');
-                  }
-                  final reader = DictReader(dictPath);
-                  final content = await reader.readEntry(
-                    result['offset'],
-                    result['length'],
-                  );
+                  for (final res in candidates) {
+                    if (res['word'].toLowerCase() != word.toLowerCase()) {
+                      continue;
+                    }
 
-                  return <Map<String, dynamic>>[
-                    {
-                      'word': word,
+                    final dict = await _dbHelper.getDictionaryById(
+                      res['dict_id'],
+                    );
+                    if (dict == null) continue;
+
+                    String dictPath = dict['path'];
+                    if (dictPath.endsWith('.ifo')) {
+                      dictPath = dictPath.replaceAll('.ifo', '.dict');
+                    }
+                    final reader = DictReader(dictPath);
+                    final content = await reader.readEntry(
+                      res['offset'],
+                      res['length'],
+                    );
+
+                    defs.add({
+                      'word': res['word'],
                       'dict_name': dict['name'],
                       'definition': content,
-                    },
-                  ];
+                    });
+                  }
+                  return defs;
                 }(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
@@ -532,9 +569,41 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
                   if (!snapshot.hasData || snapshot.data!.isEmpty) {
                     return const Center(child: Text('No definition found.'));
                   }
-                  return _buildDefinitionContentInPopup(
-                    Theme.of(context),
-                    snapshot.data!.first,
+
+                  final defs = snapshot.data!;
+                  if (defs.length == 1) {
+                    return _buildDefinitionContentInPopup(
+                      Theme.of(context),
+                      defs.first,
+                    );
+                  }
+
+                  return DefaultTabController(
+                    length: defs.length,
+                    child: Column(
+                      children: [
+                        TabBar(
+                          isScrollable: true,
+                          labelColor: Theme.of(context).colorScheme.primary,
+                          unselectedLabelColor: Colors.grey,
+                          tabs: defs
+                              .map((d) => Tab(text: d['dict_name']))
+                              .toList(),
+                        ),
+                        Expanded(
+                          child: TabBarView(
+                            children: defs
+                                .map(
+                                  (d) => _buildDefinitionContentInPopup(
+                                    Theme.of(context),
+                                    d,
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ),
+                      ],
+                    ),
                   );
                 },
               ),
@@ -547,64 +616,85 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
 
   Widget _buildDefinitionContentInPopup(
     ThemeData theme,
-    Map<String, dynamic> def,
-  ) {
+    Map<String, dynamic> def, {
+    String? highlightQuery,
+  }) {
     final settings = context.watch<SettingsProvider>();
 
-    return Container(
-      color: settings.backgroundColor,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              def['word'],
-              style: theme.textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: settings.fontColor,
-                fontFamily: settings.fontFamily,
-                fontSize: settings.fontSize + 8,
+    String definitionHtml = def['definition'];
+    if (settings.isTapOnMeaningEnabled) {
+      definitionHtml = HtmlLookupWrapper.wrapWords(definitionHtml);
+    }
+    if (highlightQuery != null && highlightQuery.isNotEmpty) {
+      final isDark =
+          ThemeData.estimateBrightnessForColor(settings.backgroundColor) ==
+          Brightness.dark;
+      definitionHtml = HtmlLookupWrapper.highlightText(
+        definitionHtml,
+        highlightQuery,
+        highlightColor: isDark ? '#ff9800' : '#ffeb3b',
+        textColor: 'black',
+      );
+    }
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      },
+      behavior: HitTestBehavior.translucent,
+      child: Container(
+        color: settings.backgroundColor,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                def['word'],
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: settings.fontColor,
+                  fontFamily: settings.fontFamily,
+                  fontSize: settings.fontSize + 8,
+                ),
               ),
-            ),
-            const Divider(height: 32),
-            SelectionArea(
-              child: Html(
-                data: settings.isTapOnMeaningEnabled
-                    ? HtmlLookupWrapper.wrapWords(def['definition'])
-                    : def['definition'],
-                style: {
-                  "body": Style(
-                    fontSize: FontSize(settings.fontSize),
-                    lineHeight: LineHeight.em(1.5),
-                    margin: Margins.zero,
-                    padding: HtmlPaddings.zero,
-                    color: settings.textColor,
-                    fontFamily: settings.fontFamily,
-                  ),
-                  "a": Style(
-                    color: settings.textColor,
-                    textDecoration: TextDecoration.none,
-                  ),
-                },
-                onLinkTap: (url, attributes, element) {
-                  debugPrint("FlashCard Popup Link tapped: $url");
-                  if (url != null && url.startsWith('look_up:')) {
-                    final encodedWord = url.substring(8);
-                    Navigator.pop(this.context);
-                    try {
-                      final word = encodedWord.contains('%')
-                          ? Uri.decodeComponent(encodedWord)
-                          : encodedWord;
-                      _showWordPopup(word);
-                    } catch (e) {
-                      _showWordPopup(encodedWord);
+              const Divider(height: 32),
+              SelectionArea(
+                child: Html(
+                  data: definitionHtml,
+                  style: {
+                    "body": Style(
+                      fontSize: FontSize(settings.fontSize),
+                      lineHeight: LineHeight.em(1.5),
+                      margin: Margins.zero,
+                      padding: HtmlPaddings.zero,
+                      color: settings.textColor,
+                      fontFamily: settings.fontFamily,
+                    ),
+                    "a": Style(
+                      color: settings.textColor,
+                      textDecoration: TextDecoration.none,
+                    ),
+                  },
+                  onLinkTap: (url, attributes, element) {
+                    debugPrint("FlashCard Popup Link tapped: $url");
+                    if (url != null && url.startsWith('look_up:')) {
+                      final encodedWord = url.substring(8);
+                      Navigator.pop(this.context);
+                      try {
+                        final word = encodedWord.contains('%')
+                            ? Uri.decodeComponent(encodedWord)
+                            : encodedWord;
+                        _showWordPopup(word);
+                      } catch (e) {
+                        _showWordPopup(encodedWord);
+                      }
                     }
-                  }
-                },
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

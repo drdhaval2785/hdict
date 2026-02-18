@@ -84,6 +84,12 @@ class SettingsScreen extends StatelessWidget {
             value: settings.isFuzzySearchEnabled,
             onChanged: (value) => settings.setFuzzySearch(value),
           ),
+          SwitchListTile(
+            title: const Text('Search Within Definitions'),
+            subtitle: const Text('Look for your query inside meanings too'),
+            value: settings.isSearchWithinDefinitionsEnabled,
+            onChanged: (value) => settings.setSearchWithinDefinitions(value),
+          ),
           const Divider(),
           _buildSectionHeader(theme, 'Dictionary Interaction'),
           SwitchListTile(
