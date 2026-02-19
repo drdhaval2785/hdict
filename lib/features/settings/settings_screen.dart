@@ -64,33 +64,6 @@ class SettingsScreen extends StatelessWidget {
             (color) => settings.setTextColor(color),
           ),
           const Divider(),
-          _buildSectionHeader(theme, 'Search & Preview'),
-          ListTile(
-            title: const Text('Preview Lines'),
-            subtitle: const Text('Number of lines to show in suggestions'),
-            trailing: DropdownButton<int>(
-              value: settings.previewLines,
-              items: [1, 2, 3, 4, 5]
-                  .map((e) => DropdownMenuItem(value: e, child: Text('$e')))
-                  .toList(),
-              onChanged: (value) {
-                if (value != null) settings.setPreviewLines(value);
-              },
-            ),
-          ),
-          SwitchListTile(
-            title: const Text('Fuzzy Search'),
-            subtitle: const Text('Search for similar words'),
-            value: settings.isFuzzySearchEnabled,
-            onChanged: (value) => settings.setFuzzySearch(value),
-          ),
-          SwitchListTile(
-            title: const Text('Search Within Definitions'),
-            subtitle: const Text('Look for your query inside meanings too'),
-            value: settings.isSearchWithinDefinitionsEnabled,
-            onChanged: (value) => settings.setSearchWithinDefinitions(value),
-          ),
-          const Divider(),
           _buildSectionHeader(theme, 'Dictionary Interaction'),
           SwitchListTile(
             title: const Text('Allow Tap on Meanings'),

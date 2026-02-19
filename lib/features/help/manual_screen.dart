@@ -30,7 +30,7 @@ class ManualScreen extends StatelessWidget {
           _buildSection(
             theme,
             '📚 Managing Dictionaries',
-            'Go to "Manage Dictionaries" from the menu. You can import .zip or .tar.gz StarDict files or download them directly from the web.',
+            'Go to "Manage Dictionaries" from the menu. You can import StarDict files (.zip, .tar.gz, .tar.xz, etc.) or download them directly from the web.',
           ),
           _buildSection(
             theme,
@@ -40,7 +40,7 @@ class ManualScreen extends StatelessWidget {
           _buildSection(
             theme,
             '⚙️ Settings',
-            'Customize fonts, colors, and search behavior in the Settings menu. You can also adjust search history retention.',
+            'Customize fonts and colors in the Settings menu. You can also adjust search history retention.',
           ),
           _buildSection(
             theme,

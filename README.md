@@ -11,8 +11,6 @@ A high-performance, feature-rich dictionary application built with Flutter. Opti
 ### 🔍 Advanced Search
 - **Multi-Dictionary Search**: Display results from multiple dictionaries simultaneously in a tabbed interface.
 - **Fast Lookups**: Optimized database queries for near-instant results.
-- **Definition Previews**: See a snippet of the definition directly in the search suggestions.
-- **Fuzzy Search**: Typo-tolerant matching to find words even with spelling errors.
 - **Tab Management**: Easily close individual dictionary results to clean up your workspace.
 
 ### 📖 Universal Word Lookup
@@ -59,10 +57,10 @@ A high-performance, feature-rich dictionary application built with Flutter. Opti
    ```
 
 ### Importing Dictionaries
-`hdict` supports StarDict dictionary files (provided as `.zip` or `.tar.gz`). 
+`hdict` supports StarDict dictionary files (provided as `.zip`, `.tar.gz`, `.tar.xz`, etc.). 
 1. Open the **Manage Dictionaries** menu in the sidebar.
-2. Tap the **+** (Add) button.
-3. Select your dictionary archive file to import it into the local database.
+2. Tap the **Import File** or **Download Web** button.
+3. Select your dictionary file or enter a URL to import it into the local database.
 
 ---
 

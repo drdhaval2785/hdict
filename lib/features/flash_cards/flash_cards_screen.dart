@@ -100,7 +100,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
       selectedWordMetas.map((meta) async {
         final dict = await _dbHelper.getDictionaryById(meta['dict_id']);
         if (dict != null) {
-          String dictPath = dict['path'];
+          String dictPath = await _dbHelper.resolvePath(dict['path']);
           if (dictPath.endsWith('.ifo')) {
             dictPath = dictPath.replaceAll('.ifo', '.dict');
           }
@@ -546,7 +546,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
                     );
                     if (dict == null) continue;
 
-                    String dictPath = dict['path'];
+                    String dictPath = await _dbHelper.resolvePath(dict['path']);
                     if (dictPath.endsWith('.ifo')) {
                       dictPath = dictPath.replaceAll('.ifo', '.dict');
                     }
