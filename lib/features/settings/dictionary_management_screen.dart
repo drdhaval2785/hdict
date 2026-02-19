@@ -516,9 +516,11 @@ class _DictionaryManagementScreenState
                           ),
                         ),
                         child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 0,
-                            vertical: 4,
+                          contentPadding: const EdgeInsets.only(
+                            left: 0,
+                            right: 8,
+                            top: 4,
+                            bottom: 4,
                           ),
                           leading: ReorderableDragStartListener(
                             index: index,
@@ -533,6 +535,7 @@ class _DictionaryManagementScreenState
                           title: Text(
                             dict['name'],
                             style: const TextStyle(fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
                           ),
                           subtitle: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -545,6 +548,7 @@ class _DictionaryManagementScreenState
                               ),
                               const SizedBox(height: 4),
                               Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Icon(
                                     dict['index_definitions'] == 1
@@ -554,12 +558,15 @@ class _DictionaryManagementScreenState
                                     color: Colors.grey,
                                   ),
                                   const SizedBox(width: 4),
-                                  Text(
-                                    dict['index_definitions'] == 1
-                                        ? 'Definitions indexed'
-                                        : 'Headwords only',
-                                    style: Theme.of(context).textTheme.bodySmall
-                                        ?.copyWith(fontSize: 10),
+                                  Flexible(
+                                    child: Text(
+                                      dict['index_definitions'] == 1
+                                          ? 'Definitions indexed'
+                                          : 'Headwords only',
+                                      style: Theme.of(context).textTheme.bodySmall
+                                          ?.copyWith(fontSize: 10),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
                                 ],
                               ),
