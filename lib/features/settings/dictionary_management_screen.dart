@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:file_picker/file_picker.dart';
 
 import 'package:hdict/core/manager/dictionary_manager.dart';
@@ -255,6 +256,10 @@ class _DictionaryManagementScreenState
         'tar',
         'gz',
         'bz2',
+        'xz',
+        'tgz',
+        'tbz2',
+        'txz',
         'ifo',
         'idx',
         'dict',
@@ -262,6 +267,7 @@ class _DictionaryManagementScreenState
         'syn',
       ],
       allowMultiple: true,
+      withData: kIsWeb, // Required for Web to get file content without path
     );
 
     if (result != null && result.files.isNotEmpty) {
@@ -330,17 +336,35 @@ class _DictionaryManagementScreenState
             result.files.any(
               (f) => f.extension == 'ifo' || f.extension == 'idx',
             )) {
-          final paths = result.files.map((f) => f.path!).toList();
-          stream = _dictionaryManager.importMultipleFilesStream(
-            paths,
-            indexDefinitions: indexDefinitions,
-          );
+          if (kIsWeb) {
+            // Web: Pass file data instead of paths
+            final files = result.files.map((f) => (name: f.name, bytes: f.bytes!)).toList();
+            stream = _dictionaryManager.importMultipleFilesWebStream(
+              files,
+              indexDefinitions: indexDefinitions,
+            );
+          } else {
+            final paths = result.files.map((f) => f.path!).toList();
+            stream = _dictionaryManager.importMultipleFilesStream(
+              paths,
+              indexDefinitions: indexDefinitions,
+            );
+          }
         } else {
           // Single file picked - assume it's an archive
-          stream = _dictionaryManager.importDictionaryStream(
-            result.files.single.path!,
-            indexDefinitions: indexDefinitions,
-          );
+          if (kIsWeb) {
+            // Web: Pass file bytes instead of path
+            stream = _dictionaryManager.importDictionaryWebStream(
+              result.files.single.name,
+              result.files.single.bytes!,
+              indexDefinitions: indexDefinitions,
+            );
+          } else {
+            stream = _dictionaryManager.importDictionaryStream(
+              result.files.single.path!,
+              indexDefinitions: indexDefinitions,
+            );
+          }
         }
 
         await for (final progress in stream) {

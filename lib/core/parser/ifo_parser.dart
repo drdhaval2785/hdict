@@ -1,19 +1,30 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 /// A parser for StarDict .ifo files (metadata/information).
-///
-/// The .ifo file contains key-value pairs (e.g., version=2.4.2) that describe
-/// the dictionary's properties, such as word count and index file offset bits.
 class IfoParser {
   final Map<String, String> _metadata = {};
 
   Future<void> parse(String path) async {
+    if (kIsWeb) {
+      throw UnsupportedError('Use parseContent on Web');
+    }
     final file = File(path);
     if (!await file.exists()) {
       throw Exception('IFO file not found: $path');
     }
 
     final lines = await file.readAsLines();
+    _parseLines(lines);
+  }
+
+  void parseContent(String content) {
+    final lines = content.split(RegExp(r'\r?\n'));
+    _parseLines(lines);
+  }
+
+  void _parseLines(List<String> lines) {
+    _metadata.clear();
     for (var line in lines) {
       final index = line.indexOf('=');
       if (index > 0) {
@@ -21,11 +32,6 @@ class IfoParser {
         final value = line.substring(index + 1).trim();
         _metadata[key] = value;
       }
-    }
-
-    // Validate required fields (optional but good for robustness)
-    if (!_metadata.containsKey('version')) {
-      // warning or error?
     }
   }
 
@@ -40,7 +46,6 @@ class IfoParser {
   String? get date => _metadata['date'];
   String? get sameTypeSequence => _metadata['sametypesequence'];
 
-  // Expose metadata for extensions or debugging
   Map<String, String> get metadata => _metadata;
 
   int get idxOffsetBits =>

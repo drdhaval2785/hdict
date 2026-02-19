@@ -332,6 +332,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
   Widget _buildReviewUI() {
     final currentWord = _quizWords[_currentIndex];
     final wasCorrect = _results[_currentIndex];
+    final settings = context.watch<SettingsProvider>();
 
     return Scaffold(
       appBar: AppBar(
@@ -400,43 +401,44 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
                 Navigator.of(context).popUntil((route) => route.isFirst);
               },
               behavior: HitTestBehavior.translucent,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: SelectionArea(
-                  child: Html(
-                    data: context.read<SettingsProvider>().isTapOnMeaningEnabled
-                        ? HtmlLookupWrapper.wrapWords(currentWord['meaning'])
-                        : currentWord['meaning'],
-                    style: {
-                      "body": Style(
-                        fontSize: FontSize(
-                          context.read<SettingsProvider>().fontSize,
+              child: Container(
+                color: settings.backgroundColor,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: SelectionArea(
+                    child: Html(
+                      data: settings.isTapOnMeaningEnabled
+                          ? HtmlLookupWrapper.wrapWords(currentWord['meaning'])
+                          : currentWord['meaning'],
+                      style: {
+                        "body": Style(
+                          fontSize: FontSize(settings.fontSize),
+                          lineHeight: LineHeight.em(1.5),
+                          margin: Margins.zero,
+                          padding: HtmlPaddings.zero,
+                          color: settings.textColor,
+                          fontFamily: settings.fontFamily,
                         ),
-                        lineHeight: LineHeight.em(1.5),
-                        margin: Margins.zero,
-                        padding: HtmlPaddings.zero,
-                        color: context.read<SettingsProvider>().textColor,
-                        fontFamily: context.read<SettingsProvider>().fontFamily,
-                      ),
-                      "a": Style(
-                        color: context.read<SettingsProvider>().textColor,
-                        textDecoration: TextDecoration.none,
-                      ),
-                    },
-                    onLinkTap: (url, attributes, element) {
-                      debugPrint("FlashCard Link tapped: $url");
-                      if (url != null && url.startsWith('look_up:')) {
-                        final encodedWord = url.substring(8);
-                        try {
-                          final word = encodedWord.contains('%')
-                              ? Uri.decodeComponent(encodedWord)
-                              : encodedWord;
-                          _showWordPopup(word);
-                        } catch (e) {
-                          _showWordPopup(encodedWord);
+                        "a": Style(
+                          color: settings.textColor,
+                          textDecoration: TextDecoration.none,
+                        ),
+                      },
+                      onLinkTap: (url, attributes, element) {
+                        debugPrint("FlashCard Link tapped: $url");
+                        if (url != null && url.startsWith('look_up:')) {
+                          final encodedWord = url.substring(8);
+                          try {
+                            final word = encodedWord.contains('%')
+                                ? Uri.decodeComponent(encodedWord)
+                                : encodedWord;
+                            _showWordPopup(word);
+                          } catch (e) {
+                            _showWordPopup(encodedWord);
+                          }
                         }
-                      }
-                    },
+                      },
+                    ),
                   ),
                 ),
               ),

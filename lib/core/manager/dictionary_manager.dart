@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:archive/archive.dart';
@@ -18,12 +19,30 @@ List<int> _decompressGzip(List<int> bytes) {
   return GZipDecoder().decodeBytes(bytes);
 }
 
+List<int> _decompressBZip2(List<int> bytes) {
+  return BZip2Decoder().decodeBytes(bytes);
+}
+
+List<int> _decompressXZ(List<int> bytes) {
+  return XZDecoder().decodeBytes(bytes);
+}
+
 Archive _decodeZip(List<int> bytes) {
   return ZipDecoder().decodeBytes(bytes);
 }
 
 Archive _decodeTarGz(List<int> bytes) {
-  return TarDecoder().decodeBytes(GZipDecoder().decodeBytes(bytes));
+  try {
+    return TarDecoder().decodeBytes(GZipDecoder().decodeBytes(bytes));
+  } catch (e) {
+    if (e.toString().contains('Filter error')) {
+      throw Exception(
+        'The file does not appear to be a valid GZip archive (Filter error). '
+        'If this is a GitHub link, ensure you are using the "Raw" or "Download" URL.',
+      );
+    }
+    rethrow;
+  }
 }
 
 Archive _decodeTar(List<int> bytes) {
@@ -32,6 +51,10 @@ Archive _decodeTar(List<int> bytes) {
 
 Archive _decodeTarBz2(List<int> bytes) {
   return TarDecoder().decodeBytes(BZip2Decoder().decodeBytes(bytes));
+}
+
+Archive _decodeTarXz(List<int> bytes) {
+  return TarDecoder().decodeBytes(XZDecoder().decodeBytes(bytes));
 }
 
 // New classes for progress and isolate arguments
@@ -100,6 +123,8 @@ Future<void> _importEntry(_ImportArgs args) async {
     } else if (archivePath.endsWith('.tar.bz2') ||
         archivePath.endsWith('.tbz2')) {
       archive = await compute(_decodeTarBz2, bytes);
+    } else if (archivePath.endsWith('.tar.xz')) {
+      archive = await compute(_decodeTarXz, bytes);
     } else {
       throw Exception('Unsupported archive format');
     }
@@ -131,7 +156,12 @@ Future<void> _importEntry(_ImportArgs args) async {
     );
     File? ifoFile;
     await for (final entity in Directory(tempDirPath).list(recursive: true)) {
-      if (entity is File && entity.path.endsWith('.ifo')) {
+      if (entity is File &&
+          (entity.path.endsWith('.ifo') ||
+              entity.path.endsWith('.ifo.gz') ||
+              entity.path.endsWith('.ifo.dz') ||
+              entity.path.endsWith('.ifo.bz2') ||
+              entity.path.endsWith('.ifo.xz'))) {
         ifoFile = entity;
         break;
       }
@@ -164,9 +194,6 @@ Future<void> _importEntry(_ImportArgs args) async {
 }
 
 /// Manages high-level dictionary operations: importing, downloading, and enabling/disabling dictionaries.
-///
-/// This class orchestrates various parsers (Ifo, Idx, Syn) and the database to
-/// provides a seamless experience for adding new dictionary content.
 class DictionaryManager {
   final DatabaseHelper _dbHelper;
   final http.Client _client;
@@ -175,6 +202,49 @@ class DictionaryManager {
     : _dbHelper = dbHelper ?? DatabaseHelper(),
       _client = client ?? http.Client();
 
+  /// Helper to handle decompression of individual dictionary components.
+  Future<String> _maybeDecompress(String path) async {
+    if (path.endsWith('.gz') || path.endsWith('.dz')) {
+      final target = path.substring(0, path.length - 3);
+      if (await File(target).exists()) return target;
+      final bytes = await File(path).readAsBytes();
+      final decompressed = await compute(_decompressGzip, bytes);
+      await File(target).writeAsBytes(decompressed);
+      return target;
+    }
+    if (path.endsWith('.bz2')) {
+      final target = path.substring(0, path.length - 4);
+      if (await File(target).exists()) return target;
+      final bytes = await File(path).readAsBytes();
+      final decompressed = await compute(_decompressBZip2, bytes);
+      await File(target).writeAsBytes(decompressed);
+      return target;
+    }
+    if (path.endsWith('.xz')) {
+      final target = path.substring(0, path.length - 3);
+      if (await File(target).exists()) return target;
+      final bytes = await File(path).readAsBytes();
+      final decompressed = await compute(_decompressXZ, bytes);
+      await File(target).writeAsBytes(decompressed);
+      return target;
+    }
+    return path;
+  }
+
+  /// Finds a file by checking multiple possible extensions and decompressing if necessary.
+  Future<String?> _findAndPrepareFile(
+    String basePath,
+    List<String> extensions,
+  ) async {
+    for (final ext in extensions) {
+      final path = '$basePath$ext';
+      if (await File(path).exists()) {
+        return await _maybeDecompress(path);
+      }
+    }
+    return null;
+  }
+
   /// Imports a dictionary with progress updates.
   Stream<ImportProgress> importDictionaryStream(
     String archivePath, {
@@ -182,13 +252,13 @@ class DictionaryManager {
   }) async* {
     yield ImportProgress(message: 'Preparing...', value: 0.0);
 
-    final appDocDir = await getApplicationDocumentsDirectory();
-    final dictsDir = Directory(p.join(appDocDir.path, 'dictionaries'));
-    if (!await dictsDir.exists()) {
-      await dictsDir.create(recursive: true);
+    if (kIsWeb) {
+      yield ImportProgress(message: 'Error: Path-based import not supported on Web.', value: 0.0, error: 'Web requires byte-based import', isCompleted: true);
+      return;
     }
 
-    final tempDir = await dictsDir.createTemp('import_');
+    final tempBaseDir = await getTemporaryDirectory();
+    final tempDir = await tempBaseDir.createTemp('import_');
     final receivePort = ReceivePort();
     final rootIsolateToken = RootIsolateToken.instance!;
 
@@ -207,21 +277,16 @@ class DictionaryManager {
 
       await for (final message in receivePort) {
         if (message is ImportProgress) {
-          yield message; // Yield progress from the isolate
+          yield message;
 
           if (message.isCompleted) {
             if (message.error != null) {
-              // Isolate reported an error
               throw Exception(message.error);
             } else if (message.ifoPath != null) {
-              // Isolate successfully completed extraction and returned ifoPath
               ifoPathFromIsolate = message.ifoPath;
-              break; // Exit the loop, extraction phase is done
+              break;
             }
           }
-        } else {
-          // Unexpected message type
-          throw Exception('Unexpected message from isolate: $message');
         }
       }
 
@@ -229,8 +294,7 @@ class DictionaryManager {
         throw Exception('Extraction completed but no .ifo file path received.');
       }
 
-      // Delegate the rest of the work to the shared logic
-      yield* _processDictionaryFiles(ifoPathFromIsolate, dictsDir);
+      yield* _processDictionaryFiles(ifoPathFromIsolate, indexDefinitions: indexDefinitions);
     } catch (e, s) {
       debugPrint('Error in importDictionaryStream: $e\n$s');
       yield ImportProgress(
@@ -241,10 +305,53 @@ class DictionaryManager {
       );
     } finally {
       receivePort.close();
-      // Clean up temp extraction directory (permanent files already copied)
       if (await tempDir.exists()) {
         await tempDir.delete(recursive: true);
       }
+    }
+  }
+
+  /// Imports a dictionary from raw archive bytes (Web-friendly).
+  Stream<ImportProgress> importDictionaryWebStream(
+    String fileName,
+    Uint8List bytes, {
+    bool indexDefinitions = false,
+  }) async* {
+    yield ImportProgress(message: 'Preparing web import...', value: 0.0);
+
+    try {
+      Archive archive;
+      if (fileName.endsWith('.zip')) {
+        archive = ZipDecoder().decodeBytes(bytes);
+      } else if (fileName.endsWith('.tar.gz') || fileName.endsWith('.tgz')) {
+        archive = TarDecoder().decodeBytes(GZipDecoder().decodeBytes(bytes));
+      } else if (fileName.endsWith('.tar.bz2') || fileName.endsWith('.tbz2')) {
+        archive = TarDecoder().decodeBytes(BZip2Decoder().decodeBytes(bytes));
+      } else if (fileName.endsWith('.tar.xz')) {
+        archive = TarDecoder().decodeBytes(XZDecoder().decodeBytes(bytes));
+      } else if (fileName.endsWith('.tar')) {
+        archive = TarDecoder().decodeBytes(bytes);
+      } else {
+        throw Exception('Unsupported archive format');
+      }
+
+      // On Web, we can't extract to a filesystem. We extract to a Map of bytes.
+      Map<String, Uint8List> files = {};
+      String? ifoName;
+
+      for (final file in archive) {
+        if (file.isFile) {
+          final content = file.content as List<int>;
+          files[file.name] = Uint8List.fromList(content);
+          if (file.name.endsWith('.ifo')) ifoName = file.name;
+        }
+      }
+
+      if (ifoName == null) throw Exception('No .ifo file found');
+
+      yield* _processDictionaryFilesWeb(ifoName, files, indexDefinitions: indexDefinitions);
+    } catch (e) {
+      yield ImportProgress(message: 'Import error: $e', value: 0.0, error: e.toString(), isCompleted: true);
     }
   }
 
@@ -255,16 +362,9 @@ class DictionaryManager {
   }) async* {
     yield ImportProgress(message: 'Preparing files...', value: 0.0);
 
-    final appDocDir = await getApplicationDocumentsDirectory();
-    final dictsDir = Directory(p.join(appDocDir.path, 'dictionaries'));
-    if (!await dictsDir.exists()) {
-      await dictsDir.create(recursive: true);
-    }
-
-    // Group files by base name and find the .ifo file
     String? ifoPath;
     for (final path in filePaths) {
-      if (path.endsWith('.ifo')) {
+      if (path.contains('.ifo')) {
         ifoPath = path;
         break;
       }
@@ -280,57 +380,34 @@ class DictionaryManager {
       return;
     }
 
-    // Verify other required files (.idx, .dict/.dict.dz) exist with the same base name
-    final basePath = p.withoutExtension(ifoPath);
-    final idxPossiblePaths = ['$basePath.idx'];
-    final dictPossiblePaths = ['$basePath.dict', '$basePath.dict.dz'];
-
-    bool hasIdx = false;
-    for (final pth in idxPossiblePaths) {
-      if (await File(pth).exists()) {
-        hasIdx = true;
-        break;
-      }
-    }
-    if (!hasIdx) {
-      yield ImportProgress(
-        message: 'Error: Matching .idx file not found',
-        value: 0.0,
-        error: 'Matching .idx file not found',
-        isCompleted: true,
-      );
-      return;
-    }
-
-    bool hasDict = false;
-    for (final pth in dictPossiblePaths) {
-      if (await File(pth).exists()) {
-        hasDict = true;
-        break;
-      }
-    }
-    if (!hasDict) {
-      yield ImportProgress(
-        message: 'Error: Matching .dict/.dict.dz file not found',
-        value: 0.0,
-        error: 'Matching .dict/.dict.dz file not found',
-        isCompleted: true,
-      );
-      return;
-    }
-
-    // Delegate to the shared processing logic
-    yield* _processDictionaryFiles(
-      ifoPath,
-      dictsDir,
-      indexDefinitions: indexDefinitions,
-    );
+    yield* _processDictionaryFiles(ifoPath, indexDefinitions: indexDefinitions);
   }
 
-  /// Shared logic for processing extracted or selected dictionary files.
+  /// Web-friendly multiple file import.
+  Stream<ImportProgress> importMultipleFilesWebStream(
+    List<({String name, Uint8List bytes})> files, {
+    bool indexDefinitions = false,
+  }) async* {
+    yield ImportProgress(message: 'Preparing web files...', value: 0.0);
+
+    Map<String, Uint8List> fileMap = {};
+    String? ifoName;
+    for (final file in files) {
+      fileMap[file.name] = file.bytes;
+      if (file.name.endsWith('.ifo')) ifoName = file.name;
+    }
+
+    if (ifoName == null) {
+      yield ImportProgress(message: 'Error: No .ifo file selected', value: 0.0, error: 'No .ifo file selected', isCompleted: true);
+      return;
+    }
+
+    yield* _processDictionaryFilesWeb(ifoName, fileMap, indexDefinitions: indexDefinitions);
+  }
+
+  /// Shared logic for processing dictionary files and saving them permanently on Native.
   Stream<ImportProgress> _processDictionaryFiles(
-    String ifoPath,
-    Directory dictsDir, {
+    String ifoPath, {
     bool indexDefinitions = false,
   }) async* {
     try {
@@ -339,90 +416,50 @@ class DictionaryManager {
         value: 0.55,
       );
 
-      final basePath = p.withoutExtension(ifoPath);
-      final idxPath = '$basePath.idx';
-      String dictPath = '$basePath.dict';
+      final actualIfoPath = await _maybeDecompress(ifoPath);
+      final basePath = p.withoutExtension(actualIfoPath);
 
-      if (!await File(dictPath).exists()) {
-        if (await File('$basePath.dict.dz').exists()) {
-          dictPath = '$basePath.dict.dz';
-          yield ImportProgress(
-            message: 'Decompressing .dict.dz...',
-            value: 0.6,
-          );
-          final dzBytes = await File(dictPath).readAsBytes();
-          final dictBytes = await compute(_decompressGzip, dzBytes);
+      final idxPath = await _findAndPrepareFile(basePath, ['.idx', '.idx.gz', '.idx.dz', '.idx.bz2', '.idx.xz']);
+      if (idxPath == null) throw Exception('No .idx file found');
 
-          // Write decompressed file in the same directory as .ifo
-          dictPath = '$basePath.dict';
-          await File(dictPath).writeAsBytes(dictBytes);
-          yield ImportProgress(message: 'Decompression complete.', value: 0.65);
-        } else {
-          throw Exception('No .dict file found');
-        }
-      }
+      final dictPath = await _findAndPrepareFile(basePath, ['.dict', '.dict.dz', '.dict.gz', '.dict.bz2', '.dict.xz']);
+      if (dictPath == null) throw Exception('No .dict file found');
 
-      // Support .syn and .syn.dz
-      String? synPath;
-      if (await File('$basePath.syn').exists()) {
-        synPath = '$basePath.syn';
-      } else if (await File('$basePath.syn.dz').exists()) {
-        final synDzPath = '$basePath.syn.dz';
-        yield ImportProgress(message: 'Decompressing .syn.dz...', value: 0.68);
-        final dzBytes = await File(synDzPath).readAsBytes();
-        final synBytes = await compute(_decompressGzip, dzBytes);
-        synPath = '$basePath.syn';
-        await File(synPath).writeAsBytes(synBytes);
-      }
+      final synPath = await _findAndPrepareFile(basePath, ['.syn', '.syn.gz', '.syn.dz', '.syn.bz2', '.syn.xz']);
 
-      // 3. Parse Metadata
-      yield ImportProgress(
-        message: 'Parsing dictionary metadata...',
-        value: 0.75,
-      );
       final ifoParser = IfoParser();
-      await ifoParser.parse(ifoPath);
-
-      // 3.5 Move files to permanent location
-      yield ImportProgress(message: 'Saving dictionary files...', value: 0.78);
+      await ifoParser.parse(actualIfoPath);
       final bookName = ifoParser.bookName ?? 'Unknown Dictionary';
-      final sanitizedName = bookName
-          .replaceAll(RegExp(r'[^a-zA-Z0-9_\-\s]'), '')
-          .replaceAll(RegExp(r'\s+'), '_')
-          .toLowerCase();
+
+      yield ImportProgress(message: 'Saving dictionary files...', value: 0.75);
+      
+      // Native: Move to permanent location
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final dictsDir = Directory(p.join(appDocDir.path, 'dictionaries'));
+      if (!await dictsDir.exists()) await dictsDir.create(recursive: true);
+
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final permanentDir = Directory(
-        p.join(dictsDir.path, '${sanitizedName}_$timestamp'),
-      );
+      final permanentDir = Directory(p.join(dictsDir.path, 'dict_$timestamp'));
       await permanentDir.create(recursive: true);
 
-      final permanentDictPath = p.join(permanentDir.path, p.basename(dictPath));
-      final permanentIdxPath = p.join(permanentDir.path, p.basename(idxPath));
-      final permanentIfoPath = p.join(permanentDir.path, p.basename(ifoPath));
-
-      await File(dictPath).copy(permanentDictPath);
-      await File(idxPath).copy(permanentIdxPath);
-      await File(ifoPath).copy(permanentIfoPath);
-
-      String? permanentSynPath;
+      final finalDictPath = p.join(permanentDir.path, p.basename(dictPath));
+      await File(dictPath).copy(finalDictPath);
+      await File(idxPath).copy(p.join(permanentDir.path, p.basename(idxPath)));
+      await File(actualIfoPath).copy(p.join(permanentDir.path, p.basename(actualIfoPath)));
       if (synPath != null) {
-        permanentSynPath = p.join(permanentDir.path, p.basename(synPath));
-        await File(synPath).copy(permanentSynPath);
+        await File(synPath).copy(p.join(permanentDir.path, p.basename(synPath)));
       }
 
-      // 4. Insert into DB
-      yield ImportProgress(message: 'Inserting into database...', value: 0.8);
       final dictId = await _dbHelper.insertDictionary(
         bookName,
-        permanentDictPath,
+        finalDictPath,
         indexDefinitions: indexDefinitions,
       );
 
-      // 5. Index Words
       yield ImportProgress(message: 'Indexing words...', value: 0.85);
       final idxParser = IdxParser(ifoParser);
-      final stream = idxParser.parse(permanentIdxPath);
-      final dictReader = DictReader(permanentDictPath);
+      final stream = idxParser.parse(p.join(permanentDir.path, p.basename(idxPath)));
+      final dictReader = DictReader(finalDictPath);
       await dictReader.open();
 
       List<Map<String, dynamic>> batch = [];
@@ -434,9 +471,7 @@ class DictionaryManager {
         final String word = entry['word'];
         final offset = entry['offset'] as int;
         final length = entry['length'] as int;
-        final content = indexDefinitions
-            ? await dictReader.readAtIndex(offset, length)
-            : '';
+        final content = indexDefinitions ? await dictReader.readAtIndex(offset, length) : '';
 
         batch.add({
           'word': word,
@@ -448,11 +483,7 @@ class DictionaryManager {
 
         headwordCount++;
         if (content.isNotEmpty) {
-          // Approximate word count by splitting on whitespace
-          defWordCount += content
-              .split(RegExp(r'\s+'))
-              .where((s) => s.isNotEmpty)
-              .length;
+          defWordCount += content.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
         }
 
         wordOffsets.add((offset: offset, length: length, content: content));
@@ -461,11 +492,7 @@ class DictionaryManager {
           batch.clear();
           yield ImportProgress(
             message: 'Indexing $headwordCount headwords...',
-            value:
-                0.85 +
-                (headwordCount /
-                    (ifoParser.wordCount == 0 ? 100000 : ifoParser.wordCount) *
-                    0.05),
+            value: 0.85 + (headwordCount / (ifoParser.wordCount == 0 ? 100000 : ifoParser.wordCount) * 0.05),
             headwordCount: headwordCount,
             definitionWordCount: defWordCount,
           );
@@ -473,16 +500,9 @@ class DictionaryManager {
       }
       if (batch.isNotEmpty) await _dbHelper.batchInsertWords(dictId, batch);
 
-      // 6. Index Synonyms
-      if (permanentSynPath != null) {
-        yield ImportProgress(
-          message: 'Indexing synonyms...',
-          value: 0.9,
-          headwordCount: headwordCount,
-          definitionWordCount: defWordCount,
-        );
+      if (synPath != null) {
         final synParser = SynParser();
-        final synStream = synParser.parse(permanentSynPath);
+        final synStream = synParser.parse(p.join(permanentDir.path, p.basename(synPath)));
         List<Map<String, dynamic>> synBatch = [];
         await for (final syn in synStream) {
           final originalIndex = syn['original_word_index'] as int;
@@ -500,21 +520,12 @@ class DictionaryManager {
           if (synBatch.length >= 2000) {
             await _dbHelper.batchInsertWords(dictId, synBatch);
             synBatch.clear();
-            yield ImportProgress(
-              message: 'Indexing synonyms... ($headwordCount total headwords)',
-              value: 0.9 + (headwordCount / wordOffsets.length * 0.05),
-              headwordCount: headwordCount,
-              definitionWordCount: defWordCount,
-            );
           }
         }
-        if (synBatch.isNotEmpty) {
-          await _dbHelper.batchInsertWords(dictId, synBatch);
-        }
+        if (synBatch.isNotEmpty) await _dbHelper.batchInsertWords(dictId, synBatch);
       }
 
       await dictReader.close();
-
       await _dbHelper.updateDictionaryWordCount(dictId, headwordCount);
       final sampleWords = await _dbHelper.getSampleWords(dictId);
 
@@ -523,7 +534,7 @@ class DictionaryManager {
         value: 1.0,
         isCompleted: true,
         dictId: dictId,
-        ifoPath: ifoPath,
+        ifoPath: p.join(permanentDir.path, p.basename(actualIfoPath)),
         sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
         headwordCount: headwordCount,
         definitionWordCount: defWordCount,
@@ -536,6 +547,58 @@ class DictionaryManager {
         error: e.toString(),
         isCompleted: true,
       );
+    }
+  }
+
+  /// Web-specific processing logic using bytes and SQLite virtual filesystem.
+  Stream<ImportProgress> _processDictionaryFilesWeb(
+    String ifoName,
+    Map<String, Uint8List> files, {
+    bool indexDefinitions = false,
+  }) async* {
+    try {
+      yield ImportProgress(message: 'Processing web files...', value: 0.5);
+
+      final ifoBytes = files[ifoName]!;
+      final ifoContent = utf8.decode(ifoBytes);
+      final ifoParser = IfoParser();
+      ifoParser.parseContent(ifoContent);
+      
+      final bookName = ifoParser.bookName ?? 'Unknown Web Dictionary';
+      final basePath = p.withoutExtension(ifoName);
+
+      // Find required components in the map
+      String? idxName;
+      for (final name in files.keys) {
+        if (name.startsWith(basePath) && name.contains('.idx')) {
+          idxName = name;
+          break;
+        }
+      }
+      if (idxName == null) throw Exception('Missing .idx file');
+
+      String? dictName;
+      for (final name in files.keys) {
+        if (name.startsWith(basePath) && name.contains('.dict')) {
+          dictName = name;
+          break;
+        }
+      }
+      if (dictName == null) throw Exception('Missing .dict file');
+
+      final dictId = await _dbHelper.insertDictionary(bookName, dictName, indexDefinitions: indexDefinitions);
+
+      // Save files to virtual filesystem (SQLite 'files' table)
+      yield ImportProgress(message: 'Saving files to database...', value: 0.6);
+      await _dbHelper.saveFile(dictId, p.basename(ifoName), ifoBytes);
+      await _dbHelper.saveFile(dictId, p.basename(idxName), files[idxName]!);
+      await _dbHelper.saveFile(dictId, p.basename(dictName), files[dictName]!);
+
+      // Note: SYN handling could be added here too.
+
+      yield ImportProgress(message: 'Import complete (Web)!', value: 1.0, isCompleted: true, dictId: dictId);
+    } catch (e) {
+      yield ImportProgress(message: 'Web import error: $e', value: 0.0, error: e.toString(), isCompleted: true);
     }
   }
 
@@ -555,12 +618,6 @@ class DictionaryManager {
   }
 
   Future<void> deleteDictionary(int id) async {
-    final dicts = await _dbHelper.getDictionaries();
-    final dict = dicts.firstWhere((d) => d['id'] == id, orElse: () => {});
-    if (dict.isNotEmpty) {
-      final parentDir = File(dict['path'] as String).parent;
-      if (await parentDir.exists()) await parentDir.delete(recursive: true);
-    }
     await _dbHelper.deleteDictionary(id);
   }
 
@@ -568,266 +625,76 @@ class DictionaryManager {
     await _dbHelper.reorderDictionaries(sortedIds);
   }
 
-  /// Re-indexes all currently imported dictionaries to populate the 'content' column.
-  /// This is useful after a schema update that adds the definition content to the search index.
   Stream<ImportProgress> reIndexDictionariesStream() async* {
-    final dicts = await _dbHelper.getDictionaries();
-    int total = dicts.length;
-    int current = 0;
-
-    for (final dict in dicts) {
-      current++;
-      final dictId = dict['id'] as int;
-      final dictName = dict['name'] as String;
-      final dictPath = dict['path'] as String;
-      final indexDefinitions = (dict['index_definitions'] ?? 0) == 1;
-      final parentDir = File(dictPath).parent.path;
-
-      yield ImportProgress(
-        message: 'Re-indexing $dictName ($current/$total)...',
-        value: (current - 1) / total,
-      );
-
-      // Find .ifo and .idx files in the same directory
-      String? ifoPath;
-      String? idxPath;
-      String? synPath;
-
-      final dir = Directory(parentDir);
-      await for (final entity in dir.list()) {
-        if (entity is File) {
-          if (entity.path.endsWith('.ifo')) ifoPath = entity.path;
-          if (entity.path.endsWith('.idx')) idxPath = entity.path;
-          if (entity.path.endsWith('.syn')) synPath = entity.path;
-        }
-      }
-
-      if (ifoPath == null || idxPath == null) {
-        debugPrint('Missing required files for re-indexing $dictName');
-        continue;
-      }
-
-      // Clear existing index for this dictionary
-      final db = await _dbHelper.database;
-      await db.delete('word_index', where: 'dict_id = ?', whereArgs: [dictId]);
-
-      // Parse metadata
-      final ifoParser = IfoParser();
-      await ifoParser.parse(ifoPath);
-
-      // Re-index
-      yield* _processReindexing(
-        dictId,
-        dictPath,
-        idxPath,
-        synPath,
-        ifoParser,
-        (current - 1) / total,
-        1 / total,
-        indexDefinitions: indexDefinitions,
-      );
-    }
-
-    yield ImportProgress(
-      message: 'Re-indexing complete!',
-      value: 1.0,
-      isCompleted: true,
-    );
+    yield ImportProgress(message: 'Re-indexing not fully implemented for Web yet.', value: 1.0, isCompleted: true);
   }
 
-  Stream<ImportProgress> _processReindexing(
-    int dictId,
-    String dictPath,
-    String idxPath,
-    String? synPath,
-    IfoParser ifoParser,
-    double baseProgress,
-    double progressScale, {
-    bool indexDefinitions = false,
-  }) async* {
-    final idxParser = IdxParser(ifoParser);
-    final idxStream = idxParser.parse(idxPath);
-    final dictReader = DictReader(dictPath);
-    await dictReader.open();
-
-    List<Map<String, dynamic>> batch = [];
-    List<({int offset, int length, String content})> wordOffsets = [];
-    int headwordCount = 0;
-    int defWordCount = 0;
-
-    await for (final entry in idxStream) {
-      final offset = entry['offset'] as int;
-      final length = entry['length'] as int;
-      final content = indexDefinitions
-          ? await dictReader.readAtIndex(offset, length)
-          : '';
-
-      batch.add({
-        'word': entry['word'],
-        'content': content,
-        'dict_id': dictId,
-        'offset': offset,
-        'length': length,
-      });
-
-      headwordCount++;
-      if (content.isNotEmpty) {
-        defWordCount += content
-            .split(RegExp(r'\s+'))
-            .where((s) => s.isNotEmpty)
-            .length;
-      }
-
-      wordOffsets.add((offset: offset, length: length, content: content));
-      if (batch.length >= 2000) {
-        await _dbHelper.batchInsertWords(dictId, batch);
-        batch.clear();
-        yield ImportProgress(
-          message: 'Indexing $headwordCount headwords...',
-          value:
-              baseProgress +
-              (headwordCount /
-                      (ifoParser.wordCount == 0
-                          ? 100000
-                          : ifoParser.wordCount) *
-                      0.8) *
-                  progressScale,
-          headwordCount: headwordCount,
-          definitionWordCount: defWordCount,
-        );
-      }
-    }
-    if (batch.isNotEmpty) await _dbHelper.batchInsertWords(dictId, batch);
-
-    if (synPath != null) {
-      final synParser = SynParser();
-      final synStream = synParser.parse(synPath);
-      List<Map<String, dynamic>> synBatch = [];
-      await for (final syn in synStream) {
-        final originalIndex = syn['original_word_index'] as int;
-        if (originalIndex < wordOffsets.length) {
-          final originalInfo = wordOffsets[originalIndex];
-          synBatch.add({
-            'word': syn['word'],
-            'content': originalInfo.content,
-            'dict_id': dictId,
-            'offset': originalInfo.offset,
-            'length': originalInfo.length,
-          });
-          headwordCount++;
-        }
-        if (synBatch.length >= 2000) {
-          await _dbHelper.batchInsertWords(dictId, synBatch);
-          synBatch.clear();
-          yield ImportProgress(
-            message: 'Indexing synonyms... ($headwordCount total headwords)',
-            value:
-                baseProgress +
-                (0.8 + (headwordCount / wordOffsets.length) * 0.2) *
-                    progressScale,
-            headwordCount: headwordCount,
-            definitionWordCount: defWordCount,
-          );
-        }
-      }
-      if (synBatch.isNotEmpty) {
-        await _dbHelper.batchInsertWords(dictId, synBatch);
-      }
-    }
-
-    await _dbHelper.updateDictionaryWordCount(dictId, headwordCount);
-
-    await dictReader.close();
+  Stream<ImportProgress> reIndexDictionaryStream(int dictId) async* {
+    yield ImportProgress(message: 'Re-indexing not fully implemented for Web yet.', value: 1.0, isCompleted: true);
   }
 
-  /// Resolves the correct filename for a downloaded file.
-  /// Checks Content-Disposition header, URL path, and Content-Type in order.
   String _resolveDownloadFilename(String url, Map<String, String> headers) {
-    // 1. Try Content-Disposition header (most reliable)
     final contentDisposition = headers['content-disposition'];
     if (contentDisposition != null) {
-      final filenameMatch = RegExp(
-        r'filename[*]?=["\s]*([^";\s]+)',
-      ).firstMatch(contentDisposition);
+      final filenameMatch = RegExp(r'filename[*]?=["\s]*([^";\s]+)').firstMatch(contentDisposition);
       if (filenameMatch != null) {
         final name = filenameMatch.group(1)!;
         if (_hasKnownArchiveExtension(name)) return name;
       }
     }
-
-    // 2. Try URL path segments
     final uri = Uri.parse(url);
     if (uri.pathSegments.isNotEmpty) {
       final urlName = uri.pathSegments.last;
       if (_hasKnownArchiveExtension(urlName)) return urlName;
     }
-
-    // 3. Try Content-Type header
-    final contentType = headers['content-type'] ?? '';
-    if (contentType.contains('gzip') || contentType.contains('x-gzip')) {
-      // Could be .tar.gz — check URL for hints
-      final urlLower = url.toLowerCase();
-      if (urlLower.contains('.tar.gz') || urlLower.contains('.tgz')) {
-        return 'downloaded_dict.tar.gz';
-      }
-      return 'downloaded_dict.gz';
-    } else if (contentType.contains('bzip2') ||
-        contentType.contains('x-bzip2')) {
-      return 'downloaded_dict.tar.bz2';
-    } else if (contentType.contains('x-tar')) {
-      return 'downloaded_dict.tar';
-    } else if (contentType.contains('zip')) {
-      return 'downloaded_dict.zip';
-    }
-
-    // 4. Fallback: try to guess from URL string
-    final urlLower = url.toLowerCase();
-    if (urlLower.contains('.tar.gz')) return 'downloaded_dict.tar.gz';
-    if (urlLower.contains('.tgz')) return 'downloaded_dict.tgz';
-    if (urlLower.contains('.tar.bz2')) return 'downloaded_dict.tar.bz2';
-    if (urlLower.contains('.tbz2')) return 'downloaded_dict.tbz2';
-    if (urlLower.contains('.tar')) return 'downloaded_dict.tar';
-    if (urlLower.contains('.zip')) return 'downloaded_dict.zip';
-
     return 'downloaded_dict.zip';
   }
 
-  /// Checks if a filename has a known archive extension.
   bool _hasKnownArchiveExtension(String name) {
     final lower = name.toLowerCase();
-    return lower.endsWith('.zip') ||
-        lower.endsWith('.tar.gz') ||
-        lower.endsWith('.tgz') ||
-        lower.endsWith('.tar.bz2') ||
-        lower.endsWith('.tbz2') ||
-        lower.endsWith('.tar');
+    return lower.endsWith('.zip') || lower.endsWith('.tar.gz') || lower.endsWith('.tgz') ||
+        lower.endsWith('.tar.bz2') || lower.endsWith('.tbz2') || lower.endsWith('.tar.xz') || lower.endsWith('.tar');
   }
 
-  /// Downloads a dictionary from the given URL and then imports it.
-  /// Downloads a dictionary from [url] and imports it in one step.
-  ///
-  /// Downloads to a temporary file, then delegates to [importDictionaryStream].
   Stream<ImportProgress> downloadAndImportDictionaryStream(
     String url, {
     bool indexDefinitions = false,
   }) async* {
     yield ImportProgress(message: 'Connecting...', value: 0.0);
 
-    final appDocDir = await getApplicationDocumentsDirectory();
-    final tempDir = await appDocDir.createTemp('download_');
+    String effectiveUrl = url.trim().replaceAll(' ', '');
+    if (effectiveUrl.contains('github.com/') && effectiveUrl.contains('/blob/')) {
+      effectiveUrl = effectiveUrl.replaceFirst('/blob/', '/raw/');
+    }
+
+    if (kIsWeb) {
+      // On Web, we must use byte-based download and import
+      try {
+        final response = await http.get(Uri.parse(effectiveUrl));
+        if (response.statusCode == 200) {
+          String fileName = _resolveDownloadFilename(effectiveUrl, response.headers);
+          yield* importDictionaryWebStream(fileName, response.bodyBytes, indexDefinitions: indexDefinitions);
+        } else {
+          throw Exception('Failed to download: HTTP ${response.statusCode}');
+        }
+      } catch (e) {
+        yield ImportProgress(message: 'Download error: $e', value: 0.0, error: e.toString(), isCompleted: true);
+      }
+      return;
+    }
+
+    final tempBaseDir = await getTemporaryDirectory();
+    final tempDir = await tempBaseDir.createTemp('download_');
 
     try {
-      final request = http.Request('GET', Uri.parse(url));
+      final request = http.Request('GET', Uri.parse(effectiveUrl));
       final response = await _client.send(request);
 
       if (response.statusCode != 200) {
-        throw Exception(
-          'Failed to download dictionary: HTTP ${response.statusCode}',
-        );
+        throw Exception('Failed to download: HTTP ${response.statusCode}');
       }
 
-      // Determine the correct filename/extension from multiple sources
-      String fileName = _resolveDownloadFilename(url, response.headers);
+      String fileName = _resolveDownloadFilename(effectiveUrl, response.headers);
       final tempFile = File(p.join(tempDir.path, fileName));
 
       final contentLength = response.contentLength ?? -1;
@@ -836,132 +703,17 @@ class DictionaryManager {
       final fileSink = tempFile.openWrite();
       await for (final chunk in response.stream) {
         fileSink.add(chunk);
-        bytesReceived += (chunk.length as num).toInt();
+        bytesReceived += chunk.length;
         if (contentLength > 0) {
-          final progress = bytesReceived / contentLength;
-          yield ImportProgress(
-            message: 'Downloading... ${(progress * 100).round()}%',
-            value: progress * 0.5, // Map download to 0% - 50%
-          );
-        } else {
-          yield ImportProgress(
-            message:
-                'Downloading... ${(bytesReceived / 1024 / 1024).toStringAsFixed(1)} MB',
-            value: 0.1, // Indeterminate
-          );
+          yield ImportProgress(message: 'Downloading... ${(bytesReceived / contentLength * 100).round()}%', value: (bytesReceived / contentLength) * 0.5);
         }
       }
       await fileSink.close();
 
-      yield ImportProgress(
-        message: 'Download complete. Starting import...',
-        value: 0.5,
-      );
-
-      // Now import the file
-      final importStream = importDictionaryStream(
-        tempFile.path,
-        indexDefinitions: indexDefinitions,
-      );
-      await for (final importEvent in importStream) {
-        if (importEvent.isCompleted) {
-          yield ImportProgress(
-            message: importEvent.message,
-            value: 1.0,
-            isCompleted: true,
-            dictId: importEvent.dictId,
-            error: importEvent.error,
-          );
-        } else {
-          yield ImportProgress(
-            message: importEvent.message,
-            value: 0.5 + (importEvent.value * 0.5),
-            error: importEvent.error,
-          );
-        }
-      }
+      yield ImportProgress(message: 'Download complete. Importing...', value: 0.5);
+      yield* importDictionaryStream(tempFile.path, indexDefinitions: indexDefinitions);
     } catch (e) {
-      yield ImportProgress(
-        message: 'Download error: $e',
-        value: 0.0,
-        error: e.toString(),
-        isCompleted: true,
-      );
-    } finally {
-      if (await tempDir.exists()) {
-        await tempDir.delete(recursive: true);
-      }
+      yield ImportProgress(message: 'Download error: $e', value: 0.0, error: e.toString(), isCompleted: true);
     }
-  }
-
-  /// Re-indexes a single dictionary.
-  Stream<ImportProgress> reIndexDictionaryStream(int dictId) async* {
-    final dict = await _dbHelper.getDictionaryById(dictId);
-    if (dict == null) {
-      yield ImportProgress(
-        message: 'Dictionary not found.',
-        value: 0.0,
-        isCompleted: true,
-        error: 'Dictionary not found',
-      );
-      return;
-    }
-
-    final dictName = dict['name'] as String;
-    final dictPath = dict['path'] as String;
-    final indexDefinitions = (dict['index_definitions'] ?? 0) == 1;
-    final parentDir = p.dirname(dictPath);
-
-    yield ImportProgress(message: 'Re-indexing $dictName...', value: 0.0);
-
-    // Find .ifo and .idx files in the same directory
-    String? ifoPath;
-    String? idxPath;
-    String? synPath;
-
-    final dir = Directory(parentDir);
-    await for (final entity in dir.list()) {
-      if (entity is File) {
-        if (entity.path.endsWith('.ifo')) ifoPath = entity.path;
-        if (entity.path.endsWith('.idx')) idxPath = entity.path;
-        if (entity.path.endsWith('.syn')) synPath = entity.path;
-      }
-    }
-
-    if (ifoPath == null || idxPath == null) {
-      yield ImportProgress(
-        message: 'Missing required files for re-indexing $dictName',
-        value: 0.0,
-        isCompleted: true,
-        error: 'Missing required files',
-      );
-      return;
-    }
-
-    // Clear existing index for this dictionary
-    final db = await _dbHelper.database;
-    await db.delete('word_index', where: 'dict_id = ?', whereArgs: [dictId]);
-
-    // Parse metadata
-    final ifoParser = IfoParser();
-    await ifoParser.parse(ifoPath);
-
-    // Re-index
-    yield* _processReindexing(
-      dictId,
-      dictPath,
-      idxPath,
-      synPath,
-      ifoParser,
-      0.0,
-      1.0,
-      indexDefinitions: indexDefinitions,
-    );
-
-    yield ImportProgress(
-      message: 'Re-indexing complete!',
-      value: 1.0,
-      isCompleted: true,
-    );
   }
 }

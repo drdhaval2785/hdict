@@ -26,11 +26,30 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDatabase() async {
-    Directory documentsDirectory = await getApplicationDocumentsDirectory();
-    String path = join(documentsDirectory.path, 'novalex.db');
+    String path;
+    if (kIsWeb) {
+      path = 'hdict_v4.db'; // Incremented version for stability
+    } else {
+      try {
+        Directory documentsDirectory = await getApplicationDocumentsDirectory();
+        path = join(documentsDirectory.path, 'novalex.db');
+      } catch (e) {
+        debugPrint('Error getting documents directory: $e');
+        path = 'novalex.db'; // Fallback to local path
+      }
+    }
+
+    // Verify factory is initialized
+    try {
+      databaseFactory;
+    } catch (e) {
+      debugPrint('Database factory not initialized: $e');
+      throw StateError('Database factory not initialized. Check main.dart');
+    }
+
     return await openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -51,16 +70,30 @@ class DatabaseHelper {
     ''');
 
     // 2. Create word_index FTS5 virtual table
-    await db.execute('''
-      CREATE VIRTUAL TABLE word_index USING fts5(
-        word,
-        content,
-        dict_id UNINDEXED,
-        offset UNINDEXED,
-        length UNINDEXED,
-        tokenize = 'unicode61'
-      )
-    ''');
+    try {
+      await db.execute('''
+        CREATE VIRTUAL TABLE word_index USING fts5(
+          word,
+          content,
+          dict_id UNINDEXED,
+          offset UNINDEXED,
+          length UNINDEXED,
+          tokenize = 'unicode61'
+        )
+      ''');
+    } catch (e) {
+      debugPrint('FTS5 table creation failed, falling back to normal table: $e');
+      await db.execute('''
+        CREATE TABLE word_index (
+          word TEXT,
+          content TEXT,
+          dict_id INTEGER,
+          offset INTEGER,
+          length INTEGER
+        )
+      ''');
+      await db.execute('CREATE INDEX idx_word_index_word ON word_index(word)');
+    }
 
     // 3. Create search_history table
     await db.execute('''
@@ -80,103 +113,100 @@ class DatabaseHelper {
         timestamp INTEGER NOT NULL
       )
     ''');
+
+    // 5. Create files table for Web Virtual Filesystem
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS files (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        dict_id INTEGER NOT NULL,
+        file_name TEXT NOT NULL,
+        content BLOB NOT NULL,
+        UNIQUE(dict_id, file_name)
+      )
+    ''');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 2) {
-      // 1. Add word_count column if it doesn't exist
-      // Note: We use try-catch because if someone is on a fresh install,
-      // onCreate might have already added it depending on timing, though version check should prevent this.
-      try {
-        await db.execute(
-          'ALTER TABLE dictionaries ADD COLUMN word_count INTEGER DEFAULT 0',
-        );
-      } catch (e) {
-        debugPrint('Column word_count might already exist: $e');
-      }
-
-      // 2. Populate word counts for existing dictionaries to make the migration seamless
-      final List<Map<String, dynamic>> dicts = await db.query('dictionaries');
-      for (final dict in dicts) {
-        final id = dict['id'];
-        final countResult = await db.rawQuery(
-          'SELECT COUNT(*) as cnt FROM word_index WHERE dict_id = ?',
-          [id],
-        );
-        final count = Sqflite.firstIntValue(countResult) ?? 0;
-        await db.update(
-          'dictionaries',
-          {'word_count': count},
-          where: 'id = ?',
-          whereArgs: [id],
-        );
-      }
-    }
-
-    if (oldVersion < 3) {
-      try {
-        await db.execute(
-          'ALTER TABLE dictionaries ADD COLUMN display_order INTEGER DEFAULT 0',
-        );
-        // Initialize display_order with id or sequential number
-        final List<Map<String, dynamic>> dicts = await db.query('dictionaries');
-        for (int i = 0; i < dicts.length; i++) {
-          await db.update(
-            'dictionaries',
-            {'display_order': i},
-            where: 'id = ?',
-            whereArgs: [dicts[i]['id']],
-          );
-        }
-      } catch (e) {
-        debugPrint('Column display_order might already exist: $e');
-      }
-    }
-
-    if (oldVersion < 4) {
+    if (oldVersion < 7) {
       await db.execute('''
-        CREATE TABLE IF NOT EXISTS search_history (
+        CREATE TABLE IF NOT EXISTS files (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          word TEXT NOT NULL,
-          timestamp INTEGER NOT NULL
+          dict_id INTEGER NOT NULL,
+          file_name TEXT NOT NULL,
+          content BLOB NOT NULL,
+          UNIQUE(dict_id, file_name)
         )
       ''');
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS flash_card_scores (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          score INTEGER NOT NULL,
-          total INTEGER NOT NULL,
-          timestamp INTEGER NOT NULL
-        )
-      ''');
+    }
+  }
+
+  // --- Path Resolution Helper (iOS/macOS Absolute Path Volatility) ---
+
+  /// Resolves a stored path to an absolute path.
+  /// Handles relative paths (stored relative to Documents) for iOS compatibility.
+  Future<String> resolvePath(String storedPath) async {
+    if (kIsWeb) return storedPath;
+    if (isAbsolute(storedPath) && !Platform.isIOS && !Platform.isMacOS) {
+      return storedPath;
     }
 
-    if (oldVersion < 5) {
-      // Recreate word_index to include 'content' column
-      // We drop and recreate because adding a column to a virtual table (FTS5) is not directly supported via ALTER TABLE.
-      // The user will need to re-index dictionaries.
-      await db.execute('DROP TABLE IF EXISTS word_index');
-      await db.execute('''
-        CREATE VIRTUAL TABLE word_index USING fts5(
-          word,
-          content,
-          dict_id UNINDEXED,
-          offset UNINDEXED,
-          length UNINDEXED,
-          tokenize = 'unicode61'
-        )
-      ''');
+    // Convention: If path starts with /Users or /var, it's absolute.
+    // On iOS/macOS, we extract the relative part if it matches the dictionaries structure.
+    final String relativePart;
+    if (storedPath.contains('dictionaries/')) {
+      relativePart = storedPath.substring(storedPath.indexOf('dictionaries/'));
+    } else {
+      relativePart = storedPath;
     }
 
-    if (oldVersion < 6) {
-      try {
-        await db.execute(
-          'ALTER TABLE dictionaries ADD COLUMN index_definitions INTEGER DEFAULT 0',
-        );
-      } catch (e) {
-        debugPrint('Column index_definitions might already exist: $e');
-      }
+    final appDocDir = await getApplicationDocumentsDirectory();
+    return join(appDocDir.path, relativePart);
+  }
+
+  // --- Virtual Filesystem Methods ---
+
+  Future<void> saveFile(int dictId, String fileName, Uint8List bytes) async {
+    final db = await database;
+    await db.insert(
+      'files',
+      {
+        'dict_id': dictId,
+        'file_name': fileName,
+        'content': bytes,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<Uint8List?> getFile(int dictId, String fileName) async {
+    final db = await database;
+    final results = await db.query(
+      'files',
+      where: 'dict_id = ? AND file_name = ?',
+      whereArgs: [dictId, fileName],
+    );
+    if (results.isNotEmpty) {
+      return results.first['content'] as Uint8List;
     }
+    return null;
+  }
+
+  /// Efficiently reads a segment of a BLOB from the virtual filesystem.
+  Future<Uint8List?> getFilePart(
+    int dictId,
+    String fileName,
+    int offset,
+    int length,
+  ) async {
+    final db = await database;
+    // SQLite SUBSTR is 1-indexed.
+    final sql =
+        'SELECT SUBSTR(content, ?, ?) as part FROM files WHERE dict_id = ? AND file_name = ?';
+    final results = await db.rawQuery(sql, [offset + 1, length, dictId, fileName]);
+    if (results.isNotEmpty) {
+      return results.first['part'] as Uint8List;
+    }
+    return null;
   }
 
   // --- Dictionary Management ---
@@ -187,9 +217,16 @@ class DatabaseHelper {
     bool indexDefinitions = false,
   }) async {
     final db = await database;
+    
+    // For native, store a path relative to Documents if possible
+    String storedPath = path;
+    if (!kIsWeb && path.contains('dictionaries/')) {
+      storedPath = path.substring(path.indexOf('dictionaries/'));
+    }
+
     return await db.insert('dictionaries', {
       'name': name,
-      'path': path,
+      'path': storedPath,
       'is_enabled': 1,
       'index_definitions': indexDefinitions ? 1 : 0,
     });
@@ -214,7 +251,6 @@ class DatabaseHelper {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
-  /// Returns a few sample words with metadata from a dictionary for verification/flash cards.
   Future<List<Map<String, dynamic>>> getSampleWords(
     int dictId, {
     int limit = 5,
@@ -257,16 +293,20 @@ class DatabaseHelper {
   Future<void> deleteDictionary(int id) async {
     final db = await database;
     await db.transaction((txn) async {
-      // Delete from dictionaries table
       await txn.delete('dictionaries', where: 'id = ?', whereArgs: [id]);
-      // Delete from word_index
       await txn.delete('word_index', where: 'dict_id = ?', whereArgs: [id]);
+      await txn.delete('files', where: 'dict_id = ?', whereArgs: [id]);
     });
   }
 
   Future<List<Map<String, dynamic>>> getDictionaries() async {
-    final db = await database;
-    return await db.query('dictionaries', orderBy: 'display_order ASC');
+    try {
+      final db = await database;
+      return await db.query('dictionaries', orderBy: 'display_order ASC');
+    } catch (e) {
+      debugPrint('Error getting dictionaries: $e');
+      return [];
+    }
   }
 
   Future<void> reorderDictionaries(List<int> sortedIds) async {
@@ -297,18 +337,26 @@ class DatabaseHelper {
   // --- Search History ---
 
   Future<void> addSearchHistory(String word) async {
-    final db = await database;
-    // Remove if exists to move it to top
-    await db.delete('search_history', where: 'word = ?', whereArgs: [word]);
-    await db.insert('search_history', {
-      'word': word,
-      'timestamp': DateTime.now().millisecondsSinceEpoch,
-    });
+    try {
+      final db = await database;
+      await db.delete('search_history', where: 'word = ?', whereArgs: [word]);
+      await db.insert('search_history', {
+        'word': word,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      });
+    } catch (e) {
+      debugPrint('Error adding search history: $e');
+    }
   }
 
   Future<List<Map<String, dynamic>>> getSearchHistory() async {
-    final db = await database;
-    return await db.query('search_history', orderBy: 'timestamp DESC');
+    try {
+      final db = await database;
+      return await db.query('search_history', orderBy: 'timestamp DESC');
+    } catch (e) {
+      debugPrint('Error getting search history: $e');
+      return [];
+    }
   }
 
   Future<void> clearSearchHistory() async {
@@ -317,15 +365,19 @@ class DatabaseHelper {
   }
 
   Future<void> deleteOldSearchHistory(int days) async {
-    final db = await database;
-    final int cutOff = DateTime.now()
-        .subtract(Duration(days: days))
-        .millisecondsSinceEpoch;
-    await db.delete(
-      'search_history',
-      where: 'timestamp < ?',
-      whereArgs: [cutOff],
-    );
+    try {
+      final db = await database;
+      final int cutOff = DateTime.now()
+          .subtract(Duration(days: days))
+          .millisecondsSinceEpoch;
+      await db.delete(
+        'search_history',
+        where: 'timestamp < ?',
+        whereArgs: [cutOff],
+      );
+    } catch (e) {
+      debugPrint('Error deleting old search history: $e');
+    }
   }
 
   // --- Flash Card Scores ---
@@ -346,7 +398,6 @@ class DatabaseHelper {
 
   // --- Indexing ---
 
-  /// Batched insertion for high performance.
   Future<void> batchInsertWords(
     int dictId,
     List<Map<String, dynamic>> words,
@@ -367,22 +418,16 @@ class DatabaseHelper {
     });
   }
 
-  /// Searches for words using FTS5 and wildcards.
-  ///
-  /// Supports exact matches and custom wildcards (* for multiple chars, ? for single char).
-  /// Exact matches use FTS5 [MATCH] operator for near O(1) performance.
-  /// Wildcard matches use the [GLOB] operator.
   Future<List<Map<String, dynamic>>> searchWords(
     String query, {
     int limit = 50,
     bool fuzzy = false,
     bool searchDefinitions = false,
   }) async {
-    final db = await database;
-
-    final bool hasWildcards = query.contains('*') || query.contains('?');
-
     try {
+      final db = await database;
+      final bool hasWildcards = query.contains('*') || query.contains('?');
+
       if (hasWildcards) {
         final String sql =
             '''
@@ -397,7 +442,6 @@ class DatabaseHelper {
         args.add(limit);
         return await db.rawQuery(sql, args);
       } else if (searchDefinitions) {
-        // If searching definitions, we ignore fuzzy headword logic for simplicity and performance
         final String sql = '''
           SELECT word, dict_id, offset, length 
           FROM word_index 
@@ -406,7 +450,6 @@ class DatabaseHelper {
         ''';
         return await db.rawQuery(sql, [query, query, limit]);
       } else if (fuzzy) {
-        // Try exact match first
         final List<Map<String, dynamic>> exactMatch = await db.query(
           'word_index',
           columns: ['word', 'dict_id', 'offset', 'length'],
@@ -416,7 +459,6 @@ class DatabaseHelper {
         );
         if (exactMatch.isNotEmpty) return exactMatch;
 
-        // Simple fuzzy: prefix match OR contains match
         final String sql = '''
           SELECT word, dict_id, offset, length FROM word_index WHERE word MATCH ?
           UNION
@@ -425,7 +467,6 @@ class DatabaseHelper {
         ''';
         return await db.rawQuery(sql, ['$query*', '%$query%', limit]);
       } else {
-        // Try exact match first
         final List<Map<String, dynamic>> exactMatch = await db.query(
           'word_index',
           columns: ['word', 'dict_id', 'offset', 'length'],
@@ -449,15 +490,13 @@ class DatabaseHelper {
     }
   }
 
-  /// Specialized search for prefix suggestions used in the Autocomplete widget.
-  /// Uses FTS5 prefix matching (MATCH 'prefix*') for extremely fast lookups.
   Future<List<String>> getPrefixSuggestions(
     String prefix, {
     int limit = 10,
     bool fuzzy = false,
   }) async {
-    final db = await database;
     try {
+      final db = await database;
       if (fuzzy) {
         final String sql = '''
           SELECT word FROM word_index WHERE word MATCH ?
