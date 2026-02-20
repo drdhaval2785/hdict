@@ -123,6 +123,7 @@ class _IndexArgs {
 // Top-level function for indexing isolate
 Future<void> _indexEntry(_IndexArgs args) async {
   BackgroundIsolateBinaryMessenger.ensureInitialized(args.rootIsolateToken);
+  await DatabaseHelper.initializeDatabaseFactory();
   final SendPort sendPort = args.sendPort;
   final dbHelper = DatabaseHelper(); // Assumes singleton or initialized factory
 
