@@ -95,7 +95,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             .join('<hr style="border: 0; border-top: 1px solid #eee; margin: 16px 0;">');
 
         consolidatedDefs.add({
-          'word': word,
+          'word': results.first['word'],
           'dict_id': dictId,
           'dict_name': results.first['dict_name'],
           'definition': combinedContent,
@@ -598,7 +598,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     final candidates = await _dbHelper.searchWords(word);
                     final List<Map<String, dynamic>> defs = [];
                     for (final res in candidates) {
-                      if (res['word'].toLowerCase() != word.toLowerCase()) continue;
                       final dict = await _dbHelper.getDictionaryById(res['dict_id']);
                       if (dict == null) continue;
                       String dictPath = await _dbHelper.resolvePath(dict['path']);

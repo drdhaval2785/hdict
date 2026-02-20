@@ -476,6 +476,20 @@ class DatabaseHelper {
         );
         if (exactMatch.isNotEmpty) return exactMatch;
 
+        // Longest Prefix Match Fallback
+        String prefix = query;
+        while (prefix.length > 2) {
+          prefix = prefix.substring(0, prefix.length - 1);
+          final List<Map<String, dynamic>> prefixMatch = await db.query(
+            'word_index',
+            columns: ['word', 'dict_id', 'offset', 'length'],
+            where: 'word = ?',
+            whereArgs: [prefix],
+            limit: limit,
+          );
+          if (prefixMatch.isNotEmpty) return prefixMatch;
+        }
+
         final String sql = '''
           SELECT word, dict_id, offset, length 
           FROM word_index 
