@@ -234,7 +234,62 @@ Future<void> _indexEntry(_IndexArgs args) async {
   }
 }
 
-// Top-level function to run in the isolate for extraction
+// Helper for compute
+class _ExtractArgs {
+  final String filePath;
+  final String workspacePath;
+  _ExtractArgs(this.filePath, this.workspacePath);
+}
+
+Future<void> _extractToWorkspaceSync(_ExtractArgs args) async {
+  final filePath = args.filePath;
+  final workspacePath = args.workspacePath;
+  try {
+    final file = File(filePath);
+    final bytes = await file.readAsBytes();
+    Archive archive;
+    final lowerPath = filePath.toLowerCase();
+
+    if (lowerPath.endsWith('.zip')) {
+      archive = ZipDecoder().decodeBytes(bytes);
+    } else if (lowerPath.endsWith('.tar.gz') || lowerPath.endsWith('.tgz')) {
+      archive = TarDecoder().decodeBytes(GZipDecoder().decodeBytes(bytes));
+    } else if (lowerPath.endsWith('.tar')) {
+      archive = TarDecoder().decodeBytes(bytes);
+    } else if (lowerPath.endsWith('.tar.bz2') || lowerPath.endsWith('.tbz2')) {
+      archive = TarDecoder().decodeBytes(BZip2Decoder().decodeBytes(bytes));
+    } else if (lowerPath.endsWith('.tar.xz')) {
+      archive = TarDecoder().decodeBytes(XZDecoder().decodeBytes(bytes));
+    } else {
+      // Not an archive, just copy it
+      final fileName = p.basename(filePath);
+      final targetPath = p.join(workspacePath, fileName);
+      if (filePath == targetPath) return; // Already there
+      await File(filePath).copy(targetPath);
+      return;
+    }
+
+    for (final archiveFile in archive) {
+      final filename = archiveFile.name;
+      if (archiveFile.isFile) {
+        final data = archiveFile.content as List<int>;
+        File(p.join(workspacePath, filename))
+          ..createSync(recursive: true)
+          ..writeAsBytesSync(data);
+      } else {
+        Directory(p.join(workspacePath, filename)).createSync(recursive: true);
+      }
+    }
+  } catch (e) {
+    debugPrint('Error extracting $filePath: $e');
+  }
+}
+
+// Updated _importEntry to support extracting to a specific workspace
+Future<void> _extractToWorkspace(String filePath, String workspacePath) async {
+  await compute(_extractToWorkspaceSync, _ExtractArgs(filePath, workspacePath));
+}
+
 Future<void> _importEntry(_ImportArgs args) async {
   BackgroundIsolateBinaryMessenger.ensureInitialized(args.rootIsolateToken);
   final SendPort sendPort = args.sendPort;
@@ -243,50 +298,7 @@ Future<void> _importEntry(_ImportArgs args) async {
 
   try {
     sendPort.send(ImportProgress(message: 'Reading archive...', value: 0.05));
-    final archiveFile = File(archivePath);
-    if (!await archiveFile.exists()) {
-      throw Exception('Archive not found');
-    }
-
-    final bytes = await archiveFile.readAsBytes();
-    Archive archive;
-    if (archivePath.endsWith('.zip')) {
-      archive = await compute(_decodeZip, bytes);
-    } else if (archivePath.endsWith('.tar.gz') ||
-        archivePath.endsWith('.tgz')) {
-      archive = await compute(_decodeTarGz, bytes);
-    } else if (archivePath.endsWith('.tar')) {
-      archive = await compute(_decodeTar, bytes);
-    } else if (archivePath.endsWith('.tar.bz2') ||
-        archivePath.endsWith('.tbz2')) {
-      archive = await compute(_decodeTarBz2, bytes);
-    } else if (archivePath.endsWith('.tar.xz')) {
-      archive = await compute(_decodeTarXz, bytes);
-    } else {
-      throw Exception('Unsupported archive format');
-    }
-
-    sendPort.send(ImportProgress(message: 'Extracting files...', value: 0.2));
-    int extractedCount = 0;
-    for (final file in archive) {
-      final filename = file.name;
-      if (file.isFile) {
-        final data = file.content as List<int>;
-        File(p.join(tempDirPath, filename))
-          ..createSync(recursive: true)
-          ..writeAsBytesSync(data);
-      } else {
-        Directory(p.join(tempDirPath, filename)).create(recursive: true);
-      }
-      extractedCount++;
-      sendPort.send(
-        ImportProgress(
-          message:
-              'Extracting files... (${(extractedCount / archive.length * 100).round()}%)',
-          value: 0.2 + (extractedCount / archive.length * 0.25),
-        ),
-      ); // 20% to 45%
-    }
+    await _extractToWorkspace(archivePath, tempDirPath);
 
     sendPort.send(
       ImportProgress(message: 'Locating .ifo file...', value: 0.45),
@@ -308,7 +320,6 @@ Future<void> _importEntry(_ImportArgs args) async {
       throw Exception('No .ifo file found in archive');
     }
 
-    // Send success message with ifoPath, indicating extraction is complete
     sendPort.send(
       ImportProgress(
         message: 'Extraction complete.',
@@ -497,31 +508,74 @@ class DictionaryManager {
     List<String> filePaths, {
     bool indexDefinitions = false,
   }) async* {
-    yield ImportProgress(message: 'Preparing files...', value: 0.0);
+    yield ImportProgress(message: 'Preparing workspace...', value: 0.0);
 
-    String? ifoPath;
-    for (final path in filePaths) {
-      if (path.contains('.ifo')) {
-        ifoPath = path;
-        break;
+    final tempBaseDir = await getTemporaryDirectory();
+    final workspaceDir = await tempBaseDir.createTemp('workspace_');
+
+    try {
+      int processedFiles = 0;
+      for (final path in filePaths) {
+        yield ImportProgress(
+          message: 'Extracting/Copying ${p.basename(path)}...',
+          value: (processedFiles / filePaths.length) * 0.4,
+        );
+        await _extractToWorkspace(path, workspaceDir.path);
+        processedFiles++;
+      }
+
+      yield ImportProgress(message: 'Scanning for dictionaries...', value: 0.45);
+      final ifoFiles = <File>[];
+      await for (final entity in workspaceDir.list(recursive: true)) {
+        if (entity is File &&
+            (entity.path.endsWith('.ifo') ||
+                entity.path.endsWith('.ifo.gz') ||
+                entity.path.endsWith('.ifo.dz') ||
+                entity.path.endsWith('.ifo.bz2') ||
+                entity.path.endsWith('.ifo.xz'))) {
+          ifoFiles.add(entity);
+        }
+      }
+
+      if (ifoFiles.isEmpty) {
+        throw Exception('No valid dictionary (.ifo) files found in selection');
+      }
+
+      int totalDicts = ifoFiles.length;
+      int currentDict = 0;
+
+      for (final ifoFile in ifoFiles) {
+        currentDict++;
+        yield ImportProgress(
+          message: 'Importing dictionary $currentDict of $totalDicts: ${p.basenameWithoutExtension(ifoFile.path)}',
+          value: 0.5 + (currentDict - 1) / totalDicts * 0.5,
+        );
+
+        try {
+          // Process this specific dictionary
+          final stream = _processDictionaryFiles(ifoFile.path, indexDefinitions: indexDefinitions);
+          await for (final progress in stream) {
+            // Update message to show which dictionary we are on
+            yield ImportProgress(
+              message: '[$currentDict/$totalDicts] ${progress.message}',
+              value: 0.5 + ((currentDict - 1) + (progress.value)) / totalDicts * 0.5,
+            );
+            if (progress.isCompleted) break;
+          }
+        } catch (e) {
+          debugPrint('Error importing ${ifoFile.path}: $e');
+          // Continue with next dictionary
+        }
+      }
+
+      yield ImportProgress(message: 'All imports complete.', value: 1.0, isCompleted: true);
+    } catch (e) {
+      yield ImportProgress(message: 'Error: $e', value: 0.0, error: e.toString(), isCompleted: true);
+    } finally {
+      if (await workspaceDir.exists()) {
+        await workspaceDir.delete(recursive: true);
       }
     }
-
-    if (ifoPath == null) {
-      yield ImportProgress(
-        message: 'Error: No .ifo file selected',
-        value: 0.0,
-        error: 'No .ifo file selected',
-        isCompleted: true,
-      );
-      return;
-    }
-
-    yield* _processDictionaryFiles(
-      ifoPath,
-      indexDefinitions: indexDefinitions,
-      otherFilePaths: filePaths,
-    );
   }
 
   /// Web-friendly multiple file import.
@@ -529,21 +583,81 @@ class DictionaryManager {
     List<({String name, Uint8List bytes})> files, {
     bool indexDefinitions = false,
   }) async* {
-    yield ImportProgress(message: 'Preparing web files...', value: 0.0);
+    yield ImportProgress(message: 'Preparing web workspace...', value: 0.0);
 
-    Map<String, Uint8List> fileMap = {};
-    String? ifoName;
-    for (final file in files) {
-      fileMap[file.name] = file.bytes;
-      if (file.name.endsWith('.ifo')) ifoName = file.name;
+    try {
+      Map<String, Uint8List> allFiles = {};
+      int processedFiles = 0;
+
+      for (final file in files) {
+        yield ImportProgress(
+          message: 'Extracting/Processing ${file.name}...',
+          value: (processedFiles / files.length) * 0.4,
+        );
+
+        final lowerName = file.name.toLowerCase();
+        if (lowerName.endsWith('.zip')) {
+          final archive = ZipDecoder().decodeBytes(file.bytes);
+          for (final f in archive) {
+            if (f.isFile) allFiles[f.name] = Uint8List.fromList(f.content as List<int>);
+          }
+        } else if (lowerName.endsWith('.tar.gz') || lowerName.endsWith('.tgz')) {
+          final archive = TarDecoder().decodeBytes(GZipDecoder().decodeBytes(file.bytes));
+          for (final f in archive) {
+            if (f.isFile) allFiles[f.name] = Uint8List.fromList(f.content as List<int>);
+          }
+        } else if (lowerName.endsWith('.tar.bz2') || lowerName.endsWith('.tbz2')) {
+          final archive = TarDecoder().decodeBytes(BZip2Decoder().decodeBytes(file.bytes));
+          for (final f in archive) {
+            if (f.isFile) allFiles[f.name] = Uint8List.fromList(f.content as List<int>);
+          }
+        } else if (lowerName.endsWith('.tar.xz')) {
+          final archive = TarDecoder().decodeBytes(XZDecoder().decodeBytes(file.bytes));
+          for (final f in archive) {
+            if (f.isFile) allFiles[f.name] = Uint8List.fromList(f.content as List<int>);
+          }
+        } else if (lowerName.endsWith('.tar')) {
+          final archive = TarDecoder().decodeBytes(file.bytes);
+          for (final f in archive) {
+            if (f.isFile) allFiles[f.name] = Uint8List.fromList(f.content as List<int>);
+          }
+        } else {
+          allFiles[file.name] = file.bytes;
+        }
+        processedFiles++;
+      }
+
+      final ifoNames = allFiles.keys.where((n) => n.endsWith('.ifo')).toList();
+      if (ifoNames.isEmpty) throw Exception('No .ifo files found');
+
+      int totalDicts = ifoNames.length;
+      int currentDict = 0;
+
+      for (final ifoName in ifoNames) {
+        currentDict++;
+        yield ImportProgress(
+          message: 'Importing dictionary $currentDict of $totalDicts: ${p.basenameWithoutExtension(ifoName)}',
+          value: 0.5 + (currentDict - 1) / totalDicts * 0.5,
+        );
+
+        try {
+          final stream = _processDictionaryFilesWeb(ifoName, allFiles, indexDefinitions: indexDefinitions);
+          await for (final progress in stream) {
+            yield ImportProgress(
+              message: '[$currentDict/$totalDicts] ${progress.message}',
+              value: 0.5 + ((currentDict - 1) + (progress.value)) / totalDicts * 0.5,
+            );
+            if (progress.isCompleted) break;
+          }
+        } catch (e) {
+          debugPrint('Web error importing $ifoName: $e');
+        }
+      }
+
+      yield ImportProgress(message: 'All web imports complete.', value: 1.0, isCompleted: true);
+    } catch (e) {
+      yield ImportProgress(message: 'Web error: $e', value: 0.0, error: e.toString(), isCompleted: true);
     }
-
-    if (ifoName == null) {
-      yield ImportProgress(message: 'Error: No .ifo file selected', value: 0.0, error: 'No .ifo file selected', isCompleted: true);
-      return;
-    }
-
-    yield* _processDictionaryFilesWeb(ifoName, fileMap, indexDefinitions: indexDefinitions);
   }
 
   /// Shared logic for processing dictionary files and saving them permanently on Native.
@@ -560,30 +674,27 @@ class DictionaryManager {
 
       final actualIfoPath = await _maybeDecompress(ifoPath);
       final basePath = p.withoutExtension(actualIfoPath);
+      final baseDir = p.dirname(actualIfoPath);
 
-      // Robust file finding: checking provided paths first, then local directory
-      String? findFile(List<String> extensions) {
-        if (otherFilePaths != null) {
-          for (final path in otherFilePaths) {
-            final lowerPath = path.toLowerCase();
-            if (extensions.any((ext) => lowerPath.endsWith(ext))) {
-              return path;
-            }
+      // Robust file finding: checking local directory first
+      String? findLocalFile(List<String> extensions) {
+        for (final ext in extensions) {
+          final path = '$basePath$ext';
+          if (File(path).existsSync()) {
+            return path;
           }
         }
-        return null; // Fallback to original logic if not found in list
+        return null;
       }
 
-      String? idxPath = findFile(['.idx', '.idx.gz', '.idx.dz', '.idx.bz2', '.idx.xz']);
-      idxPath ??= await _findAndPrepareFile(basePath, ['.idx', '.idx.gz', '.idx.dz', '.idx.bz2', '.idx.xz']);
-      if (idxPath == null) throw Exception('No .idx file found');
+      String? idxPath = findLocalFile(['.idx', '.idx.gz', '.idx.dz', '.idx.bz2', '.idx.xz']);
+      if (idxPath == null) throw Exception('No .idx file found for ${p.basename(ifoPath)}');
 
-      String? dictPath = findFile(['.dict', '.dict.dz', '.dict.gz', '.dict.bz2', '.dict.xz']);
-      dictPath ??= await _findAndPrepareFile(basePath, ['.dict', '.dict.dz', '.dict.gz', '.dict.bz2', '.dict.xz']);
-      if (dictPath == null) throw Exception('No .dict file found');
+      String? dictPath = findLocalFile(['.dict', '.dict.dz', '.dict.gz', '.dict.bz2', '.dict.xz']);
+      if (dictPath == null) throw Exception('No .dict file found for ${p.basename(ifoPath)}');
 
-      String? synPath = findFile(['.syn', '.syn.gz', '.syn.dz', '.syn.bz2', '.syn.xz']);
-      synPath ??= await _findAndPrepareFile(basePath, ['.syn', '.syn.gz', '.syn.dz', '.syn.bz2', '.syn.xz']);
+      String? synPath = findLocalFile(['.syn', '.syn.gz', '.syn.dz', '.syn.bz2', '.syn.xz']);
+
 
       final ifoParser = IfoParser();
       await ifoParser.parse(actualIfoPath);
