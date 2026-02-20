@@ -39,9 +39,7 @@ class _DictionaryManagementScreenState
 
   Future<void> _downloadDictionary() async {
     const bool indexDefinitions = false; // Default behavior
-    final TextEditingController urlController = TextEditingController(
-      text: 'http://download.huzheng.org',
-    );
+    final TextEditingController urlController = TextEditingController();
 
     final dynamic urlString = await showDialog<dynamic>(
       context: context,
