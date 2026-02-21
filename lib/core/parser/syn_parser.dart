@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 /// A parser for StarDict .syn files.
 ///
@@ -11,12 +12,20 @@ class SynParser {
   /// Parses a StarDict .syn file at [path].
   /// Yields pairs of {'word': synonym, 'original_word_index': index}.
   Stream<Map<String, dynamic>> parse(String path) async* {
+    if (kIsWeb) {
+      throw UnsupportedError('Use parseFromBytes on Web');
+    }
     final file = File(path);
     if (!await file.exists()) {
       throw Exception('SYN file not found: $path');
     }
 
     final bytes = await file.readAsBytes();
+    yield* parseFromBytes(bytes);
+  }
+
+  /// Parses a StarDict .syn file from bytes.
+  Stream<Map<String, dynamic>> parseFromBytes(Uint8List bytes) async* {
     int i = 0;
     final len = bytes.length;
 

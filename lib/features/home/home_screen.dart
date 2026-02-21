@@ -73,7 +73,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             dictPath = dictPath.replaceAll('.ifo', '.dict');
           }
           
-          final reader = DictReader(dictPath);
+          final reader = DictReader(dictPath, dictId: dictId);
           final content = await reader.readEntry(
             result['offset'],
             result['length'],
@@ -613,7 +613,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       if (dict == null) continue;
                       String dictPath = await _dbHelper.resolvePath(dict['path']);
                       if (dictPath.endsWith('.ifo')) dictPath = dictPath.replaceAll('.ifo', '.dict');
-                      final reader = DictReader(dictPath);
+                      final reader = DictReader(dictPath, dictId: res['dict_id']);
                       final content = await reader.readEntry(res['offset'], res['length']);
                       defs.add({'word': res['word'], 'dict_name': dict['name'], 'definition': content});
                     }

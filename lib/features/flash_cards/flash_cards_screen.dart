@@ -104,7 +104,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
           if (dictPath.endsWith('.ifo')) {
             dictPath = dictPath.replaceAll('.ifo', '.dict');
           }
-          final reader = DictReader(dictPath);
+          final reader = DictReader(dictPath, dictId: meta['dict_id']);
           final meaning = await reader.readEntry(
             meta['offset'],
             meta['length'],
@@ -550,7 +550,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
                     if (dictPath.endsWith('.ifo')) {
                       dictPath = dictPath.replaceAll('.ifo', '.dict');
                     }
-                    final reader = DictReader(dictPath);
+                    final reader = DictReader(dictPath, dictId: res['dict_id']);
                     final content = await reader.readEntry(
                       res['offset'],
                       res['length'],

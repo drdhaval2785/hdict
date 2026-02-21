@@ -781,6 +781,14 @@ class DictionaryManager {
       }
       if (dictName == null) throw Exception('Missing .dict file');
 
+      String? synName;
+      for (final name in files.keys) {
+        if (name.startsWith(basePath) && name.contains('.syn')) {
+          synName = name;
+          break;
+        }
+      }
+
       final dictId = await _dbHelper.insertDictionary(bookName, dictName, indexDefinitions: indexDefinitions);
 
       // Save files to virtual filesystem (SQLite 'files' table)
@@ -788,11 +796,99 @@ class DictionaryManager {
       await _dbHelper.saveFile(dictId, p.basename(ifoName), ifoBytes);
       await _dbHelper.saveFile(dictId, p.basename(idxName), files[idxName]!);
       await _dbHelper.saveFile(dictId, p.basename(dictName), files[dictName]!);
+      if (synName != null) {
+        await _dbHelper.saveFile(dictId, p.basename(synName), files[synName]!);
+      }
 
-      // Note: SYN handling could be added here too.
+      // Indexing on Web (sequential for simplicity/stability)
+      yield ImportProgress(message: 'Indexing words (Web)...', value: 0.7);
+      
+      final idxParser = IdxParser(ifoParser);
+      final dictReader = DictReader(p.basename(dictName), dictId: dictId);
+      await dictReader.open();
 
-      yield ImportProgress(message: 'Import complete (Web)!', value: 1.0, isCompleted: true, dictId: dictId);
-    } catch (e) {
+      List<Map<String, dynamic>> batch = [];
+      List<({int offset, int length, String content})> wordOffsets = [];
+      int headwordCount = 0;
+      int defWordCount = 0;
+
+      final idxStream = idxParser.parseFromBytes(files[idxName]!);
+      await for (final entry in idxStream) {
+        final String word = entry['word'];
+        final offset = entry['offset'] as int;
+        final length = entry['length'] as int;
+        final content = indexDefinitions ? await dictReader.readAtIndex(offset, length) : '';
+
+        batch.add({
+          'word': word,
+          'content': content,
+          'dict_id': dictId,
+          'offset': offset,
+          'length': length,
+        });
+
+        headwordCount++;
+        if (content.isNotEmpty) {
+          defWordCount += content.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
+        }
+
+        wordOffsets.add((offset: offset, length: length, content: content));
+        
+        if (batch.length >= 1000) {
+          await _dbHelper.batchInsertWords(dictId, batch);
+          batch.clear();
+          yield ImportProgress(
+            message: 'Indexing $headwordCount words...',
+            value: 0.7 + (headwordCount / (ifoParser.wordCount == 0 ? 100000 : ifoParser.wordCount) * 0.2),
+            headwordCount: headwordCount,
+          );
+        }
+      }
+      if (batch.isNotEmpty) await _dbHelper.batchInsertWords(dictId, batch);
+
+      // SYN support for Web
+      if (synName != null) {
+        yield ImportProgress(message: 'Indexing synonyms...', value: 0.9);
+        final synParser = SynParser();
+        final synStream = synParser.parseFromBytes(files[synName]!);
+        List<Map<String, dynamic>> synBatch = [];
+        await for (final syn in synStream) {
+          final originalIndex = syn['original_word_index'] as int;
+          if (originalIndex < wordOffsets.length) {
+            final originalInfo = wordOffsets[originalIndex];
+            synBatch.add({
+              'word': syn['word'],
+              'content': originalInfo.content,
+              'dict_id': dictId,
+              'offset': originalInfo.offset,
+              'length': originalInfo.length,
+            });
+            headwordCount++;
+          }
+          if (synBatch.length >= 1000) {
+            await _dbHelper.batchInsertWords(dictId, synBatch);
+            synBatch.clear();
+          }
+        }
+        if (synBatch.isNotEmpty) await _dbHelper.batchInsertWords(dictId, synBatch);
+      }
+
+      await dictReader.close();
+      await _dbHelper.updateDictionaryWordCount(dictId, headwordCount);
+
+      final sampleWords = await _dbHelper.getSampleWords(dictId);
+
+      yield ImportProgress(
+        message: 'Import complete (Web)!',
+        value: 1.0,
+        isCompleted: true,
+        dictId: dictId,
+        sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
+        headwordCount: headwordCount,
+        definitionWordCount: defWordCount,
+      );
+    } catch (e, s) {
+      debugPrint('Web import error: $e\n$s');
       yield ImportProgress(message: 'Web import error: $e', value: 0.0, error: e.toString(), isCompleted: true);
     }
   }
@@ -858,8 +954,11 @@ class DictionaryManager {
     yield ImportProgress(message: 'Connecting...', value: 0.0);
 
     String effectiveUrl = url.trim().replaceAll(' ', '');
-    if (effectiveUrl.contains('github.com/') && effectiveUrl.contains('/blob/')) {
-      effectiveUrl = effectiveUrl.replaceFirst('/blob/', '/raw/');
+    if (effectiveUrl.contains('github.com/')) {
+      effectiveUrl = effectiveUrl
+          .replaceFirst('github.com/', 'raw.githubusercontent.com/')
+          .replaceFirst('/blob/', '/')
+          .replaceFirst('/raw/', '/');
     }
 
     if (kIsWeb) {
@@ -873,7 +972,11 @@ class DictionaryManager {
           throw Exception('Failed to download: HTTP ${response.statusCode}');
         }
       } catch (e) {
-        yield ImportProgress(message: 'Download error: $e', value: 0.0, error: e.toString(), isCompleted: true);
+        String errorMsg = e.toString();
+        if (errorMsg.contains('ClientException') && errorMsg.contains('Failed to fetch')) {
+          errorMsg = 'Download failed due to a CORS error. This happens when the server hosting the file doesn\'t allow web browsers from other domains to download it directly. Try downloading the file manually and then use "Import File".';
+        }
+        yield ImportProgress(message: 'Download error: $errorMsg', value: 0.0, error: errorMsg, isCompleted: true);
       }
       return;
     }

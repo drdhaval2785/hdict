@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:hdict/core/parser/ifo_parser.dart';
 
 /// A parser for StarDict .idx files.
@@ -17,12 +18,20 @@ class IdxParser {
   /// Parses the .idx file at [path] and yields a stream of word entries.
   /// Each entry is a map containing: 'word', 'offset', and 'length'.
   Stream<Map<String, dynamic>> parse(String path) async* {
+    if (kIsWeb) {
+      throw UnsupportedError('Use parseFromBytes on Web');
+    }
     final file = File(path);
     if (!await file.exists()) {
       throw Exception('IDX file not found: $path');
     }
 
     final bytes = await file.readAsBytes();
+    yield* parseFromBytes(bytes);
+  }
+
+  /// Parses the .idx file from bytes and yields a stream of word entries.
+  Stream<Map<String, dynamic>> parseFromBytes(Uint8List bytes) async* {
     int offsetBits = 32;
     if (ifo.idxOffsetBits == 64) {
       offsetBits = 64;
