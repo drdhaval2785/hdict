@@ -47,7 +47,6 @@ dependencies:
   flutter_colorpicker: ^1.1.0
   provider: ^6.1.1
   intl: ^0.20.2
-  upi_pay: ^1.1.0
 
 dev_dependencies:
   flutter_test:
