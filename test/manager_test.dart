@@ -82,7 +82,7 @@ void main() {
 
     final zipData = ZipEncoder().encode(archive);
     final zipFile = File(p.join(tempDir.path, 'test.zip'));
-    await zipFile.writeAsBytes(zipData!);
+    await zipFile.writeAsBytes(zipData);
 
     // 2. Run import
     final stream = manager.importDictionaryStream(zipFile.path);

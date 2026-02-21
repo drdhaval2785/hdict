@@ -1,14 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:hdict/core/theme/app_theme.dart';
 import 'package:hdict/core/database/database_helper.dart';
 import 'package:hdict/features/home/home_screen.dart';
 import 'package:hdict/features/settings/settings_provider.dart';
 import 'package:provider/provider.dart';
-
-import 'dart:io' show Platform;
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

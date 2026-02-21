@@ -682,7 +682,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
                     debugPrint("FlashCard Popup Link tapped: $url");
                     if (url != null && url.startsWith('look_up:')) {
                       final encodedWord = url.substring(8);
-                      Navigator.pop(this.context);
+                      Navigator.pop(context);
                       try {
                         final word = encodedWord.contains('%')
                             ? Uri.decodeComponent(encodedWord)

@@ -63,6 +63,7 @@
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>upi</string>
+		<string>bhim</string>
 		<string>tez</string>
 		<string>phonepe</string>
 		<string>paytmmp</string>

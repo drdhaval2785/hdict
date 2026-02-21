@@ -44,6 +44,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     // Save to history
     await _dbHelper.addSearchHistory(word);
 
+    if (!mounted) return;
+
     setState(() {
       _isLoading = true;
       _selectedWord = word;

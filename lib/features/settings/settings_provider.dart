@@ -47,9 +47,9 @@ class SettingsProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _fontFamily = prefs.getString(_keyFontFamily) ?? 'Roboto';
     _fontSize = prefs.getDouble(_keyFontSize) ?? 16.0;
-    _backgroundColor = Color(prefs.getInt(_keyBgColor) ?? Colors.white.value);
-    _fontColor = Color(prefs.getInt(_keyFontColor) ?? Colors.black.value);
-    _textColor = Color(prefs.getInt(_keyTextColor) ?? Colors.black87.value);
+    _backgroundColor = Color(prefs.getInt(_keyBgColor) ?? Colors.white.toARGB32());
+    _fontColor = Color(prefs.getInt(_keyFontColor) ?? Colors.black.toARGB32());
+    _textColor = Color(prefs.getInt(_keyTextColor) ?? Colors.black87.toARGB32());
     _previewLines = prefs.getInt(_keyPreviewLines) ?? 3;
     _isFuzzySearchEnabled = prefs.getBool(_keyFuzzySearch) ?? false;
     _isTapOnMeaningEnabled = prefs.getBool(_keyTapMeaning) ?? true;
@@ -77,21 +77,21 @@ class SettingsProvider with ChangeNotifier {
   Future<void> setBackgroundColor(Color color) async {
     _backgroundColor = color;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_keyBgColor, color.value);
+    await prefs.setInt(_keyBgColor, color.toARGB32());
     notifyListeners();
   }
 
   Future<void> setFontColor(Color color) async {
     _fontColor = color;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_keyFontColor, color.value);
+    await prefs.setInt(_keyFontColor, color.toARGB32());
     notifyListeners();
   }
 
   Future<void> setTextColor(Color color) async {
     _textColor = color;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_keyTextColor, color.value);
+    await prefs.setInt(_keyTextColor, color.toARGB32());
     notifyListeners();
   }
 

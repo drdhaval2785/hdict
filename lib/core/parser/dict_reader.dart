@@ -16,8 +16,9 @@ class DictReader {
 
   /// Reads from the already opened file.
   Future<String> readAtIndex(int offset, int length) async {
-    if (_raf == null)
+    if (_raf == null) {
       throw Exception('DictReader not opened. Call open() first.');
+    }
     await _raf!.setPosition(offset);
     final bytes = await _raf!.read(length);
     return utf8.decode(bytes);

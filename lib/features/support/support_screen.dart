@@ -1,5 +1,7 @@
+import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:upi_pay/upi_pay.dart';
 
 class SupportScreen extends StatelessWidget {
   const SupportScreen({super.key});
@@ -33,7 +35,6 @@ class SupportScreen extends StatelessWidget {
       ),
       builder: (context) {
         return _UpiOptionsList(
-          onAppSelected: (url) => _launchUrl(url, context),
           onShowQrCode: () => _showQrCodeDialog(context),
         );
       },
@@ -175,27 +176,100 @@ class SupportScreen extends StatelessWidget {
   }
 }
 
-class _UpiOptionsList extends StatelessWidget {
-  final Function(String) onAppSelected;
+class _UpiOptionsList extends StatefulWidget {
   final VoidCallback onShowQrCode;
 
   const _UpiOptionsList({
-    required this.onAppSelected,
     required this.onShowQrCode,
   });
 
   @override
+  State<_UpiOptionsList> createState() => _UpiOptionsListState();
+}
+
+class _UpiOptionsListState extends State<_UpiOptionsList> {
+  List<ApplicationMeta>? _apps;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInstalledUpiApps();
+  }
+
+  Future<void> _loadInstalledUpiApps() async {
+    try {
+      final apps = await UpiPay().getInstalledUpiApplications(
+        statusType: UpiApplicationDiscoveryAppStatusType.all,
+      );
+      
+      final List<ApplicationMeta> verifiedApps = [];
+      for (var app in apps) {
+        if (io.Platform.isIOS) {
+          // UpiPay blindly returns apps on iOS if they lack a discovery scheme.
+          // Filter to only those we can actively verify are installed via schemes.
+          if (app.upiApplication.discoveryCustomScheme != null) {
+            final uri = Uri.parse('${app.upiApplication.discoveryCustomScheme}://');
+            if (await canLaunchUrl(uri)) {
+              verifiedApps.add(app);
+            }
+          }
+        } else {
+          // UpiPay uses PackageManager on Android which is generally reliable.
+          verifiedApps.add(app);
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _apps = verifiedApps;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _apps = [];
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _onAppTap(ApplicationMeta app) async {
+    Navigator.pop(context); // Close the bottom sheet
+    
+    try {
+      final response = await UpiPay().initiateTransaction(
+        app: app.upiApplication,
+        receiverUpiAddress: 'drdhaval2785@okicici',
+        receiverName: 'Dhaval Patel',
+        transactionRef: 'DONATION_${DateTime.now().millisecondsSinceEpoch}',
+        transactionNote: 'Donation to hdict',
+        amount: '1.00', // Optional amount to prevent compile failure
+      );
+
+      if (mounted) {
+        final status = response.status == UpiTransactionStatus.success
+            ? 'Transaction Successful'
+            : 'Transaction Failed or Cancelled';
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(status)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to launch app: $e')),
+        );
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    const upiParams = 'pay?pa=drdhaval2785@okicici&pn=Dhaval%20Patel&cu=INR';
-    
-    final apps = [
-      {'name': 'BHIM', 'icon': Icons.account_balance, 'url': 'upi://$upiParams'},
-      {'name': 'Google Pay', 'icon': Icons.payment, 'url': 'tez://$upiParams'},
-      {'name': 'Paytm', 'icon': Icons.account_balance_wallet, 'url': 'paytmmp://$upiParams'},
-      {'name': 'PhonePe', 'icon': Icons.mobile_friendly, 'url': 'phonepe://$upiParams'},
-      {'name': 'WhatsApp Pay', 'icon': Icons.message, 'url': 'whatsapp://$upiParams'},
-    ];
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 24),
@@ -205,26 +279,34 @@ class _UpiOptionsList extends StatelessWidget {
           children: [
             Text(
               'Select UPI App',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 16),
-            ...apps.map((app) => ListTile(
-              leading: Icon(app['icon'] as IconData, color: theme.colorScheme.primary),
-              title: Text(app['name'] as String),
-              onTap: () {
-                Navigator.pop(context);
-                onAppSelected(app['url'] as String);
-              },
-            )),
+            if (_isLoading)
+              const Padding(
+                padding: EdgeInsets.all(24.0),
+                child: CircularProgressIndicator(),
+              )
+            else if (_apps != null && _apps!.isNotEmpty)
+              ..._apps!.map((app) => ListTile(
+                leading: app.iconImage(40),
+                title: Text(app.upiApplication.getAppName()),
+                onTap: () => _onAppTap(app),
+              ))
+            else
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16.0),
+                child: Text('No UPI apps found on this device.'),
+              ),
             const Divider(),
             ListTile(
               leading: Icon(Icons.qr_code_scanner, color: theme.colorScheme.secondary),
               title: const Text('Show QR Code (Fallback)'),
               onTap: () {
                 Navigator.pop(context);
-                onShowQrCode();
+                widget.onShowQrCode();
               },
             ),
             const SizedBox(height: 16),

@@ -27,36 +27,6 @@ List<int> _decompressXZ(List<int> bytes) {
   return XZDecoder().decodeBytes(bytes);
 }
 
-Archive _decodeZip(List<int> bytes) {
-  return ZipDecoder().decodeBytes(bytes);
-}
-
-Archive _decodeTarGz(List<int> bytes) {
-  try {
-    return TarDecoder().decodeBytes(GZipDecoder().decodeBytes(bytes));
-  } catch (e) {
-    if (e.toString().contains('Filter error')) {
-      throw Exception(
-        'The file does not appear to be a valid GZip archive (Filter error). '
-        'If this is a GitHub link, ensure you are using the "Raw" or "Download" URL.',
-      );
-    }
-    rethrow;
-  }
-}
-
-Archive _decodeTar(List<int> bytes) {
-  return TarDecoder().decodeBytes(bytes);
-}
-
-Archive _decodeTarBz2(List<int> bytes) {
-  return TarDecoder().decodeBytes(BZip2Decoder().decodeBytes(bytes));
-}
-
-Archive _decodeTarXz(List<int> bytes) {
-  return TarDecoder().decodeBytes(XZDecoder().decodeBytes(bytes));
-}
-
 // New classes for progress and isolate arguments
 class ImportProgress {
   final String message;
@@ -379,20 +349,6 @@ class DictionaryManager {
     return path;
   }
 
-  /// Finds a file by checking multiple possible extensions and decompressing if necessary.
-  Future<String?> _findAndPrepareFile(
-    String basePath,
-    List<String> extensions,
-  ) async {
-    for (final ext in extensions) {
-      final path = '$basePath$ext';
-      if (await File(path).exists()) {
-        return await _maybeDecompress(path);
-      }
-    }
-    return null;
-  }
-
   /// Imports a dictionary with progress updates.
   Stream<ImportProgress> importDictionaryStream(
     String archivePath, {
@@ -664,7 +620,6 @@ class DictionaryManager {
   Stream<ImportProgress> _processDictionaryFiles(
     String ifoPath, {
     bool indexDefinitions = false,
-    List<String>? otherFilePaths,
   }) async* {
     try {
       yield ImportProgress(
@@ -674,7 +629,6 @@ class DictionaryManager {
 
       final actualIfoPath = await _maybeDecompress(ifoPath);
       final basePath = p.withoutExtension(actualIfoPath);
-      final baseDir = p.dirname(actualIfoPath);
 
       // Robust file finding: checking local directory first
       String? findLocalFile(List<String> extensions) {
