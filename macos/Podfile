@@ -38,5 +38,19 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_macos_build_settings(target)
+
+    # Silence sqlite3 warnings
+    if target.name == 'sqlite3'
+      target.build_configurations.each do |config|
+        config.build_settings['CLANG_WARN_COMMA'] = 'NO'
+        config.build_settings['CLANG_WARN_64_TO_32_BIT_CONVERSION'] = 'NO'
+        config.build_settings['GCC_WARN_64_TO_32_BIT_CONVERSION'] = 'NO'
+        config.build_settings['OTHER_CFLAGS'] ||= ['$(inherited)']
+        config.build_settings['OTHER_CFLAGS'] << '-Wno-ambiguous-macro'
+        config.build_settings['OTHER_CFLAGS'] << '-Wno-shorten-64-to-32'
+        config.build_settings['OTHER_CFLAGS'] << '-Wno-comma'
+        config.build_settings['OTHER_CFLAGS'] << '-Wno-unreachable-code'
+      end
+    end
   end
 end
