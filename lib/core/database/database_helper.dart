@@ -18,7 +18,7 @@ class DatabaseHelper {
 
   static Future<void> initializeDatabaseFactory() async {
     if (kIsWeb) {
-      databaseFactory = databaseFactoryFfiWeb;
+      databaseFactory = createDatabaseFactoryFfiWeb();
     } else if (Platform.isWindows || Platform.isLinux || Platform.isAndroid) {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
