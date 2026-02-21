@@ -12,6 +12,7 @@ import 'package:hdict/features/settings/search_history_screen.dart';
 import 'package:hdict/features/flash_cards/score_history_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:hdict/features/settings/settings_provider.dart';
+import 'package:hdict/features/support/support_screen.dart';
 import 'dart:async';
 
 /// The main search screen of the hdict app.
@@ -261,6 +262,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const AboutScreen()));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.favorite_outline),
+              title: const Text('Support Us'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const SupportScreen()));
               },
             ),
             const SizedBox(height: 16),
