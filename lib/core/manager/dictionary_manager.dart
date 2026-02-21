@@ -745,6 +745,32 @@ class DictionaryManager {
     }
   }
 
+  Future<Uint8List> _maybeDecompressWeb(String name, Uint8List bytes) async {
+    if (name.endsWith('.gz') || name.endsWith('.dz')) {
+      return Uint8List.fromList(await compute(_decompressGzip, bytes));
+    }
+    if (name.endsWith('.bz2')) {
+      return Uint8List.fromList(await compute(_decompressBZip2, bytes));
+    }
+    if (name.endsWith('.xz')) {
+      return Uint8List.fromList(await compute(_decompressXZ, bytes));
+    }
+    return bytes;
+  }
+
+  String _getDecompressedName(String name) {
+    if (name.endsWith('.gz') || name.endsWith('.dz')) {
+      return name.substring(0, name.length - 3);
+    }
+    if (name.endsWith('.bz2')) {
+      return name.substring(0, name.length - 4);
+    }
+    if (name.endsWith('.xz')) {
+      return name.substring(0, name.length - 3);
+    }
+    return name;
+  }
+
   /// Web-specific processing logic using bytes and SQLite virtual filesystem.
   Stream<ImportProgress> _processDictionaryFilesWeb(
     String ifoName,
@@ -755,7 +781,9 @@ class DictionaryManager {
       yield ImportProgress(message: 'Processing web files...', value: 0.5);
 
       final ifoBytes = files[ifoName]!;
-      final ifoContent = utf8.decode(ifoBytes);
+      // IFO files are usually not compressed, but let's be safe
+      final decompressedIfoBytes = await _maybeDecompressWeb(ifoName, ifoBytes);
+      final ifoContent = utf8.decode(decompressedIfoBytes, allowMalformed: true);
       final ifoParser = IfoParser();
       ifoParser.parseContent(ifoContent);
       
@@ -789,22 +817,33 @@ class DictionaryManager {
         }
       }
 
-      final dictId = await _dbHelper.insertDictionary(bookName, dictName, indexDefinitions: indexDefinitions);
+      // Decompress components
+      yield ImportProgress(message: 'Decompressing components...', value: 0.55);
+      final decompressedIdxBytes = await _maybeDecompressWeb(idxName, files[idxName]!);
+      final decompressedDictBytes = await _maybeDecompressWeb(dictName, files[dictName]!);
+      final decompressedSynBytes = synName != null ? await _maybeDecompressWeb(synName, files[synName]!) : null;
+
+      final finalIfoName = _getDecompressedName(p.basename(ifoName));
+      final finalIdxName = _getDecompressedName(p.basename(idxName));
+      final finalDictName = _getDecompressedName(p.basename(dictName));
+      final finalSynName = synName != null ? _getDecompressedName(p.basename(synName)) : null;
+
+      final dictId = await _dbHelper.insertDictionary(bookName, finalDictName, indexDefinitions: indexDefinitions);
 
       // Save files to virtual filesystem (SQLite 'files' table)
       yield ImportProgress(message: 'Saving files to database...', value: 0.6);
-      await _dbHelper.saveFile(dictId, p.basename(ifoName), ifoBytes);
-      await _dbHelper.saveFile(dictId, p.basename(idxName), files[idxName]!);
-      await _dbHelper.saveFile(dictId, p.basename(dictName), files[dictName]!);
-      if (synName != null) {
-        await _dbHelper.saveFile(dictId, p.basename(synName), files[synName]!);
+      await _dbHelper.saveFile(dictId, finalIfoName, decompressedIfoBytes);
+      await _dbHelper.saveFile(dictId, finalIdxName, decompressedIdxBytes);
+      await _dbHelper.saveFile(dictId, finalDictName, decompressedDictBytes);
+      if (finalSynName != null && decompressedSynBytes != null) {
+        await _dbHelper.saveFile(dictId, finalSynName, decompressedSynBytes);
       }
 
       // Indexing on Web (sequential for simplicity/stability)
       yield ImportProgress(message: 'Indexing words (Web)...', value: 0.7);
       
       final idxParser = IdxParser(ifoParser);
-      final dictReader = DictReader(p.basename(dictName), dictId: dictId);
+      final dictReader = DictReader(finalDictName, dictId: dictId);
       await dictReader.open();
 
       List<Map<String, dynamic>> batch = [];
@@ -812,12 +851,19 @@ class DictionaryManager {
       int headwordCount = 0;
       int defWordCount = 0;
 
-      final idxStream = idxParser.parseFromBytes(files[idxName]!);
+      final idxStream = idxParser.parseFromBytes(decompressedIdxBytes);
       await for (final entry in idxStream) {
         final String word = entry['word'];
         final offset = entry['offset'] as int;
         final length = entry['length'] as int;
-        final content = indexDefinitions ? await dictReader.readAtIndex(offset, length) : '';
+        
+        // When indexing definitions, we have the bytes directly available in decompressedDictBytes
+        String content = '';
+        if (indexDefinitions) {
+          if (offset + length <= decompressedDictBytes.length) {
+            content = utf8.decode(decompressedDictBytes.sublist(offset, offset + length), allowMalformed: true);
+          }
+        }
 
         batch.add({
           'word': word,
@@ -847,10 +893,10 @@ class DictionaryManager {
       if (batch.isNotEmpty) await _dbHelper.batchInsertWords(dictId, batch);
 
       // SYN support for Web
-      if (synName != null) {
+      if (finalSynName != null && decompressedSynBytes != null) {
         yield ImportProgress(message: 'Indexing synonyms...', value: 0.9);
         final synParser = SynParser();
-        final synStream = synParser.parseFromBytes(files[synName]!);
+        final synStream = synParser.parseFromBytes(decompressedSynBytes);
         List<Map<String, dynamic>> synBatch = [];
         await for (final syn in synStream) {
           final originalIndex = syn['original_word_index'] as int;

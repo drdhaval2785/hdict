@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io';
 import 'dart:convert';
 import 'package:hdict/core/database/database_helper.dart';
+import 'package:path/path.dart' as p;
 
 /// Reads definitions from a StarDict .dict file at specified offsets and lengths.
 class DictReader {
@@ -23,9 +24,10 @@ class DictReader {
   Future<String> readAtIndex(int offset, int length) async {
     if (kIsWeb) {
       if (dictId == null) throw Exception('dictId required for Web reading');
-      final bytes = await DatabaseHelper().getFilePart(dictId!, path, offset, length);
-      if (bytes == null) throw Exception('Failed to read from virtual FS: $path');
-      return utf8.decode(bytes);
+      // Use basename to match how files are stored in the 'files' table
+      final bytes = await DatabaseHelper().getFilePart(dictId!, p.basename(path), offset, length);
+      if (bytes == null) throw Exception('Failed to read from virtual FS: ${p.basename(path)}');
+      return utf8.decode(bytes, allowMalformed: true);
     }
 
     if (_raf == null) {
@@ -33,7 +35,7 @@ class DictReader {
     }
     await _raf!.setPosition(offset);
     final bytes = await _raf!.read(length);
-    return utf8.decode(bytes);
+    return utf8.decode(bytes, allowMalformed: true);
   }
 
   /// Closes the file.
@@ -52,7 +54,7 @@ class DictReader {
     try {
       await raf.setPosition(offset);
       final bytes = await raf.read(length);
-      return utf8.decode(bytes);
+      return utf8.decode(bytes, allowMalformed: true);
     } finally {
       await raf.close();
     }

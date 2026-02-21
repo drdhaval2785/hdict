@@ -122,6 +122,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       debugPrint('Error fetching definitions: $e');
       if (mounted) {
         setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error retrieving definition: $e')),
+        );
       }
     }
   }
