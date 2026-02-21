@@ -185,7 +185,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.book, size: 48, color: Color(0xFFFFAB40)),
+                    Image.asset('assets/hdict_logo.png', height: 64),
                     const SizedBox(height: 8),
                     Text(
                       'hdict',

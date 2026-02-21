@@ -19,10 +19,9 @@ class AboutScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
-                Icons.info_outline,
-                size: 80,
-                color: Color(0xFFFFAB40),
+              Image.asset(
+                'assets/hdict_logo.png',
+                height: 100,
               ),
               const SizedBox(height: 24),
               const Text(
