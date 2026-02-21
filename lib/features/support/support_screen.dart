@@ -1,5 +1,5 @@
-import 'dart:io' as io;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SupportScreen extends StatelessWidget {
@@ -13,7 +13,7 @@ class SupportScreen extends StatelessWidget {
       } else {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not launch app. Please try the QR code.')),
+            const SnackBar(content: Text('Could not launch PayPal. Please check your internet connection.')),
           );
         }
       }
@@ -26,90 +26,51 @@ class SupportScreen extends StatelessWidget {
     }
   }
 
-  void _donateUpi(BuildContext context) async {
-    const query = 'pa=drdhaval2785@okicici&pn=Dhaval%20Patel&tr=DONATION_PAY&tn=Donation%20to%20hdict&am=100.00&cu=INR';
-    
-    if (io.Platform.isIOS) {
-      // On iOS, we must show a list of specific apps because upi:// only opens one default app.
-      _showUpiAppPicker(context, query);
-    } else {
-      // On Android, upi:// triggers the system intent chooser, which is preferred.
-      final urlString = 'upi://pay?$query';
-      final Uri url = Uri.parse(urlString);
-
-      try {
-        if (await canLaunchUrl(url)) {
-          await launchUrl(url, mode: LaunchMode.externalApplication);
-        } else {
-          if (context.mounted) {
-            _showQrCodeDialog(context);
-          }
-        }
-      } catch (e) {
-        if (context.mounted) {
-          _showQrCodeDialog(context);
-        }
-      }
-    }
+  void _copyUpiId(BuildContext context) {
+    Clipboard.setData(const ClipboardData(text: 'drdhaval2785@okicici'));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('UPI ID copied to clipboard')),
+    );
   }
 
-  void _showUpiAppPicker(BuildContext context, String query) async {
-    final Map<String, String> apps = {
-      'Google Pay': 'gpay://upi/pay',
-      'PhonePe': 'phonepe://pay',
-      'Paytm': 'paytmmp://pay',
-      'BHIM': 'bhim://pay',
-      'Amazon Pay': 'com.amazon.mobile.shopping://pay',
-      'WhatsApp': 'whatsapp://pay',
-    };
-
-    final List<MapEntry<String, String>> installedApps = [];
-    for (var entry in apps.entries) {
-      if (await canLaunchUrl(Uri.parse('${entry.value.split('://')[0]}://'))) {
-        installedApps.add(entry);
-      }
-    }
-
-    if (!context.mounted) return;
-
-    if (installedApps.isEmpty) {
-      _showQrCodeDialog(context);
-      return;
-    }
-
+  void _showUpiOptions(BuildContext context) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
-        return Container(
-          padding: const EdgeInsets.symmetric(vertical: 24),
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                'Select UPI App',
+                'Donate via UPI',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 16),
-              ...installedApps.map((app) => ListTile(
-                leading: const Icon(Icons.account_balance_wallet_outlined),
-                title: Text(app.key),
+              const SizedBox(height: 24),
+              ListTile(
+                leading: const Icon(Icons.copy, color: Colors.blue),
+                title: const Text('Copy UPI ID'),
+                subtitle: const Text('drdhaval2785@okicici\nCopy and pay via any UPI app of your choice'),
+                isThreeLine: true,
                 onTap: () {
                   Navigator.pop(context);
-                  _launchUrl('${app.value}?$query', context);
+                  _copyUpiId(context);
                 },
-              )),
+              ),
               const Divider(),
               ListTile(
-                leading: const Icon(Icons.qr_code_scanner),
-                title: const Text('Show QR Code (Fallback)'),
+                leading: const Icon(Icons.qr_code_scanner, color: Colors.green),
+                title: const Text('Scan QR Code'),
+                subtitle: const Text('Scan the QR code to pay'),
                 onTap: () {
                   Navigator.pop(context);
                   _showQrCodeDialog(context);
                 },
               ),
+              const SizedBox(height: 16),
             ],
           ),
         );
@@ -209,25 +170,13 @@ class SupportScreen extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () => _donateUpi(context),
+                onPressed: () => _showUpiOptions(context),
                 icon: const Icon(Icons.account_balance_wallet_outlined),
                 label: const Text('Donate via UPI'),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   backgroundColor: theme.colorScheme.primaryContainer,
                   foregroundColor: theme.colorScheme.onPrimaryContainer,
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () => _showQrCodeDialog(context),
-                icon: const Icon(Icons.qr_code_scanner),
-                label: const Text('Show QR Code (Fallback)'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
               ),
             ),
