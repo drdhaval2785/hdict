@@ -438,6 +438,7 @@ class DatabaseHelper {
     try {
       final db = await database;
       final bool hasWildcards = query.contains('*') || query.contains('?');
+      final String safeQuery = query.replaceAll('"', '""');
 
       if (hasWildcards) {
         final String sql = '''
@@ -448,10 +449,11 @@ class DatabaseHelper {
           LIMIT ?
         ''';
         final List<Object?> args = [query];
-        if (searchDefinitions) args.add(query);
+        if (searchDefinitions) args.add('"$safeQuery"');
         args.add(limit);
         return await db.rawQuery(sql, args);
       } else if (searchDefinitions) {
+        final String matchQuery = '"$safeQuery"';
         final String sql = '''
           SELECT word, dict_id, offset, length 
           FROM word_index 
@@ -459,17 +461,20 @@ class DatabaseHelper {
           AND (word MATCH ? OR content MATCH ?)
           LIMIT ?
         ''';
-        return await db.rawQuery(sql, [query, query, limit]);
+        return await db.rawQuery(sql, [matchQuery, matchQuery, limit]);
       } else if (fuzzy) {
+        final String matchQuery = '"$safeQuery"';
         final List<Map<String, dynamic>> exactMatch = await db.rawQuery('''
           SELECT word, dict_id, offset, length 
           FROM word_index 
-          WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
+          WHERE word MATCH ?
           AND word = ?
+          AND dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
           LIMIT ?
-        ''', [query, limit]);
+        ''', [matchQuery, query, limit]);
         if (exactMatch.isNotEmpty) return exactMatch;
 
+        final String prefixMatchQuery = '"$safeQuery"*';
         final String sql = '''
           SELECT word, dict_id, offset, length 
           FROM word_index 
@@ -482,28 +487,34 @@ class DatabaseHelper {
           AND word LIKE ?
           LIMIT ?
         ''';
-        return await db.rawQuery(sql, ['$query*', '%$query%', limit]);
+        return await db.rawQuery(sql, [prefixMatchQuery, '%$query%', limit]);
       } else {
+        final String matchQuery = '"$safeQuery"';
         final List<Map<String, dynamic>> exactMatch = await db.rawQuery('''
           SELECT word, dict_id, offset, length 
           FROM word_index 
-          WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
+          WHERE word MATCH ?
           AND word = ?
+          AND dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
           LIMIT ?
-        ''', [query, limit]);
+        ''', [matchQuery, query, limit]);
         if (exactMatch.isNotEmpty) return exactMatch;
 
         // Longest Prefix Match Fallback
         String prefix = query;
         while (prefix.length > 2) {
           prefix = prefix.substring(0, prefix.length - 1);
+          final String prefixSafe = prefix.replaceAll('"', '""');
+          final String matchPrefixQuery = '"$prefixSafe"';
+          
           final List<Map<String, dynamic>> prefixMatch = await db.rawQuery('''
             SELECT word, dict_id, offset, length 
             FROM word_index 
-            WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
+            WHERE word MATCH ?
             AND word = ?
+            AND dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
             LIMIT ?
-          ''', [prefix, limit]);
+          ''', [matchPrefixQuery, prefix, limit]);
           if (prefixMatch.isNotEmpty) return prefixMatch;
         }
 
@@ -514,7 +525,7 @@ class DatabaseHelper {
           AND word MATCH ?
           LIMIT ?
         ''';
-        return await db.rawQuery(sql, [query, limit]);
+        return await db.rawQuery(sql, [matchQuery, limit]);
       }
     } catch (e) {
       debugPrint("Search error: $e");
@@ -530,6 +541,10 @@ class DatabaseHelper {
   }) async {
     try {
       final db = await database;
+      final String safePrefix = prefix.replaceAll('"', '""');
+      // For prefix mapping in FTS5 we append * outside strings
+      final String matchQueryPrefix = '"$safePrefix"*';
+
       if (fuzzy) {
         final String sql = '''
           SELECT word 
@@ -545,7 +560,7 @@ class DatabaseHelper {
           LIMIT ?
         ''';
         final results = await db.rawQuery(sql, [
-          '$prefix*',
+          matchQueryPrefix,
           '%$prefix%',
           limit,
         ]);
@@ -559,7 +574,7 @@ class DatabaseHelper {
           ORDER BY word ASC
           LIMIT ?
         ''';
-        final results = await db.rawQuery(sql, ['$prefix*', limit]);
+        final results = await db.rawQuery(sql, [matchQueryPrefix, limit]);
         return results.map((r) => r['word'] as String).toList();
       }
     } catch (e) {
