@@ -13,6 +13,7 @@ class SettingsProvider with ChangeNotifier {
   static const String _keyOpenPopup = 'open_popup';
   static const String _keyHistoryDays = 'history_days';
   static const String _keySearchWithinDefinitions = 'search_within_definitions';
+  static const String _keySearchBarColor = 'search_bar_color';
 
   String _fontFamily = 'Roboto';
   double _fontSize = 16.0;
@@ -25,6 +26,7 @@ class SettingsProvider with ChangeNotifier {
   bool _isOpenPopupOnTap = true;
   int _historyRetentionDays = 30;
   bool _isSearchWithinDefinitionsEnabled = false;
+  Color _searchBarColor = const Color(0xFFFFF3E0); // Orange 50
 
   String get fontFamily => _fontFamily;
   double get fontSize => _fontSize;
@@ -38,6 +40,7 @@ class SettingsProvider with ChangeNotifier {
   int get historyRetentionDays => _historyRetentionDays;
   bool get isSearchWithinDefinitionsEnabled =>
       _isSearchWithinDefinitionsEnabled;
+  Color get searchBarColor => _searchBarColor;
 
   SettingsProvider() {
     _loadSettings();
@@ -57,6 +60,7 @@ class SettingsProvider with ChangeNotifier {
     _historyRetentionDays = prefs.getInt(_keyHistoryDays) ?? 30;
     _isSearchWithinDefinitionsEnabled =
         prefs.getBool(_keySearchWithinDefinitions) ?? false;
+    _searchBarColor = Color(prefs.getInt(_keySearchBarColor) ?? const Color(0xFFFFF3E0).toARGB32());
     notifyListeners();
   }
 
@@ -134,6 +138,13 @@ class SettingsProvider with ChangeNotifier {
     _isSearchWithinDefinitionsEnabled = enabled;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keySearchWithinDefinitions, enabled);
+    notifyListeners();
+  }
+
+  Future<void> setSearchBarColor(Color color) async {
+    _searchBarColor = color;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keySearchBarColor, color.toARGB32());
     notifyListeners();
   }
 }

@@ -221,6 +221,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildSearchBar(ThemeData theme) {
+    final settings = context.watch<SettingsProvider>();
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Container(
@@ -232,19 +233,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         child: Autocomplete<String>(
           optionsBuilder: (TextEditingValue textEditingValue) async {
             if (textEditingValue.text.isEmpty) return const Iterable<String>.empty();
-            final settings = context.read<SettingsProvider>();
             return await _dbHelper.getPrefixSuggestions(textEditingValue.text, fuzzy: settings.isFuzzySearchEnabled);
           },
           onSelected: (String selection) => _onWordSelected(selection),
           fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+            final isDark = ThemeData.estimateBrightnessForColor(settings.searchBarColor) == Brightness.dark;
+            final textColor = isDark ? Colors.white : Colors.black;
             return TextField(
               controller: controller,
               focusNode: focusNode,
+              style: TextStyle(color: textColor),
               decoration: InputDecoration(
                 hintText: 'Search or use * and ? for wildcards...',
-                prefixIcon: const Icon(Icons.search),
+                hintStyle: TextStyle(color: textColor.withValues(alpha: 0.6)),
+                prefixIcon: Icon(Icons.search, color: textColor.withValues(alpha: 0.6)),
+                filled: true,
+                fillColor: settings.searchBarColor,
                 suffixIcon: IconButton(
-                  icon: const Icon(Icons.clear),
+                  icon: Icon(Icons.clear, color: textColor.withValues(alpha: 0.6)),
                   onPressed: () {
                     controller.clear();
                     setState(() {
@@ -256,8 +262,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
               onSubmitted: (value) {
                 if (value.isNotEmpty) {
+                  focusNode.unfocus();
                   _onWordSelected(value);
-                  onFieldSubmitted();
                 }
               },
             );
@@ -427,15 +433,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           children: [
             Text(def['word'], style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: settings.fontColor, fontFamily: settings.fontFamily, fontSize: settings.fontSize + 8)),
             const Divider(height: 32),
-            SelectionArea(
-              child: Html(
-                data: definitionHtml,
-                style: {
-                  "body": Style(fontSize: FontSize(settings.fontSize), lineHeight: LineHeight.em(1.5), margin: Margins.zero, padding: HtmlPaddings.zero, color: settings.textColor, fontFamily: settings.fontFamily),
-                  "a": Style(color: settings.textColor, textDecoration: TextDecoration.none),
-                },
-                onLinkTap: (url, attributes, element) async {
-                  if (url != null && url.startsWith('look_up:')) {
+            Html(
+              data: definitionHtml,
+              style: {
+                "body": Style(fontSize: FontSize(settings.fontSize), lineHeight: LineHeight.em(1.5), margin: Margins.zero, padding: HtmlPaddings.zero, color: settings.textColor, fontFamily: settings.fontFamily),
+                "a": Style(color: Colors.blue, textDecoration: TextDecoration.underline),
+                ".dict-word": Style(color: settings.textColor, textDecoration: TextDecoration.none),
+              },
+              onLinkTap: (url, attributes, element) async {
+                if (url != null) {
+                  if (url.startsWith('look_up:')) {
                     final encodedWord = url.substring(8);
                     try {
                       final word = encodedWord.contains('%') ? Uri.decodeComponent(encodedWord) : encodedWord;
@@ -443,14 +450,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     } catch (e) {
                       _showWordPopup(encodedWord);
                     }
-                  } else if (url != null && (url.startsWith('http://') || url.startsWith('https://'))) {
+                  } else if (url.startsWith('bword://')) {
+                    final encodedWord = url.substring(8);
+                    try {
+                      final word = encodedWord.contains('%') ? Uri.decodeComponent(encodedWord) : encodedWord;
+                      _showWordPopup(word);
+                    } catch (e) {
+                      _showWordPopup(encodedWord);
+                    }
+                  } else if (url.startsWith('http://') || url.startsWith('https://')) {
                     final uri = Uri.parse(url);
                     if (await canLaunchUrl(uri)) {
                       await launchUrl(uri, mode: LaunchMode.externalApplication);
                     }
                   }
-                },
-              ),
+                }
+              },
             ),
             if (settings.isTapOnMeaningEnabled)
               const Padding(

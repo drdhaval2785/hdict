@@ -65,6 +65,12 @@ class SettingsScreen extends StatelessWidget {
             settings.textColor,
             (color) => settings.setTextColor(color),
           ),
+          _buildColorTile(
+            context,
+            'Search Bar Colour',
+            settings.searchBarColor,
+            (color) => settings.setSearchBarColor(color),
+          ),
           const Divider(),
           _buildSectionHeader(theme, 'Dictionary Interaction'),
           SwitchListTile(

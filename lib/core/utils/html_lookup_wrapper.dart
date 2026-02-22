@@ -4,8 +4,6 @@ class HtmlLookupWrapper {
   /// Preserves existing HTML tags.
   static String wrapWords(String html) {
     final tagRegExp = RegExp(r'<[^>]*>|[^<]+');
-    // We match any sequence of Unicode letters, numbers, and marks.
-    // Including \p{M} is critical for correctly matching Devanagari marks (maatras).
     final wordRegExp = RegExp(r'([\p{L}\p{N}\p{M}]+)', unicode: true);
 
     final StringBuffer buffer = StringBuffer();
@@ -16,14 +14,11 @@ class HtmlLookupWrapper {
       if (part.startsWith('<')) {
         buffer.write(part);
       } else {
-        // Wrap the words in text segments first
         final wrapped = part.replaceAllMapped(wordRegExp, (m) {
           final word = m.group(1)!;
-          return '<a href="look_up:${Uri.encodeComponent(word)}">$word</a>';
+          return '<a href="look_up:${Uri.encodeComponent(word)}" class="dict-word">$word</a>';
         });
-        // Then replace newlines with <br> to preserve line breaks
-        final wrappedWithBreaks = wrapped.replaceAll('\n', '<br>');
-        buffer.write(wrappedWithBreaks);
+        buffer.write(wrapped.replaceAll('\n', '<br>'));
       }
     }
 
