@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:hdict/features/home/widgets/app_drawer.dart';
 
 class SupportScreen extends StatelessWidget {
   const SupportScreen({super.key});
@@ -124,6 +125,7 @@ class SupportScreen extends StatelessWidget {
     final theme = Theme.of(context);
     
     return Scaffold(
+      drawer: const AppDrawer(),
       appBar: AppBar(
         title: const Text('Support Us'),
       ),

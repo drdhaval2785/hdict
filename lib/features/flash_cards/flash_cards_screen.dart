@@ -7,6 +7,7 @@ import 'package:hdict/features/settings/settings_provider.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:provider/provider.dart';
 import 'dart:math';
+import 'package:hdict/features/home/widgets/app_drawer.dart';
 
 class FlashCardsScreen extends StatefulWidget {
   const FlashCardsScreen({super.key});
@@ -219,6 +220,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
 
   Widget _buildSetupUI() {
     return Scaffold(
+      drawer: const AppDrawer(),
       appBar: AppBar(title: const Text('Flash Cards')),
       body: Column(
         children: [
@@ -290,6 +292,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
   Widget _buildQuizUI() {
     final currentWord = _quizWords[_currentIndex];
     return Scaffold(
+      drawer: const AppDrawer(),
       appBar: AppBar(title: Text('Word ${_currentIndex + 1} of 10')),
       body: Center(
         child: Column(
@@ -335,6 +338,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
     final settings = context.watch<SettingsProvider>();
 
     return Scaffold(
+      drawer: const AppDrawer(),
       appBar: AppBar(
         title: Text('Review: ${currentWord['word']}'),
         actions: [

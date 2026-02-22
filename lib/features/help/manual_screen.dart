@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hdict/features/home/widgets/app_drawer.dart';
 
 class ManualScreen extends StatelessWidget {
   const ManualScreen({super.key});
@@ -8,6 +9,7 @@ class ManualScreen extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Scaffold(
+      drawer: const AppDrawer(),
       appBar: AppBar(
         title: const Text(
           'User Manual',

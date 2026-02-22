@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:file_selector/file_selector.dart';
 
 import 'package:hdict/core/manager/dictionary_manager.dart';
+import 'package:hdict/features/home/widgets/app_drawer.dart';
 
 /// A screen for managing installed dictionaries.
 class DictionaryManagementScreen extends StatefulWidget {
@@ -288,6 +289,7 @@ class _DictionaryManagementScreenState
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
+      drawer: const AppDrawer(),
       persistentFooterButtons: [
         Row(
           children: [

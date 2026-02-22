@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hdict/core/database/database_helper.dart';
 import 'package:intl/intl.dart';
+import 'package:hdict/features/home/widgets/app_drawer.dart';
 
 class SearchHistoryScreen extends StatefulWidget {
   const SearchHistoryScreen({super.key});
@@ -58,6 +59,7 @@ class _SearchHistoryScreenState extends State<SearchHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      drawer: const AppDrawer(),
       appBar: AppBar(
         title: const Text('Search History'),
         actions: [

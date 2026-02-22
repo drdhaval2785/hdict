@@ -440,12 +440,11 @@ class DatabaseHelper {
       final bool hasWildcards = query.contains('*') || query.contains('?');
 
       if (hasWildcards) {
-        final String sql =
-            '''
+        final String sql = '''
           SELECT word, dict_id, offset, length 
           FROM word_index 
-          WHERE word GLOB ? 
-          ${searchDefinitions ? "OR content MATCH ?" : ""}
+          WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
+          AND (word GLOB ? ${searchDefinitions ? "OR content MATCH ?" : ""})
           LIMIT ?
         ''';
         final List<Object?> args = [query];
@@ -456,55 +455,63 @@ class DatabaseHelper {
         final String sql = '''
           SELECT word, dict_id, offset, length 
           FROM word_index 
-          WHERE word MATCH ? OR content MATCH ?
+          WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
+          AND (word MATCH ? OR content MATCH ?)
           LIMIT ?
         ''';
         return await db.rawQuery(sql, [query, query, limit]);
       } else if (fuzzy) {
-        final List<Map<String, dynamic>> exactMatch = await db.query(
-          'word_index',
-          columns: ['word', 'dict_id', 'offset', 'length'],
-          where: 'word = ?',
-          whereArgs: [query],
-          limit: limit,
-        );
+        final List<Map<String, dynamic>> exactMatch = await db.rawQuery('''
+          SELECT word, dict_id, offset, length 
+          FROM word_index 
+          WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
+          AND word = ?
+          LIMIT ?
+        ''', [query, limit]);
         if (exactMatch.isNotEmpty) return exactMatch;
 
         final String sql = '''
-          SELECT word, dict_id, offset, length FROM word_index WHERE word MATCH ?
+          SELECT word, dict_id, offset, length 
+          FROM word_index 
+          WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
+          AND word MATCH ?
           UNION
-          SELECT word, dict_id, offset, length FROM word_index WHERE word LIKE ?
+          SELECT word, dict_id, offset, length 
+          FROM word_index 
+          WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
+          AND word LIKE ?
           LIMIT ?
         ''';
         return await db.rawQuery(sql, ['$query*', '%$query%', limit]);
       } else {
-        final List<Map<String, dynamic>> exactMatch = await db.query(
-          'word_index',
-          columns: ['word', 'dict_id', 'offset', 'length'],
-          where: 'word = ?',
-          whereArgs: [query],
-          limit: limit,
-        );
+        final List<Map<String, dynamic>> exactMatch = await db.rawQuery('''
+          SELECT word, dict_id, offset, length 
+          FROM word_index 
+          WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
+          AND word = ?
+          LIMIT ?
+        ''', [query, limit]);
         if (exactMatch.isNotEmpty) return exactMatch;
 
         // Longest Prefix Match Fallback
         String prefix = query;
         while (prefix.length > 2) {
           prefix = prefix.substring(0, prefix.length - 1);
-          final List<Map<String, dynamic>> prefixMatch = await db.query(
-            'word_index',
-            columns: ['word', 'dict_id', 'offset', 'length'],
-            where: 'word = ?',
-            whereArgs: [prefix],
-            limit: limit,
-          );
+          final List<Map<String, dynamic>> prefixMatch = await db.rawQuery('''
+            SELECT word, dict_id, offset, length 
+            FROM word_index 
+            WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
+            AND word = ?
+            LIMIT ?
+          ''', [prefix, limit]);
           if (prefixMatch.isNotEmpty) return prefixMatch;
         }
 
         final String sql = '''
           SELECT word, dict_id, offset, length 
           FROM word_index 
-          WHERE word MATCH ?
+          WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
+          AND word MATCH ?
           LIMIT ?
         ''';
         return await db.rawQuery(sql, [query, limit]);
@@ -515,6 +522,7 @@ class DatabaseHelper {
     }
   }
 
+
   Future<List<String>> getPrefixSuggestions(
     String prefix, {
     int limit = 10,
@@ -524,9 +532,15 @@ class DatabaseHelper {
       final db = await database;
       if (fuzzy) {
         final String sql = '''
-          SELECT word FROM word_index WHERE word MATCH ?
+          SELECT word 
+          FROM word_index 
+          WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
+          AND word MATCH ?
           UNION
-          SELECT word FROM word_index WHERE word LIKE ?
+          SELECT word 
+          FROM word_index 
+          WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
+          AND word LIKE ?
           ORDER BY word ASC
           LIMIT ?
         ''';
@@ -538,8 +552,10 @@ class DatabaseHelper {
         return results.map((r) => r['word'] as String).toList();
       } else {
         final String sql = '''
-          SELECT DISTINCT word FROM word_index 
-          WHERE word MATCH ? 
+          SELECT DISTINCT word 
+          FROM word_index 
+          WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
+          AND word MATCH ? 
           ORDER BY word ASC
           LIMIT ?
         ''';

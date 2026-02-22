@@ -1,19 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:hdict/core/database/database_helper.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
-import 'package:hdict/features/settings/dictionary_management_screen.dart';
 import 'package:flutter_html/flutter_html.dart';
-import 'package:hdict/features/about/about_screen.dart';
-import 'package:hdict/features/help/manual_screen.dart';
-import 'package:hdict/features/settings/settings_screen.dart';
-import 'package:hdict/features/flash_cards/flash_cards_screen.dart';
 import 'package:hdict/core/utils/html_lookup_wrapper.dart';
-import 'package:hdict/features/settings/search_history_screen.dart';
-import 'package:hdict/features/flash_cards/score_history_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:hdict/features/settings/settings_provider.dart';
-import 'package:hdict/features/support/support_screen.dart';
+import 'package:hdict/features/home/widgets/app_drawer.dart';
+import 'package:hdict/features/settings/dictionary_management_screen.dart';
 import 'dart:async';
+
 
 /// The main search screen of the hdict app.
 class HomeScreen extends StatefulWidget {
@@ -175,112 +171,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       appBar: AppBar(
         title: const Text('hdict', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(color: theme.colorScheme.primaryContainer),
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Image.asset('assets/hdict_logo.png', height: 64),
-                    const SizedBox(height: 8),
-                    Text(
-                      'hdict',
-                      style: theme.textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.onPrimaryContainer,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.search),
-              title: const Text('Search'),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.history),
-              title: const Text('Search History'),
-              onTap: () async {
-                Navigator.pop(context);
-                final selectedWord = await Navigator.push<String>(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SearchHistoryScreen()),
-                );
-                if (selectedWord != null) {
-                  _onWordSelected(selectedWord);
-                  _searchController.text = selectedWord;
-                }
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.flash_on),
-              title: const Text('Flash Cards'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const FlashCardsScreen()));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.assessment),
-              title: const Text('Flash Card Scores'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const ScoreHistoryScreen()));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.library_books),
-              title: const Text('Manage Dictionaries'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const DictionaryManagementScreen()),
-                ).then((_) => _checkDictionaries());
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.settings),
-              title: const Text('Settings'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsScreen()));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.help_outline),
-              title: const Text('User Manual'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const ManualScreen()));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.info_outline),
-              title: const Text('About Us'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const AboutScreen()));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.favorite_outline),
-              title: const Text('Support Us'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const SupportScreen()));
-              },
-            ),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
+      drawer: const AppDrawer(),
       body: _checkingDicts
           ? const Center(child: CircularProgressIndicator())
           : !_hasDictionaries
@@ -527,48 +418,50 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       definitionHtml = HtmlLookupWrapper.highlightText(definitionHtml, highlightQuery, highlightColor: isDark ? '#ff9800' : '#ffeb3b', textColor: 'black');
     }
 
-    return GestureDetector(
-      onTap: () => Navigator.of(context).popUntil((route) => route.isFirst),
-      behavior: HitTestBehavior.translucent,
-      child: Container(
-        color: settings.backgroundColor,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(def['word'], style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: settings.fontColor, fontFamily: settings.fontFamily, fontSize: settings.fontSize + 8)),
-              const Divider(height: 32),
-              SelectionArea(
-                child: Html(
-                  data: definitionHtml,
-                  style: {
-                    "body": Style(fontSize: FontSize(settings.fontSize), lineHeight: LineHeight.em(1.5), margin: Margins.zero, padding: HtmlPaddings.zero, color: settings.textColor, fontFamily: settings.fontFamily),
-                    "a": Style(color: settings.textColor, textDecoration: TextDecoration.none),
-                  },
-                  onLinkTap: (url, attributes, element) {
-                    if (url != null && url.startsWith('look_up:')) {
-                      final encodedWord = url.substring(8);
-                      try {
-                        final word = encodedWord.contains('%') ? Uri.decodeComponent(encodedWord) : encodedWord;
-                        _showWordPopup(word);
-                      } catch (e) {
-                        _showWordPopup(encodedWord);
-                      }
+    return Container(
+      color: settings.backgroundColor,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(def['word'], style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: settings.fontColor, fontFamily: settings.fontFamily, fontSize: settings.fontSize + 8)),
+            const Divider(height: 32),
+            SelectionArea(
+              child: Html(
+                data: definitionHtml,
+                style: {
+                  "body": Style(fontSize: FontSize(settings.fontSize), lineHeight: LineHeight.em(1.5), margin: Margins.zero, padding: HtmlPaddings.zero, color: settings.textColor, fontFamily: settings.fontFamily),
+                  "a": Style(color: settings.textColor, textDecoration: TextDecoration.none),
+                },
+                onLinkTap: (url, attributes, element) async {
+                  if (url != null && url.startsWith('look_up:')) {
+                    final encodedWord = url.substring(8);
+                    try {
+                      final word = encodedWord.contains('%') ? Uri.decodeComponent(encodedWord) : encodedWord;
+                      _showWordPopup(word);
+                    } catch (e) {
+                      _showWordPopup(encodedWord);
                     }
-                  },
-                ),
+                  } else if (url != null && (url.startsWith('http://') || url.startsWith('https://'))) {
+                    final uri = Uri.parse(url);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  }
+                },
               ),
-              if (settings.isTapOnMeaningEnabled)
-                const Padding(
-                  padding: EdgeInsets.only(top: 24.0),
-                  child: Text('Tap on words/links to look them up.', style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey, fontSize: 12)),
-                ),
-            ],
-          ),
+            ),
+            if (settings.isTapOnMeaningEnabled)
+              const Padding(
+                padding: EdgeInsets.only(top: 24.0),
+                child: Text('Tap on words/links to look them up.', style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey, fontSize: 12)),
+              ),
+          ],
         ),
       ),
     );
+
   }
 
   void _showWordPopup(String word) async {
@@ -613,7 +506,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     final List<Map<String, dynamic>> defs = [];
                     for (final res in candidates) {
                       final dict = await _dbHelper.getDictionaryById(res['dict_id']);
-                      if (dict == null) continue;
+                      if (dict == null || dict['is_enabled'] != 1) continue;
                       String dictPath = await _dbHelper.resolvePath(dict['path']);
                       if (dictPath.endsWith('.ifo')) dictPath = dictPath.replaceAll('.ifo', '.dict');
                       final reader = DictReader(dictPath, dictId: res['dict_id']);
