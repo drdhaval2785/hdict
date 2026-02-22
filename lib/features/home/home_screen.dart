@@ -442,26 +442,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               },
               onLinkTap: (url, attributes, element) async {
                 if (url != null) {
-                  if (url.startsWith('look_up:')) {
-                    final encodedWord = url.substring(8);
-                    try {
-                      final word = encodedWord.contains('%') ? Uri.decodeComponent(encodedWord) : encodedWord;
-                      _showWordPopup(word);
-                    } catch (e) {
-                      _showWordPopup(encodedWord);
-                    }
-                  } else if (url.startsWith('bword://')) {
-                    final encodedWord = url.substring(8);
-                    try {
-                      final word = encodedWord.contains('%') ? Uri.decodeComponent(encodedWord) : encodedWord;
-                      _showWordPopup(word);
-                    } catch (e) {
-                      _showWordPopup(encodedWord);
-                    }
-                  } else if (url.startsWith('http://') || url.startsWith('https://')) {
+                  if (url.startsWith('http://') || url.startsWith('https://')) {
                     final uri = Uri.parse(url);
                     if (await canLaunchUrl(uri)) {
                       await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  } else {
+                    String wordToLookup = url;
+                    if (wordToLookup.startsWith('look_up:')) {
+                      wordToLookup = wordToLookup.substring(8);
+                    } else if (wordToLookup.startsWith('bword://')) {
+                      wordToLookup = wordToLookup.substring(8);
+                    }
+                    try {
+                      final word = wordToLookup.contains('%') ? Uri.decodeComponent(wordToLookup) : wordToLookup;
+                      _showWordPopup(word);
+                    } catch (e) {
+                      _showWordPopup(wordToLookup);
                     }
                   }
                 }

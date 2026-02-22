@@ -8,17 +8,29 @@ class HtmlLookupWrapper {
 
     final StringBuffer buffer = StringBuffer();
     final matches = tagRegExp.allMatches(html);
+    
+    bool inAnchor = false;
 
     for (final match in matches) {
       final part = match.group(0)!;
       if (part.startsWith('<')) {
         buffer.write(part);
+        final lowerPart = part.toLowerCase();
+        if (lowerPart.startsWith('<a ') || lowerPart == '<a>') {
+          inAnchor = true;
+        } else if (lowerPart == '</a>') {
+          inAnchor = false;
+        }
       } else {
-        final wrapped = part.replaceAllMapped(wordRegExp, (m) {
-          final word = m.group(1)!;
-          return '<a href="look_up:${Uri.encodeComponent(word)}" class="dict-word">$word</a>';
-        });
-        buffer.write(wrapped.replaceAll('\n', '<br>'));
+        if (inAnchor) {
+          buffer.write(part.replaceAll('\n', '<br>'));
+        } else {
+          final wrapped = part.replaceAllMapped(wordRegExp, (m) {
+            final word = m.group(1)!;
+            return '<a href="look_up:${Uri.encodeComponent(word)}" class="dict-word">$word</a>';
+          });
+          buffer.write(wrapped.replaceAll('\n', '<br>'));
+        }
       }
     }
 
