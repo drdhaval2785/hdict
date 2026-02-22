@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart';
 
 import 'package:hdict/core/manager/dictionary_manager.dart';
 
@@ -153,9 +153,9 @@ class _DictionaryManagementScreenState
   Future<void> _importDictionary() async {
     const bool indexDefinitions = false; // Default behavior
     // Pick file(s)
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: [
+    const XTypeGroup typeGroup = XTypeGroup(
+      label: 'Dictionaries',
+      extensions: [
         'zip',
         'tar',
         'gz',
@@ -170,11 +170,21 @@ class _DictionaryManagementScreenState
         'dz',
         'syn',
       ],
-      allowMultiple: true,
-      withData: kIsWeb,
+      uniformTypeIdentifiers: [
+        'public.item',
+        'public.archive',
+        'com.pkware.zip-archive',
+        'public.tar-archive',
+        'public.gzip',
+        'public.bzip2-archive',
+        'public.data',
+      ],
     );
+    final List<XFile> files = await openFiles(acceptedTypeGroups: <XTypeGroup>[
+      typeGroup,
+    ]);
 
-    if (result != null && result.files.isNotEmpty) {
+    if (files.isNotEmpty) {
       if (!mounted) return;
 
       // Show progress dialog immediately
@@ -200,18 +210,18 @@ class _DictionaryManagementScreenState
       try {
         Stream<ImportProgress> stream;
 
-        if (result.files.length > 1 ||
-            result.files.any(
-              (f) => f.extension == 'ifo' || f.extension == 'idx',
+        if (files.length > 1 ||
+            files.any(
+              (f) => f.name.endsWith('.ifo') || f.name.endsWith('.idx'),
             )) {
           if (kIsWeb) {
-            final files = result.files.map((f) => (name: f.name, bytes: f.bytes!)).toList();
+            final fileData = await Future.wait(files.map((f) async => (name: f.name, bytes: await f.readAsBytes())));
             stream = _dictionaryManager.importMultipleFilesWebStream(
-              files,
+              fileData,
               indexDefinitions: indexDefinitions,
             );
           } else {
-            final paths = result.files.map((f) => f.path!).toList();
+            final paths = files.map((f) => f.path).toList();
             stream = _dictionaryManager.importMultipleFilesStream(
               paths,
               indexDefinitions: indexDefinitions,
@@ -220,13 +230,13 @@ class _DictionaryManagementScreenState
         } else {
           if (kIsWeb) {
             stream = _dictionaryManager.importDictionaryWebStream(
-              result.files.single.name,
-              result.files.single.bytes!,
+              files.single.name,
+              await files.single.readAsBytes(),
               indexDefinitions: indexDefinitions,
             );
           } else {
             stream = _dictionaryManager.importDictionaryStream(
-              result.files.single.path!,
+              files.single.path,
               indexDefinitions: indexDefinitions,
             );
           }
