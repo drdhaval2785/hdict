@@ -67,6 +67,12 @@ class SettingsScreen extends StatelessWidget {
           ),
           _buildColorTile(
             context,
+            'Headword Colour',
+            settings.headwordColor,
+            (color) => settings.setHeadwordColor(color),
+          ),
+          _buildColorTile(
+            context,
             'Search Bar Colour',
             settings.searchBarColor,
             (color) => settings.setSearchBarColor(color),

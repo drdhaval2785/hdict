@@ -5,7 +5,7 @@ void main() {
   group('consolidateDefinitions', () {
     const sep = '<hr style="border: 0; border-top: 1px solid #eee; margin: 16px 0;">';
 
-    test('keeps separate entries for each headword', () {
+    test('produces one entry per dictionary with all headwords', () {
       final grouped = <int, Map<String, List<Map<String, dynamic>>>>{
         1: {
           'alpha': [
@@ -25,23 +25,22 @@ void main() {
 
       final consolidated = consolidateDefinitions(grouped);
 
-      // we expect three consolidated entries: (1,alpha), (1,beta), (2,alpha)
-      expect(consolidated.length, 3);
-      expect(
-        consolidated.any((e) => e['dict_id'] == 1 && e['word'] == 'alpha'),
-        isTrue,
-      );
-      expect(
-        consolidated.any((e) => e['dict_id'] == 1 && e['word'] == 'beta'),
-        isTrue,
-      );
-      expect(
-        consolidated.any((e) => e['dict_id'] == 2 && e['word'] == 'alpha'),
-        isTrue,
-      );
+      // expect two entries: one per dict id
+      expect(consolidated.length, 2);
 
-      final fooDef = consolidated.firstWhere((e) => e['dict_id'] == 1 && e['word'] == 'alpha');
-      expect(fooDef['definition'], equals('first$sep' 'second'));
+      final dict1 = consolidated.firstWhere((e) => e['dict_id'] == 1);
+      expect(dict1['word'], 'alpha');
+      expect(dict1['dict_name'], 'A');
+      final defHtml = dict1['definition'] as String;
+      // should contain both headwords with separators and the proper class
+      expect(defHtml, contains('<p class="headword"><b>alpha</b></p>'));
+      expect(defHtml, contains('<p class="headword"><b>beta</b></p>'));
+      // alpha's definitions are joined
+      expect(defHtml, contains('first$sep' 'second'));
+
+      final dict2 = consolidated.firstWhere((e) => e['dict_id'] == 2);
+      expect(dict2['dict_name'], 'B');
+      expect(dict2['definition'], contains('other'));
     });
   });
 }

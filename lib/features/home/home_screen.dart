@@ -129,22 +129,29 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   static List<Map<String, dynamic>> consolidateDefinitions(
       Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults) {
     final List<Map<String, dynamic>> consolidated = [];
-
+    const sep = '<hr style="border: 0; border-top: 1px solid #eee; margin: 16px 0;">';
     groupedResults.forEach((dictId, wordMap) {
+      final buffer = StringBuffer();
+      String? dictName;
+      bool first = true;
       wordMap.forEach((headword, entries) {
-        final combinedContent = entries
-            .map((r) => r['definition'] as String)
-            .join('<hr style="border: 0; border-top: 1px solid #eee; margin: 16px 0;">');
-
-        consolidated.add({
-          'word': headword,
-          'dict_id': dictId,
-          'dict_name': entries.first['dict_name'],
-          'definition': combinedContent,
-        });
+        if (dictName == null && entries.isNotEmpty) {
+          dictName = entries.first['dict_name'] as String;
+        }
+        if (!first) {
+          buffer.writeln('<hr style="border: 0; border-top: 2px solid #bbb; margin: 24px 0;">');
+        }
+        first = false;
+        buffer.writeln('<div class="headword" style="font-size:1.3em;font-weight:bold;margin-bottom:8px;">$headword</div>');
+        buffer.write(entries.map((r) => r['definition'] as String).join(sep));
+      });
+      consolidated.add({
+        'word': wordMap.keys.first,
+        'dict_id': dictId,
+        'dict_name': dictName ?? '',
+        'definition': buffer.toString(),
       });
     });
-
     return consolidated;
   }
 
@@ -408,26 +415,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             String name = def['dict_name'];
             if (name.length > 13) name = '${name.substring(0, 10)}...';
             return Tab(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(name),
-                  const SizedBox(width: 4),
-                  GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _currentDefinitions.remove(def);
-                        if (_currentDefinitions.isEmpty) {
-                          _selectedWord = null;
-                        } else {
-                          _tabController = TabController(length: _currentDefinitions.length, vsync: this);
-                        }
-                      });
-                    },
-                    child: const Icon(Icons.close, size: 14),
-                  ),
-                ],
-              ),
+              child: Text(name),
             );
           }).toList(),
         ),
@@ -459,7 +447,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(def['word'], style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: settings.fontColor, fontFamily: settings.fontFamily, fontSize: settings.fontSize + 8)),
+            Text(def['word'], style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: settings.headwordColor, fontFamily: settings.fontFamily, fontSize: settings.fontSize + 8)),
             const Divider(height: 32),
             Html(
               data: definitionHtml,
@@ -467,6 +455,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 "body": Style(fontSize: FontSize(settings.fontSize), lineHeight: LineHeight.em(1.5), margin: Margins.zero, padding: HtmlPaddings.zero, color: settings.textColor, fontFamily: settings.fontFamily),
                 "a": Style(color: Colors.blue, textDecoration: TextDecoration.underline),
                 ".dict-word": Style(color: settings.textColor, textDecoration: TextDecoration.none),
+                ".headword": Style(color: settings.headwordColor, fontWeight: FontWeight.bold),
               },
               onLinkTap: (url, attributes, element) async {
                 if (url != null) {
@@ -578,31 +567,4 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       },
     );
   }
-}
-
-/// Group results by dictionary and headword for display in the UI.
-///
-/// The map structure is the same produced by the _onWordSelected helper when
-/// it reads definitions; each result entry must already include `dict_name`
-/// and `definition`.
-List<Map<String, dynamic>> consolidateDefinitions(
-    Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults) {
-  final List<Map<String, dynamic>> consolidated = [];
-
-  groupedResults.forEach((dictId, wordMap) {
-    wordMap.forEach((headword, entries) {
-      final combinedContent = entries
-          .map((r) => r['definition'] as String)
-          .join('<hr style="border: 0; border-top: 1px solid #eee; margin: 16px 0;">');
-
-      consolidated.add({
-        'word': headword,
-        'dict_id': dictId,
-        'dict_name': entries.first['dict_name'],
-        'definition': combinedContent,
-      });
-    });
-  });
-
-  return consolidated;
 }
