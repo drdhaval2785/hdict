@@ -59,27 +59,29 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       );
 
       // 2. Fetch definitions
-      final Map<int, List<Map<String, dynamic>>> groupedResults = {};
+      // group first by dictionary and then by the actual headword so multiple
+      // headwords in the same dictionary don't get merged together.
+      final Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults = {};
       for (final result in results) {
         final dictId = result['dict_id'] as int;
+        final wordValue = result['word'] as String;
         final dict = await _dbHelper.getDictionaryById(dictId);
         if (dict != null && dict['is_enabled'] == 1) {
           String dictPath = await _dbHelper.resolvePath(dict['path']);
           if (dictPath.endsWith('.ifo')) {
             dictPath = dictPath.replaceAll('.ifo', '.dict');
           }
-          
+
           final reader = DictReader(dictPath, dictId: dictId);
           final content = await reader.readEntry(
             result['offset'],
             result['length'],
           );
 
-          if (!groupedResults.containsKey(dictId)) {
-            groupedResults[dictId] = [];
-          }
+          groupedResults.putIfAbsent(dictId, () => {});
+          groupedResults[dictId]!.putIfAbsent(wordValue, () => []);
 
-          groupedResults[dictId]!.add({
+          groupedResults[dictId]![wordValue]!.add({
             ...result,
             'dict_name': dict['name'],
             'definition': content,
@@ -87,19 +89,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         }
       }
 
-      final List<Map<String, dynamic>> consolidatedDefs = [];
-      groupedResults.forEach((dictId, results) {
-        final combinedContent = results
-            .map((r) => r['definition'])
-            .join('<hr style="border: 0; border-top: 1px solid #eee; margin: 16px 0;">');
+      // once all definitions have been read we can consolidate them
+      // (group by dictionary and headword). delegate to a helper so we can
+      // unit test the behaviour in isolation.
+      final consolidatedDefs = consolidateDefinitions(groupedResults);
 
-        consolidatedDefs.add({
-          'word': results.first['word'],
-          'dict_id': dictId,
-          'dict_name': results.first['dict_name'],
-          'definition': combinedContent,
-        });
-      });
 
       setState(() {
         _currentDefinitions = consolidatedDefs;
@@ -123,6 +117,35 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         );
       }
     }
+  }
+
+  // Helpers ------------------------------------------------------------------
+  /// Takes results that have already been enriched with `dict_name` and
+  /// `definition` and groups them first by dictionary id and then by the
+  /// specific headword before producing a list suitable for the UI.
+  /// Public utility for grouping lookup results by dictionary and headword.
+  ///
+  /// Used by [_onWordSelected] and covered by unit tests.
+  static List<Map<String, dynamic>> consolidateDefinitions(
+      Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults) {
+    final List<Map<String, dynamic>> consolidated = [];
+
+    groupedResults.forEach((dictId, wordMap) {
+      wordMap.forEach((headword, entries) {
+        final combinedContent = entries
+            .map((r) => r['definition'] as String)
+            .join('<hr style="border: 0; border-top: 1px solid #eee; margin: 16px 0;">');
+
+        consolidated.add({
+          'word': headword,
+          'dict_id': dictId,
+          'dict_name': entries.first['dict_name'],
+          'definition': combinedContent,
+        });
+      });
+    });
+
+    return consolidated;
   }
 
   bool _hasDictionaries = false;
@@ -555,4 +578,31 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       },
     );
   }
+}
+
+/// Group results by dictionary and headword for display in the UI.
+///
+/// The map structure is the same produced by the _onWordSelected helper when
+/// it reads definitions; each result entry must already include `dict_name`
+/// and `definition`.
+List<Map<String, dynamic>> consolidateDefinitions(
+    Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults) {
+  final List<Map<String, dynamic>> consolidated = [];
+
+  groupedResults.forEach((dictId, wordMap) {
+    wordMap.forEach((headword, entries) {
+      final combinedContent = entries
+          .map((r) => r['definition'] as String)
+          .join('<hr style="border: 0; border-top: 1px solid #eee; margin: 16px 0;">');
+
+      consolidated.add({
+        'word': headword,
+        'dict_id': dictId,
+        'dict_name': entries.first['dict_name'],
+        'definition': combinedContent,
+      });
+    });
+  });
+
+  return consolidated;
 }
