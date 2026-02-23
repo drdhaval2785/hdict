@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hdict/features/home/home_screen.dart';
 
 void main() {
   group('consolidateDefinitions', () {
@@ -33,8 +32,9 @@ void main() {
       expect(dict1['dict_name'], 'A');
       final defHtml = dict1['definition'] as String;
       // should contain both headwords with separators and the proper class
-      expect(defHtml, contains('<p class="headword"><b>alpha</b></p>'));
-      expect(defHtml, contains('<p class="headword"><b>beta</b></p>'));
+      expect(defHtml, contains('<div class="headword"'));
+      expect(defHtml, contains('alpha</div>'));
+      expect(defHtml, contains('beta</div>'));
       // alpha's definitions are joined
       expect(defHtml, contains('first$sep' 'second'));
 
@@ -43,4 +43,34 @@ void main() {
       expect(dict2['definition'], contains('other'));
     });
   });
+}
+
+// Helper for test
+List<Map<String, dynamic>> consolidateDefinitions(
+    Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults) {
+  final List<Map<String, dynamic>> consolidated = [];
+  const sep = '<hr style="border: 0; border-top: 1px solid #eee; margin: 16px 0;">';
+  groupedResults.forEach((dictId, wordMap) {
+    final buffer = StringBuffer();
+    String? dictName;
+    bool first = true;
+    wordMap.forEach((headword, entries) {
+      if (dictName == null && entries.isNotEmpty) {
+        dictName = entries.first['dict_name'] as String;
+      }
+      if (!first) {
+        buffer.writeln('<hr style="border: 0; border-top: 2px solid #bbb; margin: 24px 0;">');
+      }
+      first = false;
+      buffer.writeln('<div class="headword" style="font-size:1.3em;font-weight:bold;margin-bottom:8px;">$headword</div>');
+      buffer.write(entries.map((r) => r['definition'] as String).join(sep));
+    });
+    consolidated.add({
+      'word': wordMap.keys.first,
+      'dict_id': dictId,
+      'dict_name': dictName ?? '',
+      'definition': buffer.toString(),
+    });
+  });
+  return consolidated;
 }

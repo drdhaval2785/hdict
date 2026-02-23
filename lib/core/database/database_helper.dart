@@ -581,4 +581,8 @@ class DatabaseHelper {
       return [];
     }
   }
+
+  Future<List<String>> getTriePrefixSuggestions(String prefix, {int limit = 100}) async {
+    return [];
+  }
 }

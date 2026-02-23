@@ -251,102 +251,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildSearchBar(ThemeData theme) {
-    final settings = context.watch<SettingsProvider>();
     return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Container(
-        decoration: BoxDecoration(
-          boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
-          ],
+      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+      child: TextField(
+        controller: _searchController,
+        decoration: InputDecoration(
+          hintText: 'Search...',
+          border: InputBorder.none,
+          suffixIcon: IconButton(
+            icon: const Icon(Icons.clear),
+            onPressed: () => _searchController.clear(),
+          ),
         ),
-        child: Autocomplete<String>(
-          optionsBuilder: (TextEditingValue textEditingValue) async {
-            if (textEditingValue.text.isEmpty) return const Iterable<String>.empty();
-            // always fetch a larger bucket of suggestions for the dropdown
-            return await _dbHelper.getPrefixSuggestions(
-              textEditingValue.text,
-              fuzzy: settings.isFuzzySearchEnabled,
-              limit: 100,
-            );
-          },
-          onSelected: (String selection) => _onWordSelected(selection),
-          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-            final isDark = ThemeData.estimateBrightnessForColor(settings.searchBarColor) == Brightness.dark;
-            final textColor = isDark ? Colors.white : Colors.black;
-            return TextField(
-              controller: controller,
-              focusNode: focusNode,
-              style: TextStyle(color: textColor),
-              decoration: InputDecoration(
-                hintText: 'Search or use * and ? for wildcards...',
-                hintStyle: TextStyle(color: textColor.withValues(alpha: 0.6)),
-                prefixIcon: Icon(Icons.search, color: textColor.withValues(alpha: 0.6)),
-                filled: true,
-                fillColor: settings.searchBarColor,
-                suffixIcon: IconButton(
-                  icon: Icon(Icons.clear, color: textColor.withValues(alpha: 0.6)),
-                  onPressed: () {
-                    controller.clear();
-                    setState(() {
-                      _selectedWord = null;
-                      _currentDefinitions = [];
-                    });
-                  },
-                ),
-              ),
-              onSubmitted: (value) {
-                if (value.isNotEmpty) {
-                  focusNode.unfocus();
-                  _onWordSelected(value);
-                }
-              },
-            );
-          },
-          optionsViewBuilder: (context, onSelected, options) {
-            return Align(
-              alignment: Alignment.topLeft,
-              child: Material(
-                elevation: 4.0,
-                borderRadius: BorderRadius.circular(12),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 300, maxWidth: 350),
-                  child: ListView.builder(
-                    padding: EdgeInsets.zero,
-                    shrinkWrap: true,
-                    itemCount: options.length,
-                    itemBuilder: (BuildContext context, int index) {
-                      final String option = options.elementAt(index);
-                      final settings = context.read<SettingsProvider>();
-
-                      return FutureBuilder<List<Map<String, dynamic>>>(
-                        future: _dbHelper.searchWords(option, limit: 1, fuzzy: false),
-                        builder: (context, snapshot) {
-                          String preview = '';
-                          if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-                            final def = snapshot.data!.first['definition'] ?? '';
-                            preview = def.replaceAll(RegExp(r'<[^>]*>'), '');
-                            final lines = preview.split('\n');
-                            preview = lines.take(settings.previewLines).join(' ').trim();
-                            if (preview.length > 100) preview = '${preview.substring(0, 97)}...';
-                          }
-
-                          return ListTile(
-                            title: Text(option),
-                            subtitle: preview.isNotEmpty
-                                ? Text(preview, maxLines: settings.previewLines, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall)
-                                : null,
-                            onTap: () => onSelected(option),
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
+        onSubmitted: (value) {
+          if (value.isNotEmpty) _onWordSelected(value);
+        },
       ),
     );
   }
@@ -437,7 +356,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
     if (highlightQuery != null && highlightQuery.isNotEmpty) {
       final isDark = ThemeData.estimateBrightnessForColor(settings.backgroundColor) == Brightness.dark;
-      definitionHtml = HtmlLookupWrapper.highlightText(definitionHtml, highlightQuery, highlightColor: isDark ? '#ff9800' : '#ffeb3b', textColor: 'black');
+      definitionHtml = HtmlLookupWrapper.highlightText(definitionHtml, highlightQuery, highlightColor: isDark ? '#ff9900' : '#ffeb3b', textColor: 'black');
     }
 
     return Container(
@@ -512,7 +431,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         final theme = Theme.of(context);
         return Container(
           width: double.infinity,
-          height: MediaQuery.of(context).size.height * 0.5,
+          height: MediaQuery.of(context).size.height * 0.0,
           decoration: BoxDecoration(color: settings.backgroundColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
           child: Column(
             children: [
@@ -545,7 +464,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     return defs;
                   }(),
                   builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                    if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: SizedBox());
                     if (!snapshot.hasData || snapshot.data!.isEmpty) return const Center(child: Text('No definition found.'));
                     final defs = snapshot.data!;
                     if (defs.length == 1) return _buildDefinitionContent(theme, defs.first);
