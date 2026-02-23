@@ -37,26 +37,35 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Future<void> _onWordSelected(String word) async {
-    // Save to history
     await _dbHelper.addSearchHistory(word);
-
     if (!mounted) return;
-
     setState(() {
       _isLoading = true;
       _selectedWord = word;
       _lastSearchQuery = word;
       _currentDefinitions = [];
     });
-
     try {
       final settings = context.read<SettingsProvider>();
       // 1. Search for all occurrences of this word
-      final results = await _dbHelper.searchWords(
+      List<Map<String, dynamic>> results = await _dbHelper.searchWords(
         word,
         fuzzy: settings.isFuzzySearchEnabled,
         searchDefinitions: settings.isSearchWithinDefinitionsEnabled,
       );
+      if (results.isEmpty) {
+        // fallback: longest prefix match
+        String prefix = word;
+        while (prefix.length > 2) {
+          prefix = prefix.substring(0, prefix.length - 1);
+          results = await _dbHelper.searchWords(
+            prefix,
+            fuzzy: settings.isFuzzySearchEnabled,
+            searchDefinitions: settings.isSearchWithinDefinitionsEnabled,
+          );
+          if (results.isNotEmpty) break;
+        }
+      }
 
       // 2. Fetch definitions
       // group first by dictionary and then by the actual headword so multiple
@@ -419,7 +428,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _searchController.text = word;
       return;
     }
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -431,7 +439,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         final theme = Theme.of(context);
         return Container(
           width: double.infinity,
-          height: MediaQuery.of(context).size.height * 0.0,
+          height: MediaQuery.of(context).size.height * 0.5,
           decoration: BoxDecoration(color: settings.backgroundColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
           child: Column(
             children: [
@@ -450,7 +458,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               Expanded(
                 child: FutureBuilder<List<Map<String, dynamic>>>(
                   future: () async {
-                    final candidates = await _dbHelper.searchWords(word);
+                    List<Map<String, dynamic>> candidates = await _dbHelper.searchWords(word);
+                    if (candidates.isEmpty) {
+                      // fallback: longest prefix match
+                      String prefix = word;
+                      while (prefix.length > 2) {
+                        prefix = prefix.substring(0, prefix.length - 1);
+                        candidates = await _dbHelper.searchWords(prefix);
+                        if (candidates.isNotEmpty) break;
+                      }
+                    }
                     final List<Map<String, dynamic>> defs = [];
                     for (final res in candidates) {
                       final dict = await _dbHelper.getDictionaryById(res['dict_id']);
@@ -464,7 +481,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     return defs;
                   }(),
                   builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: SizedBox());
+                    if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
                     if (!snapshot.hasData || snapshot.data!.isEmpty) return const Center(child: Text('No definition found.'));
                     final defs = snapshot.data!;
                     if (defs.length == 1) return _buildDefinitionContent(theme, defs.first);
