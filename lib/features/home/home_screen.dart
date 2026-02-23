@@ -233,7 +233,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         child: Autocomplete<String>(
           optionsBuilder: (TextEditingValue textEditingValue) async {
             if (textEditingValue.text.isEmpty) return const Iterable<String>.empty();
-            return await _dbHelper.getPrefixSuggestions(textEditingValue.text, fuzzy: settings.isFuzzySearchEnabled);
+            // always fetch a larger bucket of suggestions for the dropdown
+            return await _dbHelper.getPrefixSuggestions(
+              textEditingValue.text,
+              fuzzy: settings.isFuzzySearchEnabled,
+              limit: 100,
+            );
           },
           onSelected: (String selection) => _onWordSelected(selection),
           fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {

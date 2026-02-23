@@ -28,6 +28,7 @@ void main() {
           name TEXT NOT NULL,
           path TEXT NOT NULL,
           is_enabled INTEGER DEFAULT 1,
+          index_definitions INTEGER DEFAULT 0,
           word_count INTEGER DEFAULT 0,
           display_order INTEGER DEFAULT 0
         )
@@ -64,6 +65,9 @@ void main() {
       // Inject the test database
       DatabaseHelper.setDatabase(db);
       dbHelper = DatabaseHelper();
+
+      // make sure a dictionary row exists for search queries
+      await dbHelper.insertDictionary('Test Dict', '/path/to/dict');
     });
 
     tearDown(() async {
@@ -71,13 +75,13 @@ void main() {
     });
 
     test('Insert and Retrieve Dictionary', () async {
-      int id = await dbHelper.insertDictionary('Test Dict', '/path/to/dict');
+      int id = await dbHelper.insertDictionary('Another Dict', '/path/other');
       expect(id, greaterThan(0));
 
       List<Map<String, dynamic>> dicts = await dbHelper.getDictionaries();
-      expect(dicts.length, 1);
-      expect(dicts.first['name'], 'Test Dict');
-      expect(dicts.first['word_count'], 0);
+      expect(dicts.length, 2); // one from setUp plus new one
+      expect(dicts.last['name'], 'Another Dict');
+      expect(dicts.last['word_count'], 0);
     });
 
     test('Search Words (Exact vs Wildcard)', () async {

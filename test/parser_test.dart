@@ -143,12 +143,12 @@ author=Tester
       expect(
         output,
         contains(
-          '<a href="look_up:%E0%A4%B6%E0%A4%A4%E0%A4%AA%E0%A4%A4%E0%A5%8D%E0%A4%A4%E0%A5%8D%E0%A4%B0">शतपत्त्र</a>',
+          '<a href="look_up:%E0%A4%B6%E0%A4%A4%E0%A4%AA%E0%A4%A4%E0%A5%8D%E0%A4%A4%E0%A5%8D%E0%A4%B0" class="dict-word">शतपत्त्र</a>',
         ),
       );
       expect(
         output,
-        contains('<a href="look_up:%E0%A4%95%E0%A4%AE%E0%A4%B2">कमल</a>'),
+        contains('<a href="look_up:%E0%A4%95%E0%A4%AE%E0%A4%B2" class="dict-word">कमल</a>'),
       );
     });
 
@@ -167,7 +167,7 @@ author=Tester
       // # is not \p{L}\p{N}\p{M}, so it should be a boundary
       expect(
         output,
-        contains('<a href="look_up:word">word</a>#<a href="look_up:1">1</a>'),
+        contains('<a href="look_up:word" class="dict-word">word</a>#<a href="look_up:1" class="dict-word">1</a>'),
       );
     });
   });
