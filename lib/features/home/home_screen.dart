@@ -324,13 +324,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
       );
     }
-
     if (_currentDefinitions.length == 1) {
       return _buildDefinitionContent(theme, _currentDefinitions.first, highlightQuery: _lastSearchQuery);
     }
-
     if (_tabController == null || _tabController!.length != _currentDefinitions.length) return const SizedBox.shrink();
-
     return Column(
       children: [
         TabBar(
@@ -343,7 +340,26 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             String name = def['dict_name'];
             if (name.length > 13) name = '${name.substring(0, 10)}...';
             return Tab(
-              child: Text(name),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(name),
+                  const SizedBox(width: 4),
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _currentDefinitions.remove(def);
+                        if (_currentDefinitions.isEmpty) {
+                          _selectedWord = null;
+                        } else {
+                          _tabController = TabController(length: _currentDefinitions.length, vsync: this);
+                        }
+                      });
+                    },
+                    child: const Icon(Icons.close, size: 14),
+                  ),
+                ],
+              ),
             );
           }).toList(),
         ),
@@ -468,17 +484,26 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         if (candidates.isNotEmpty) break;
                       }
                     }
-                    final List<Map<String, dynamic>> defs = [];
+                    // Group by dictionary, consolidate headwords
+                    final Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults = {};
                     for (final res in candidates) {
-                      final dict = await _dbHelper.getDictionaryById(res['dict_id']);
+                      final dictId = res['dict_id'] as int;
+                      final wordValue = res['word'] as String;
+                      final dict = await _dbHelper.getDictionaryById(dictId);
                       if (dict == null || dict['is_enabled'] != 1) continue;
                       String dictPath = await _dbHelper.resolvePath(dict['path']);
                       if (dictPath.endsWith('.ifo')) dictPath = dictPath.replaceAll('.ifo', '.dict');
-                      final reader = DictReader(dictPath, dictId: res['dict_id']);
+                      final reader = DictReader(dictPath, dictId: dictId);
                       final content = await reader.readEntry(res['offset'], res['length']);
-                      defs.add({'word': res['word'], 'dict_name': dict['name'], 'definition': content});
+                      groupedResults.putIfAbsent(dictId, () => {});
+                      groupedResults[dictId]!.putIfAbsent(wordValue, () => []);
+                      groupedResults[dictId]![wordValue]!.add({
+                        ...res,
+                        'dict_name': dict['name'],
+                        'definition': content,
+                      });
                     }
-                    return defs;
+                    return consolidateDefinitions(groupedResults);
                   }(),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
@@ -489,8 +514,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       length: defs.length,
                       child: Column(
                         children: [
-                          TabBar(isScrollable: true, labelColor: theme.colorScheme.primary, unselectedLabelColor: Colors.grey, tabs: defs.map((d) => Tab(text: d['dict_name'])).toList()),
-                          Expanded(child: TabBarView(children: defs.map((d) => _buildDefinitionContent(theme, d)).toList())),
+                          TabBar(isScrollable: true, labelColor: theme.colorScheme.primary, unselectedLabelColor: Colors.grey, tabs: defs.map((def) {
+                            String name = def['dict_name'];
+                            if (name.length > 13) name = '${name.substring(0, 10)}...';
+                            return Tab(
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(name),
+                                  const SizedBox(width: 4),
+                                  GestureDetector(
+                                    onTap: () {
+                                      defs.remove(def);
+                                      (context as Element).markNeedsBuild();
+                                    },
+                                    child: const Icon(Icons.close, size: 14),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList()),
+                          Expanded(child: TabBarView(children: defs.map((def) => _buildDefinitionContent(theme, def)).toList())),
                         ],
                       ),
                     );
