@@ -1,70 +1,46 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hdict/features/home/home_screen.dart';
 
 void main() {
   group('consolidateDefinitions', () {
-    // Separator used by helper; the top-level test no longer declares it explicitly.
-
-    test('merges headwords sharing identical definition and lists all words', () {
+    test('lists headword-definition pairs individually and joins keys for title', () {
       final grouped = <int, Map<String, List<Map<String, dynamic>>>>{
         1: {
           'alpha': [
-            {'word': 'alpha', 'dict_name': 'A', 'definition': 'same'},
+            {'word': 'alpha', 'dict_name': 'A', 'definition': 'def1'},
           ],
           'beta': [
-            {'word': 'beta', 'dict_name': 'A', 'definition': 'same'},
+            {'word': 'beta', 'dict_name': 'A', 'definition': 'def1'},
           ],
           'gamma': [
-            {'word': 'gamma', 'dict_name': 'A', 'definition': 'different'},
+            {'word': 'gamma', 'dict_name': 'A', 'definition': 'def2'},
           ],
         },
       };
 
-      final consolidated = consolidateDefinitions(grouped);
+      final consolidated = HomeScreen.consolidateDefinitions(grouped);
 
       expect(consolidated.length, 1);
       final dict1 = consolidated.first;
-      // word field should list all headwords
+      
+      // The overall 'word' field (used for the tab title) should contain all keys
       expect(dict1['word'], 'alpha | beta | gamma');
       expect(dict1['dict_name'], 'A');
+      
       final defHtml = dict1['definition'] as String;
-      // first group heading should include both alpha and beta
-      expect(defHtml, contains('alpha | beta')); 
-      // second group heading for gamma
-      expect(defHtml, contains('gamma</div>'));
-      // the shared definition should appear only once
-      expect(defHtml, contains('same')); 
-      // and the different definition
-      expect(defHtml, contains('different'));
+      
+      // Each headword should have its own heading now, not merged
+      expect(defHtml, contains('<div class="headword" style="font-size:1.3em;font-weight:bold;margin-bottom:8px;">alpha</div>'));
+      expect(defHtml, contains('<div class="headword" style="font-size:1.3em;font-weight:bold;margin-bottom:8px;">beta</div>'));
+      expect(defHtml, contains('<div class="headword" style="font-size:1.3em;font-weight:bold;margin-bottom:8px;">gamma</div>'));
+      
+      // Definitions should be present
+      expect(defHtml, contains('def1'));
+      expect(defHtml, contains('def2'));
+      
+      // Separators should exist between the 3 entries
+      final hrCount = RegExp('<hr').allMatches(defHtml).length;
+      expect(hrCount, 2);
     });
   });
-}
-
-// Helper for test
-List<Map<String, dynamic>> consolidateDefinitions(
-    Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults) {
-  final List<Map<String, dynamic>> consolidated = [];
-  const sep = '<hr style="border: 0; border-top: 1px solid #eee; margin: 16px 0;">';
-  groupedResults.forEach((dictId, wordMap) {
-    final buffer = StringBuffer();
-    String? dictName;
-    bool first = true;
-    wordMap.forEach((headword, entries) {
-      if (dictName == null && entries.isNotEmpty) {
-        dictName = entries.first['dict_name'] as String;
-      }
-      if (!first) {
-        buffer.writeln('<hr style="border: 0; border-top: 2px solid #bbb; margin: 24px 0;">');
-      }
-      first = false;
-      buffer.writeln('<div class="headword" style="font-size:1.3em;font-weight:bold;margin-bottom:8px;">$headword</div>');
-      buffer.write(entries.map((r) => r['definition'] as String).join(sep));
-    });
-    consolidated.add({
-      'word': wordMap.keys.first,
-      'dict_id': dictId,
-      'dict_name': dictName ?? '',
-      'definition': buffer.toString(),
-    });
-  });
-  return consolidated;
 }

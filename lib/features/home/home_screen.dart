@@ -15,6 +15,48 @@ import 'dart:async';
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
+  // Helpers ------------------------------------------------------------------
+  /// Takes results that have already been enriched with `dict_name` and
+  /// `definition` and groups them first by dictionary id and then by the
+  /// specific headword before producing a list suitable for the UI.
+  static List<Map<String, dynamic>> consolidateDefinitions(
+      Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults) {
+    final List<Map<String, dynamic>> consolidated = [];
+    groupedResults.forEach((dictId, wordMap) {
+      String? dictName;
+      final buffer = StringBuffer();
+      bool firstEntry = true;
+
+      wordMap.forEach((headword, entries) {
+        for (final r in entries) {
+          dictName ??= r['dict_name'] as String;
+          if (!firstEntry) {
+            buffer.writeln('<hr style="border: 0; border-top: 2px solid #bbb; margin: 24px 0;">');
+          }
+          firstEntry = false;
+          buffer.writeln('<div class="headword" style="font-size:1.3em;font-weight:bold;margin-bottom:8px;">$headword</div>');
+          buffer.writeln(normalizeWhitespace(r['definition'] as String));
+        }
+      });
+
+      consolidated.add({
+        'word': wordMap.keys.join(' | '),
+        'dict_id': dictId,
+        'dict_name': dictName ?? '',
+        'definition': buffer.toString(),
+      });
+    });
+    return consolidated;
+  }
+
+  /// Normalizes whitespace in HTML by replacing multiple spaces/newlines with single space.
+  static String normalizeWhitespace(String html) {
+    return html
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .replaceAll(RegExp(r'>\s+<'), '><')
+        .trim();
+  }
+
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -99,7 +141,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         }
       }
 
-      final consolidatedDefs = consolidateDefinitions(groupedResults);
+      final consolidatedDefs = HomeScreen.consolidateDefinitions(groupedResults);
 
       setState(() {
         _currentDefinitions = consolidatedDefs;
@@ -123,48 +165,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         );
       }
     }
-  }
-
-  // Helpers ------------------------------------------------------------------
-  /// Takes results that have already been enriched with `dict_name` and
-  /// `definition` and groups them first by dictionary id and then by the
-  /// specific headword before producing a list suitable for the UI.
-  static List<Map<String, dynamic>> consolidateDefinitions(
-      Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults) {
-    final List<Map<String, dynamic>> consolidated = [];
-    groupedResults.forEach((dictId, wordMap) {
-      String? dictName;
-      final buffer = StringBuffer();
-      bool firstEntry = true;
-
-      wordMap.forEach((headword, entries) {
-        for (final r in entries) {
-          dictName ??= r['dict_name'] as String;
-          if (!firstEntry) {
-            buffer.writeln('<hr style="border: 0; border-top: 2px solid #bbb; margin: 24px 0;">');
-          }
-          firstEntry = false;
-          buffer.writeln('<div class="headword" style="font-size:1.3em;font-weight:bold;margin-bottom:8px;">$headword</div>');
-          buffer.writeln(normalizeWhitespace(r['definition'] as String));
-        }
-      });
-
-      consolidated.add({
-        'word': wordMap.keys.join(' | '),
-        'dict_id': dictId,
-        'dict_name': dictName ?? '',
-        'definition': buffer.toString(),
-      });
-    });
-    return consolidated;
-  }
-
-  /// Normalizes whitespace in HTML by replacing multiple spaces/newlines with single space.
-  static String normalizeWhitespace(String html) {
-    return html
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .replaceAll(RegExp(r'>\s+<'), '><')
-        .trim();
   }
 
   bool _hasDictionaries = false;
@@ -377,7 +377,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _buildDefinitionContent(ThemeData theme, Map<String, dynamic> def, {String? highlightQuery}) {
     final settings = context.watch<SettingsProvider>();
     String definitionHtml = def['definition'];
-    definitionHtml = normalizeWhitespace(definitionHtml);
+    definitionHtml = HomeScreen.normalizeWhitespace(definitionHtml);
     if (settings.isTapOnMeaningEnabled) {
       definitionHtml = HtmlLookupWrapper.wrapWords(definitionHtml);
     }
@@ -505,7 +505,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         'definition': content,
                       });
                     }
-                    return consolidateDefinitions(groupedResults);
+                    return HomeScreen.consolidateDefinitions(groupedResults);
                   }(),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());

@@ -20,7 +20,10 @@ class DatabaseHelper {
   static Future<void> initializeDatabaseFactory() async {
     if (kIsWeb) {
       databaseFactory = createDatabaseFactoryFfiWeb();
-    } else if (Platform.isWindows || Platform.isLinux || Platform.isAndroid) {
+    } else if (Platform.isWindows ||
+        Platform.isLinux ||
+        Platform.isAndroid ||
+        Platform.isMacOS) {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
     }
@@ -96,7 +99,9 @@ class DatabaseHelper {
         )
       ''');
     } catch (e) {
-      debugPrint('FTS5 table creation failed, falling back to normal table: $e');
+      debugPrint(
+        'FTS5 table creation failed, falling back to normal table: $e',
+      );
       await db.execute('''
         CREATE TABLE word_index (
           word TEXT,
@@ -154,8 +159,12 @@ class DatabaseHelper {
     }
     if (oldVersion < 8) {
       try {
-        await db.execute('ALTER TABLE dictionaries ADD COLUMN start_rowid INTEGER');
-        await db.execute('ALTER TABLE dictionaries ADD COLUMN end_rowid INTEGER');
+        await db.execute(
+          'ALTER TABLE dictionaries ADD COLUMN start_rowid INTEGER',
+        );
+        await db.execute(
+          'ALTER TABLE dictionaries ADD COLUMN end_rowid INTEGER',
+        );
       } catch (e) {
         debugPrint('Migration error (version 8): $e');
       }
@@ -224,7 +233,10 @@ class DatabaseHelper {
     // SQLite SUBSTR is 1-indexed.
     final sql =
         'SELECT SUBSTR(content, ?, ?) as part FROM files WHERE dict_id = ? AND file_name = ?';
-    final results = await db.rawQuery(sql, [offset + 1, length, dictId, fileName]);
+    final results = await db.rawQuery(
+      sql,
+      [offset + 1, length, dictId, fileName],
+    );
     if (results.isNotEmpty) {
       return results.first['part'] as Uint8List;
     }
@@ -239,7 +251,7 @@ class DatabaseHelper {
     bool indexDefinitions = false,
   }) async {
     final db = await database;
-    
+
     // For native, store a path relative to Documents if possible
     String storedPath = path;
     if (!kIsWeb && path.contains('dictionaries/')) {
@@ -289,7 +301,7 @@ class DatabaseHelper {
     int limit = 5,
   }) async {
     final db = await database;
-    
+
     // 1. Get dictionary metadata
     final dictResult = await db.query(
       'dictionaries',
@@ -297,13 +309,13 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [dictId],
     );
-    
+
     if (dictResult.isEmpty) return [];
-    
+
     int total = (dictResult.first['word_count'] as num).toInt();
     int? startRowId = dictResult.first['start_rowid'] as int?;
     int? endRowId = dictResult.first['end_rowid'] as int?;
-    
+
     if (total == 0) return [];
 
     final random = Random();
@@ -326,8 +338,6 @@ class DatabaseHelper {
     }
 
     // 3. Fallback: Slow O(N) scan strategy (if rowid metadata missing)
-    // We only do this if the above failed or metadata isn't set yet.
-    // Note: We'll also try to auto-heal the metadata here.
     try {
       final rangeRes = await db.rawQuery(
         'SELECT MIN(rowid) as min_id, MAX(rowid) as max_id FROM word_index WHERE dict_id = ?',
@@ -337,13 +347,13 @@ class DatabaseHelper {
         int min = (rangeRes.first['min_id'] as num).toInt();
         int max = (rangeRes.first['max_id'] as num).toInt();
         await updateDictionaryRowIdRange(dictId, min, max);
-        return getSampleWords(dictId, limit: limit); // Recurse now that we have data
+        return getSampleWords(dictId, limit: limit); // Recurse
       }
     } catch (e) {
       debugPrint('Fallback random word lookup error: $e');
     }
 
-    // Last resort: standard offset (extremely slow on large dicts)
+    // Last resort: standard offset
     for (int i = 0; i < limit; i++) {
       int randomOffset = random.nextInt(total);
       final res = await db.query(
@@ -356,7 +366,7 @@ class DatabaseHelper {
       );
       if (res.isNotEmpty) results.add(res.first);
     }
-    
+
     return results;
   }
 
@@ -563,7 +573,20 @@ class DatabaseHelper {
         if (result.isNotEmpty) return result;
       }
 
-      // 2. Prefix fallback
+      // 2. Fuzzy search (if requested)
+      if (fuzzy) {
+        final String sql = '''
+          SELECT word, dict_id, offset, length 
+          FROM word_index 
+          WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
+          AND word LIKE ?
+          LIMIT ?
+        ''';
+        final results = await db.rawQuery(sql, ['%$query%', limit]);
+        if (results.isNotEmpty) return results;
+      }
+
+      // 3. Prefix fallback
       String prefix = query;
       while (prefix.length > 2) {
         final String prefixSafe = prefix.replaceAll('"', '""');
@@ -576,7 +599,10 @@ class DatabaseHelper {
           ORDER BY length(word) ASC
           LIMIT ?
         ''';
-        final List<Map<String, dynamic>> prefixResults = await db.rawQuery(sql, [prefixMatchQuery, limit]);
+        final List<Map<String, dynamic>> prefixResults = await db.rawQuery(
+          sql,
+          [prefixMatchQuery, limit],
+        );
         if (prefixResults.isNotEmpty) return prefixResults;
         prefix = prefix.substring(0, prefix.length - 1);
       }
