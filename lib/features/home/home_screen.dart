@@ -148,7 +148,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           buffer.writeln('<hr style="border: 0; border-top: 2px solid #bbb; margin: 24px 0;">');
         }
         first = false;
-        buffer.writeln('<div class="headword" style="font-size:1.3em;font-weight:bold;margin-bottom:8px;">$headword</div>');
         buffer.write(entries.map((r) => r['definition'] as String).join(sep));
       });
       consolidated.add({
@@ -159,6 +158,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       });
     });
     return consolidated;
+  }
+
+  /// Normalizes whitespace in HTML by replacing multiple spaces/newlines with single space.
+  static String normalizeWhitespace(String html) {
+    return html
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .replaceAll(RegExp(r'>\s+<'), '><')
+        .trim();
   }
 
   bool _hasDictionaries = false;
@@ -373,6 +380,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _buildDefinitionContent(ThemeData theme, Map<String, dynamic> def, {String? highlightQuery}) {
     final settings = context.watch<SettingsProvider>();
     String definitionHtml = def['definition'];
+    definitionHtml = normalizeWhitespace(definitionHtml);
     if (settings.isTapOnMeaningEnabled) {
       definitionHtml = HtmlLookupWrapper.wrapWords(definitionHtml);
     }
@@ -389,6 +397,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(def['word'], style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: settings.headwordColor, fontFamily: settings.fontFamily, fontSize: settings.fontSize + 8)),
+            if (def['dict_name'] != null && (def['dict_name'] as String).isNotEmpty)
+              Text(def['dict_name'], style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey, fontStyle: FontStyle.italic)),
             const Divider(height: 32),
             Html(
               data: definitionHtml,
@@ -506,7 +516,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
                     if (!snapshot.hasData || snapshot.data!.isEmpty) return const Center(child: Text('No definition found.'));
                     final defs = snapshot.data!;
-                    if (defs.length == 1) return _buildDefinitionContent(theme, defs.first);
+                    if (defs.length == 1) {
+                      return Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            child: Text(defs.first['dict_name'] ?? '', style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey, fontStyle: FontStyle.italic)),
+                          ),
+                          Expanded(child: _buildDefinitionContent(theme, defs.first)),
+                        ],
+                      );
+                    }
                     return DefaultTabController(
                       length: defs.length,
                       child: Column(
