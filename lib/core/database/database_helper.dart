@@ -5,6 +5,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
+import 'dart:math';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -60,7 +61,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 7,
+      version: 8, // Incremented for start_rowid tracking
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -76,7 +77,9 @@ class DatabaseHelper {
         is_enabled INTEGER DEFAULT 1,
         index_definitions INTEGER DEFAULT 0,
         word_count INTEGER DEFAULT 0,
-        display_order INTEGER DEFAULT 0
+        display_order INTEGER DEFAULT 0,
+        start_rowid INTEGER,
+        end_rowid INTEGER
       )
     ''');
 
@@ -148,6 +151,14 @@ class DatabaseHelper {
           UNIQUE(dict_id, file_name)
         )
       ''');
+    }
+    if (oldVersion < 8) {
+      try {
+        await db.execute('ALTER TABLE dictionaries ADD COLUMN start_rowid INTEGER');
+        await db.execute('ALTER TABLE dictionaries ADD COLUMN end_rowid INTEGER');
+      } catch (e) {
+        debugPrint('Migration error (version 8): $e');
+      }
     }
   }
 
@@ -253,6 +264,16 @@ class DatabaseHelper {
     );
   }
 
+  Future<void> updateDictionaryRowIdRange(int id, int start, int end) async {
+    final db = await database;
+    await db.update(
+      'dictionaries',
+      {'start_rowid': start, 'end_rowid': end},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<int> getWordCountForDict(int dictId) async {
     final db = await database;
     final result = await db.rawQuery(
@@ -262,19 +283,80 @@ class DatabaseHelper {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
+  /// Returns random sample words using O(1) rowid lookup if available, or O(N) fallback.
   Future<List<Map<String, dynamic>>> getSampleWords(
     int dictId, {
     int limit = 5,
   }) async {
     final db = await database;
-    final results = await db.query(
-      'word_index',
-      columns: ['word', 'offset', 'length'],
-      where: 'dict_id = ?',
+    
+    // 1. Get dictionary metadata
+    final dictResult = await db.query(
+      'dictionaries',
+      columns: ['word_count', 'start_rowid', 'end_rowid'],
+      where: 'id = ?',
       whereArgs: [dictId],
-      orderBy: 'RANDOM()',
-      limit: limit,
     );
+    
+    if (dictResult.isEmpty) return [];
+    
+    int total = (dictResult.first['word_count'] as num).toInt();
+    int? startRowId = dictResult.first['start_rowid'] as int?;
+    int? endRowId = dictResult.first['end_rowid'] as int?;
+    
+    if (total == 0) return [];
+
+    final random = Random();
+    final List<Map<String, dynamic>> results = [];
+
+    // 2. High-speed O(1) rowid strategy (if metadata is available)
+    if (startRowId != null && endRowId != null) {
+      final int range = endRowId - startRowId + 1;
+      for (int i = 0; i < limit * 2 && results.length < limit; i++) {
+        int randomRowId = startRowId + random.nextInt(range);
+        final res = await db.query(
+          'word_index',
+          columns: ['word', 'offset', 'length', 'dict_id'],
+          where: 'rowid = ? AND dict_id = ?',
+          whereArgs: [randomRowId, dictId],
+        );
+        if (res.isNotEmpty) results.add(res.first);
+      }
+      if (results.isNotEmpty) return results;
+    }
+
+    // 3. Fallback: Slow O(N) scan strategy (if rowid metadata missing)
+    // We only do this if the above failed or metadata isn't set yet.
+    // Note: We'll also try to auto-heal the metadata here.
+    try {
+      final rangeRes = await db.rawQuery(
+        'SELECT MIN(rowid) as min_id, MAX(rowid) as max_id FROM word_index WHERE dict_id = ?',
+        [dictId],
+      );
+      if (rangeRes.isNotEmpty && rangeRes.first['min_id'] != null) {
+        int min = (rangeRes.first['min_id'] as num).toInt();
+        int max = (rangeRes.first['max_id'] as num).toInt();
+        await updateDictionaryRowIdRange(dictId, min, max);
+        return getSampleWords(dictId, limit: limit); // Recurse now that we have data
+      }
+    } catch (e) {
+      debugPrint('Fallback random word lookup error: $e');
+    }
+
+    // Last resort: standard offset (extremely slow on large dicts)
+    for (int i = 0; i < limit; i++) {
+      int randomOffset = random.nextInt(total);
+      final res = await db.query(
+        'word_index',
+        columns: ['word', 'offset', 'length', 'dict_id'],
+        where: 'dict_id = ?',
+        whereArgs: [dictId],
+        limit: 1,
+        offset: randomOffset,
+      );
+      if (res.isNotEmpty) results.add(res.first);
+    }
+    
     return results;
   }
 
@@ -451,10 +533,7 @@ class DatabaseHelper {
         final List<Object?> args = [query];
         if (searchDefinitions) args.add('"$safeQuery"');
         args.add(limit);
-        debugPrint('[SQLITE][searchWords] SQL: $sql');
-        debugPrint('[SQLITE][searchWords] ARGS: $args');
         final result = await db.rawQuery(sql, args);
-          debugPrint('[SQLITE][searchWords] RESULT: ${result.toString()}');
         return result;
       }
 
@@ -468,10 +547,7 @@ class DatabaseHelper {
           AND (word MATCH ? OR content MATCH ?)
           LIMIT ?
         ''';
-        debugPrint('[SQLITE][searchWords] SQL: $sql');
-        debugPrint('[SQLITE][searchWords] ARGS: [$matchQuery, $matchQuery, $limit]');
         final result = await db.rawQuery(sql, [matchQuery, matchQuery, limit]);
-          debugPrint('[SQLITE][searchWords] RESULT: ${result.toString()}');
         if (result.isNotEmpty) return result;
       } else {
         final String matchQuery = '"$safeQuery"';
@@ -483,14 +559,11 @@ class DatabaseHelper {
           AND dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
           LIMIT ?
         ''';
-        debugPrint('[SQLITE][searchWords] SQL: $sql');
-        debugPrint('[SQLITE][searchWords] ARGS: [$matchQuery, $query, $limit]');
         final result = await db.rawQuery(sql, [matchQuery, query, limit]);
-        debugPrint('[SQLITE][searchWords] RESULT: $result');
         if (result.isNotEmpty) return result;
       }
 
-      // 2. Prefix fallback (always use FTS5 prefix search, ignore content MATCH)
+      // 2. Prefix fallback
       String prefix = query;
       while (prefix.length > 2) {
         final String prefixSafe = prefix.replaceAll('"', '""');
@@ -503,15 +576,11 @@ class DatabaseHelper {
           ORDER BY length(word) ASC
           LIMIT ?
         ''';
-        debugPrint('[SQLITE][searchWords] SQL: $sql');
-        debugPrint('[SQLITE][searchWords] ARGS: [$prefixMatchQuery, $limit]');
         final List<Map<String, dynamic>> prefixResults = await db.rawQuery(sql, [prefixMatchQuery, limit]);
-        debugPrint('[SQLITE][searchWords] RESULT: $prefixResults');
         if (prefixResults.isNotEmpty) return prefixResults;
         prefix = prefix.substring(0, prefix.length - 1);
       }
 
-      // 3. If still nothing, return empty
       return [];
     } catch (e) {
       debugPrint("Search error: $e");

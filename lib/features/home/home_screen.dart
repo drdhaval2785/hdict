@@ -104,7 +104,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       setState(() {
         _currentDefinitions = consolidatedDefs;
         _tabController?.dispose();
-        if (consolidatedDefs.length > 1) {
+        if (consolidatedDefs.isNotEmpty) {
           _tabController = TabController(
             length: consolidatedDefs.length,
             vsync: this,
@@ -133,35 +133,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults) {
     final List<Map<String, dynamic>> consolidated = [];
     groupedResults.forEach((dictId, wordMap) {
-      // map definition text -> list of headwords sharing it
-      final Map<String, List<String>> defToWords = {};
       String? dictName;
+      final buffer = StringBuffer();
+      bool firstEntry = true;
+
       wordMap.forEach((headword, entries) {
         for (final r in entries) {
           dictName ??= r['dict_name'] as String;
-          final String defText = r['definition'] as String;
-          defToWords.putIfAbsent(defText, () => []);
-          if (!defToWords[defText]!.contains(headword)) {
-            defToWords[defText]!.add(headword);
+          if (!firstEntry) {
+            buffer.writeln('<hr style="border: 0; border-top: 2px solid #bbb; margin: 24px 0;">');
           }
+          firstEntry = false;
+          buffer.writeln('<div class="headword" style="font-size:1.3em;font-weight:bold;margin-bottom:8px;">$headword</div>');
+          buffer.writeln(normalizeWhitespace(r['definition'] as String));
         }
       });
 
-      final buffer = StringBuffer();
-      bool firstGroup = true;
-      defToWords.forEach((defText, words) {
-        if (!firstGroup) {
-          buffer.writeln('<hr style="border: 0; border-top: 2px solid #bbb; margin: 24px 0;">');
-        }
-        firstGroup = false;
-        final heading = words.join(' | ');
-        buffer.writeln('<div class="headword" style="font-size:1.3em;font-weight:bold;margin-bottom:8px;">$heading</div>');
-        buffer.writeln(normalizeWhitespace(defText));
-      });
-
-      final allWords = wordMap.keys.join(' | ');
       consolidated.add({
-        'word': allWords,
+        'word': wordMap.keys.join(' | '),
         'dict_id': dictId,
         'dict_name': dictName ?? '',
         'definition': buffer.toString(),
@@ -338,9 +327,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
       );
     }
-    if (_currentDefinitions.length == 1) {
-      return _buildDefinitionContent(theme, _currentDefinitions.first, highlightQuery: _lastSearchQuery);
-    }
+
     if (_tabController == null || _tabController!.length != _currentDefinitions.length) return const SizedBox.shrink();
     return Column(
       children: [
@@ -406,10 +393,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Text(def['word'], style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: settings.headwordColor, fontFamily: settings.fontFamily, fontSize: settings.fontSize + 8)),
-            if (def['dict_name'] != null && (def['dict_name'] as String).isNotEmpty)
-              Text(def['dict_name'], style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey, fontStyle: FontStyle.italic)),
-            const Divider(height: 32),
             Html(
               data: definitionHtml,
               style: {
@@ -528,17 +511,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
                     if (!snapshot.hasData || snapshot.data!.isEmpty) return const Center(child: Text('No definition found.'));
                     final defs = snapshot.data!;
-                    if (defs.length == 1) {
-                      return Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            child: Text(defs.first['dict_name'] ?? '', style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey, fontStyle: FontStyle.italic)),
-                          ),
-                          Expanded(child: _buildDefinitionContent(theme, defs.first)),
-                        ],
-                      );
-                    }
+
                     return DefaultTabController(
                       length: defs.length,
                       child: Column(
