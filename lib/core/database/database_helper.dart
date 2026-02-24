@@ -451,8 +451,15 @@ class DatabaseHelper {
         final List<Object?> args = [query];
         if (searchDefinitions) args.add('"$safeQuery"');
         args.add(limit);
-        return await db.rawQuery(sql, args);
-      } else if (searchDefinitions) {
+        debugPrint('[SQLITE][searchWords] SQL: $sql');
+        debugPrint('[SQLITE][searchWords] ARGS: $args');
+        final result = await db.rawQuery(sql, args);
+        debugPrint('[SQLITE][searchWords] RESULT: ' + result.toString());
+        return result;
+      }
+
+      // 1. Try exact match (with/without definitions)
+      if (searchDefinitions) {
         final String matchQuery = '"$safeQuery"';
         final String sql = '''
           SELECT word, dict_id, offset, length 
@@ -461,78 +468,56 @@ class DatabaseHelper {
           AND (word MATCH ? OR content MATCH ?)
           LIMIT ?
         ''';
-        return await db.rawQuery(sql, [matchQuery, matchQuery, limit]);
-      } else if (fuzzy) {
-        final String matchQuery = '"$safeQuery"';
-        final List<Map<String, dynamic>> exactMatch = await db.rawQuery('''
-          SELECT word, dict_id, offset, length 
-          FROM word_index 
-          WHERE word MATCH ?
-          AND word = ?
-          AND dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
-          LIMIT ?
-        ''', [matchQuery, query, limit]);
-        if (exactMatch.isNotEmpty) return exactMatch;
-
-        final String prefixMatchQuery = '"$safeQuery"*';
-        final String sql = '''
-          SELECT word, dict_id, offset, length 
-          FROM word_index 
-          WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
-          AND word MATCH ?
-          UNION
-          SELECT word, dict_id, offset, length 
-          FROM word_index 
-          WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
-          AND word LIKE ?
-          LIMIT ?
-        ''';
-        return await db.rawQuery(sql, [prefixMatchQuery, '%$query%', limit]);
+        debugPrint('[SQLITE][searchWords] SQL: $sql');
+        debugPrint('[SQLITE][searchWords] ARGS: [$matchQuery, $matchQuery, $limit]');
+        final result = await db.rawQuery(sql, [matchQuery, matchQuery, limit]);
+        debugPrint('[SQLITE][searchWords] RESULT: ' + result.toString());
+        if (result.isNotEmpty) return result;
       } else {
         final String matchQuery = '"$safeQuery"';
-        final List<Map<String, dynamic>> exactMatch = await db.rawQuery('''
+        final String sql = '''
           SELECT word, dict_id, offset, length 
           FROM word_index 
           WHERE word MATCH ?
           AND word = ?
           AND dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
           LIMIT ?
-        ''', [matchQuery, query, limit]);
-        if (exactMatch.isNotEmpty) return exactMatch;
+        ''';
+        debugPrint('[SQLITE][searchWords] SQL: $sql');
+        debugPrint('[SQLITE][searchWords] ARGS: [$matchQuery, $query, $limit]');
+        final result = await db.rawQuery(sql, [matchQuery, query, limit]);
+        debugPrint('[SQLITE][searchWords] RESULT: $result');
+        if (result.isNotEmpty) return result;
+      }
 
-        // Longest Prefix Match Fallback
-        String prefix = query;
-        while (prefix.length > 2) {
-          prefix = prefix.substring(0, prefix.length - 1);
-          final String prefixSafe = prefix.replaceAll('"', '""');
-          final String matchPrefixQuery = '"$prefixSafe"';
-          
-          final List<Map<String, dynamic>> prefixMatch = await db.rawQuery('''
-            SELECT word, dict_id, offset, length 
-            FROM word_index 
-            WHERE word MATCH ?
-            AND word = ?
-            AND dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
-            LIMIT ?
-          ''', [matchPrefixQuery, prefix, limit]);
-          if (prefixMatch.isNotEmpty) return prefixMatch;
-        }
-
+      // 2. Prefix fallback (always use FTS5 prefix search, ignore content MATCH)
+      String prefix = query;
+      while (prefix.length > 2) {
+        final String prefixSafe = prefix.replaceAll('"', '""');
+        final String prefixMatchQuery = prefixSafe + '*';
         final String sql = '''
           SELECT word, dict_id, offset, length 
           FROM word_index 
           WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
           AND word MATCH ?
+          ORDER BY length(word) ASC
           LIMIT ?
         ''';
-        return await db.rawQuery(sql, [matchQuery, limit]);
+        debugPrint('[SQLITE][searchWords] SQL: $sql');
+        debugPrint('[SQLITE][searchWords] ARGS: [$prefixMatchQuery, $limit]');
+        final List<Map<String, dynamic>> prefixResults = await db.rawQuery(sql, [prefixMatchQuery, limit]);
+        debugPrint('[SQLITE][searchWords] RESULT: $prefixResults');
+        if (prefixResults.isNotEmpty) return prefixResults;
+        prefix = prefix.substring(0, prefix.length - 1);
       }
+
+      // 3. If still nothing, return empty
+      return [];
     } catch (e) {
       debugPrint("Search error: $e");
       return [];
     }
   }
-
 
   Future<List<String>> getPrefixSuggestions(
     String prefix, {
@@ -542,47 +527,34 @@ class DatabaseHelper {
     try {
       final db = await database;
       final String safePrefix = prefix.replaceAll('"', '""');
-      // For prefix mapping in FTS5 we append * outside strings
-      final String matchQueryPrefix = '"$safePrefix"*';
 
       if (fuzzy) {
         final String sql = '''
-          SELECT word 
-          FROM word_index 
-          WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
-          AND word MATCH ?
-          UNION
-          SELECT word 
+          SELECT DISTINCT word 
           FROM word_index 
           WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
           AND word LIKE ?
           ORDER BY word ASC
           LIMIT ?
         ''';
-        final results = await db.rawQuery(sql, [
-          matchQueryPrefix,
-          '%$prefix%',
-          limit,
-        ]);
+        final results = await db.rawQuery(sql, ['%$prefix%', limit]);
         return results.map((r) => r['word'] as String).toList();
       } else {
+        final String prefixMatchQuery = safePrefix + '*';
         final String sql = '''
           SELECT DISTINCT word 
           FROM word_index 
           WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
-          AND word MATCH ? 
+          AND word MATCH ?
           ORDER BY word ASC
           LIMIT ?
         ''';
-        final results = await db.rawQuery(sql, [matchQueryPrefix, limit]);
+        final results = await db.rawQuery(sql, [prefixMatchQuery, limit]);
         return results.map((r) => r['word'] as String).toList();
       }
     } catch (e) {
+      debugPrint('Error getting prefix suggestions: $e');
       return [];
     }
-  }
-
-  Future<List<String>> getTriePrefixSuggestions(String prefix, {int limit = 100}) async {
-    return [];
   }
 }

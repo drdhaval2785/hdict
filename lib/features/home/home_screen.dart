@@ -47,31 +47,32 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     });
     try {
       final settings = context.read<SettingsProvider>();
-      // 1. Search for all occurrences of this word
+      // 1. Search for all occurrences of this word (searchWords now handles fallback/prefix logic)
       List<Map<String, dynamic>> results = await _dbHelper.searchWords(
         word,
         fuzzy: settings.isFuzzySearchEnabled,
         searchDefinitions: settings.isSearchWithinDefinitionsEnabled,
       );
-      if (results.isEmpty) {
-        // fallback: longest prefix match
-        String prefix = word;
-        while (prefix.length > 2) {
-          prefix = prefix.substring(0, prefix.length - 1);
-          results = await _dbHelper.searchWords(
-            prefix,
-            fuzzy: settings.isFuzzySearchEnabled,
-            searchDefinitions: settings.isSearchWithinDefinitionsEnabled,
-          );
-          if (results.isNotEmpty) break;
+
+      // Custom logic: exact match or prefix match sorted by headword length
+      List<Map<String, dynamic>> filteredResults = [];
+      if (results.isNotEmpty) {
+        // Check for exact match
+        final exactMatches = results.where((r) => (r['word'] as String).toLowerCase() == word.toLowerCase()).toList();
+        if (exactMatches.isNotEmpty) {
+          filteredResults = exactMatches;
+        } else {
+          // Prefix matches sorted by headword length
+          filteredResults = results
+              .where((r) => (r['word'] as String).toLowerCase().startsWith(word.toLowerCase()))
+              .toList();
+          filteredResults.sort((a, b) => (a['word'] as String).length.compareTo((b['word'] as String).length));
         }
       }
 
       // 2. Fetch definitions
-      // group first by dictionary and then by the actual headword so multiple
-      // headwords in the same dictionary don't get merged together.
       final Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults = {};
-      for (final result in results) {
+      for (final result in filteredResults) {
         final dictId = result['dict_id'] as int;
         final wordValue = result['word'] as String;
         final dict = await _dbHelper.getDictionaryById(dictId);
@@ -98,11 +99,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         }
       }
 
-      // once all definitions have been read we can consolidate them
-      // (group by dictionary and headword). delegate to a helper so we can
-      // unit test the behaviour in isolation.
       final consolidatedDefs = consolidateDefinitions(groupedResults);
-
 
       setState(() {
         _currentDefinitions = consolidatedDefs;
