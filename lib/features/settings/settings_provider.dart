@@ -5,7 +5,6 @@ class SettingsProvider with ChangeNotifier {
   static const String _keyFontFamily = 'font_family';
   static const String _keyFontSize = 'font_size';
   static const String _keyBgColor = 'bg_color';
-  static const String _keyFontColor = 'font_color';
   static const String _keyTextColor = 'text_color';
   static const String _keyPreviewLines = 'preview_lines';
   static const String _keyFuzzySearch = 'fuzzy_search';
@@ -13,13 +12,11 @@ class SettingsProvider with ChangeNotifier {
   static const String _keyOpenPopup = 'open_popup';
   static const String _keyHistoryDays = 'history_days';
   static const String _keySearchWithinDefinitions = 'search_within_definitions';
-  static const String _keySearchBarColor = 'search_bar_color';
   static const String _keyHeadwordColor = 'headword_color';
 
   String _fontFamily = 'Roboto';
   double _fontSize = 16.0;
   Color _backgroundColor = Colors.white;
-  Color _fontColor = Colors.black;
   Color _textColor = Colors.black87;
   int _previewLines = 3;
   bool _isFuzzySearchEnabled = false;
@@ -27,13 +24,11 @@ class SettingsProvider with ChangeNotifier {
   bool _isOpenPopupOnTap = true;
   int _historyRetentionDays = 30;
   bool _isSearchWithinDefinitionsEnabled = false;
-  Color _searchBarColor = const Color(0xFFFFF3E0); // Orange 50
   Color _headwordColor = Colors.black;
 
   String get fontFamily => _fontFamily;
   double get fontSize => _fontSize;
   Color get backgroundColor => _backgroundColor;
-  Color get fontColor => _fontColor;
   Color get textColor => _textColor;
   int get previewLines => _previewLines;
   bool get isFuzzySearchEnabled => _isFuzzySearchEnabled;
@@ -42,7 +37,6 @@ class SettingsProvider with ChangeNotifier {
   int get historyRetentionDays => _historyRetentionDays;
   bool get isSearchWithinDefinitionsEnabled =>
       _isSearchWithinDefinitionsEnabled;
-  Color get searchBarColor => _searchBarColor;
   Color get headwordColor => _headwordColor;
 
   SettingsProvider() {
@@ -54,7 +48,6 @@ class SettingsProvider with ChangeNotifier {
     _fontFamily = prefs.getString(_keyFontFamily) ?? 'Roboto';
     _fontSize = prefs.getDouble(_keyFontSize) ?? 16.0;
     _backgroundColor = Color(prefs.getInt(_keyBgColor) ?? Colors.white.toARGB32());
-    _fontColor = Color(prefs.getInt(_keyFontColor) ?? Colors.black.toARGB32());
     _textColor = Color(prefs.getInt(_keyTextColor) ?? Colors.black87.toARGB32());
     _previewLines = prefs.getInt(_keyPreviewLines) ?? 3;
     _isFuzzySearchEnabled = prefs.getBool(_keyFuzzySearch) ?? false;
@@ -63,7 +56,6 @@ class SettingsProvider with ChangeNotifier {
     _historyRetentionDays = prefs.getInt(_keyHistoryDays) ?? 30;
     _isSearchWithinDefinitionsEnabled =
         prefs.getBool(_keySearchWithinDefinitions) ?? false;
-    _searchBarColor = Color(prefs.getInt(_keySearchBarColor) ?? const Color(0xFFFFF3E0).toARGB32());
     _headwordColor = Color(prefs.getInt(_keyHeadwordColor) ?? Colors.black.toARGB32());
     notifyListeners();
   }
@@ -86,13 +78,6 @@ class SettingsProvider with ChangeNotifier {
     _backgroundColor = color;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_keyBgColor, color.toARGB32());
-    notifyListeners();
-  }
-
-  Future<void> setFontColor(Color color) async {
-    _fontColor = color;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_keyFontColor, color.toARGB32());
     notifyListeners();
   }
 
@@ -142,13 +127,6 @@ class SettingsProvider with ChangeNotifier {
     _isSearchWithinDefinitionsEnabled = enabled;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keySearchWithinDefinitions, enabled);
-    notifyListeners();
-  }
-
-  Future<void> setSearchBarColor(Color color) async {
-    _searchBarColor = color;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_keySearchBarColor, color.toARGB32());
     notifyListeners();
   }
 

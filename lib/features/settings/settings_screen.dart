@@ -55,12 +55,6 @@ class SettingsScreen extends StatelessWidget {
           ),
           _buildColorTile(
             context,
-            'Font Colour (Headings)',
-            settings.fontColor,
-            (color) => settings.setFontColor(color),
-          ),
-          _buildColorTile(
-            context,
             'Text Colour (Content)',
             settings.textColor,
             (color) => settings.setTextColor(color),
@@ -70,12 +64,6 @@ class SettingsScreen extends StatelessWidget {
             'Headword Colour',
             settings.headwordColor,
             (color) => settings.setHeadwordColor(color),
-          ),
-          _buildColorTile(
-            context,
-            'Search Bar Colour',
-            settings.searchBarColor,
-            (color) => settings.setSearchBarColor(color),
           ),
           const Divider(),
           _buildSectionHeader(theme, 'Dictionary Interaction'),

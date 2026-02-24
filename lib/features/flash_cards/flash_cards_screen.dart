@@ -659,7 +659,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
                 def['word'],
                 style: theme.textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: settings.fontColor,
+                  color: settings.headwordColor,
                   fontFamily: settings.fontFamily,
                   fontSize: settings.fontSize + 8,
                 ),

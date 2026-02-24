@@ -47,7 +47,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     });
     try {
       final settings = context.read<SettingsProvider>();
-      // 1. Search for all occurrences of this word (searchWords now handles fallback/prefix logic)
+      // 1. Search for all occurrences of this word
       List<Map<String, dynamic>> results = await _dbHelper.searchWords(
         word,
         fuzzy: settings.isFuzzySearchEnabled,
@@ -129,9 +129,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   /// Takes results that have already been enriched with `dict_name` and
   /// `definition` and groups them first by dictionary id and then by the
   /// specific headword before producing a list suitable for the UI.
-  /// Public utility for grouping lookup results by dictionary and headword.
-  ///
-  /// Used by [_onWordSelected] and covered by unit tests.
   static List<Map<String, dynamic>> consolidateDefinitions(
       Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults) {
     final List<Map<String, dynamic>> consolidated = [];
@@ -162,7 +159,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         buffer.writeln(normalizeWhitespace(defText));
       });
 
-      // title word for overall entry: list all headwords present
       final allWords = wordMap.keys.join(' | ');
       consolidated.add({
         'word': allWords,
@@ -410,7 +406,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(def['word'], style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: settings.headwordColor, fontFamily: settings.fontFamily, fontSize: settings.fontSize + 8)),
+            // Text(def['word'], style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: settings.headwordColor, fontFamily: settings.fontFamily, fontSize: settings.fontSize + 8)),
             if (def['dict_name'] != null && (def['dict_name'] as String).isNotEmpty)
               Text(def['dict_name'], style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey, fontStyle: FontStyle.italic)),
             const Divider(height: 32),
@@ -418,9 +414,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               data: definitionHtml,
               style: {
                 "body": Style(fontSize: FontSize(settings.fontSize), lineHeight: LineHeight.em(1.5), margin: Margins.zero, padding: HtmlPaddings.zero, color: settings.textColor, fontFamily: settings.fontFamily),
-                "a": Style(color: Colors.blue, textDecoration: TextDecoration.underline),
+                "a": Style(color: settings.textColor, textDecoration: TextDecoration.none),
                 ".dict-word": Style(color: settings.textColor, textDecoration: TextDecoration.none),
                 ".headword": Style(color: settings.headwordColor, fontWeight: FontWeight.bold),
+                ".headword a": Style(color: settings.headwordColor, textDecoration: TextDecoration.none),
+                ".headword .dict-word": Style(color: settings.headwordColor, textDecoration: TextDecoration.none),
               },
               onLinkTap: (url, attributes, element) async {
                 if (url != null) {
