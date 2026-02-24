@@ -37,8 +37,6 @@ class HtmlLookupWrapper {
     return buffer.toString();
   }
 
-  /// Highlights occurrences of [query] in the [html] string.
-  /// Wraps matches in a `<span style="background-color: [highlightColor]; color: black; border-radius: 2px; padding: 0 2px;">`.
   static String highlightText(
     String html,
     String query, {
@@ -48,8 +46,10 @@ class HtmlLookupWrapper {
     if (query.isEmpty) return html;
 
     final tagRegExp = RegExp(r'<[^>]*>|[^<]+');
+    // Match words starting with the query. 
+    // Uses \b to match at word start, then query, then any following alphanumeric chars.
     final queryRegExp = RegExp(
-      '(${RegExp.escape(query)})',
+      '(\\b${RegExp.escape(query)}[\\w]*)',
       caseSensitive: false,
       unicode: true,
     );

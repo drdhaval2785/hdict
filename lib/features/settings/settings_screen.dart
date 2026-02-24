@@ -81,6 +81,12 @@ class SettingsScreen extends StatelessWidget {
             value: settings.isOpenPopupOnTap,
             onChanged: (value) => settings.setOpenPopup(value),
           ),
+          SwitchListTile(
+            title: const Text('Search within Definitions'),
+            subtitle: const Text('Include dictionary definitions in search results'),
+            value: settings.isSearchWithinDefinitionsEnabled,
+            onChanged: (value) => settings.setSearchWithinDefinitions(value),
+          ),
           const Divider(),
           _buildSectionHeader(theme, 'History'),
           ListTile(

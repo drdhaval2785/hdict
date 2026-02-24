@@ -17,6 +17,23 @@ class DatabaseHelper {
 
   DatabaseHelper._internal();
 
+  void _log(String type, String sql, [dynamic args, dynamic result]) {
+    debugPrint('--- SQL $type ---');
+    debugPrint('Query: $sql');
+    if (args != null) debugPrint('Args: $args');
+    if (result != null) {
+      if (result is List) {
+        debugPrint('Result Count: ${result.length}');
+        if (result.isNotEmpty) {
+          debugPrint('Results: $result');
+        }
+      } else {
+        debugPrint('Result: $result');
+      }
+    }
+    debugPrint('-----------------');
+  }
+
   static Future<void> initializeDatabaseFactory() async {
     if (kIsWeb) {
       databaseFactory = createDatabaseFactoryFfiWeb();
@@ -237,6 +254,7 @@ class DatabaseHelper {
       sql,
       [offset + 1, length, dictId, fileName],
     );
+    _log('RAW_QUERY', sql, [offset + 1, length, dictId, fileName], results);
     if (results.isNotEmpty) {
       return results.first['part'] as Uint8List;
     }
@@ -529,85 +547,66 @@ class DatabaseHelper {
   }) async {
     try {
       final db = await database;
-      final bool hasWildcards = query.contains('*') || query.contains('?');
       final String safeQuery = query.replaceAll('"', '""');
 
-      if (hasWildcards) {
+      // 1. Explicit wildcard support (* or ?)
+      final bool hasExplicitWildcards = query.contains('*') || query.contains('?');
+      if (hasExplicitWildcards) {
         final String sql = '''
           SELECT word, dict_id, offset, length 
           FROM word_index 
           WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
           AND (word GLOB ? ${searchDefinitions ? "OR content MATCH ?" : ""})
+          ORDER BY word ASC
           LIMIT ?
         ''';
         final List<Object?> args = [query];
         if (searchDefinitions) args.add('"$safeQuery"');
         args.add(limit);
         final result = await db.rawQuery(sql, args);
+        _log('RAW_QUERY (Explicit Wildcard)', sql, args, result);
         return result;
       }
 
-      // 1. Try exact match (with/without definitions)
-      if (searchDefinitions) {
-        final String matchQuery = '"$safeQuery"';
-        final String sql = '''
-          SELECT word, dict_id, offset, length 
-          FROM word_index 
-          WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
-          AND (word MATCH ? OR content MATCH ?)
-          LIMIT ?
-        ''';
-        final result = await db.rawQuery(sql, [matchQuery, matchQuery, limit]);
-        if (result.isNotEmpty) return result;
-      } else {
-        final String matchQuery = '"$safeQuery"';
-        final String sql = '''
-          SELECT word, dict_id, offset, length 
-          FROM word_index 
-          WHERE word MATCH ?
-          AND word = ?
-          AND dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
-          LIMIT ?
-        ''';
-        final result = await db.rawQuery(sql, [matchQuery, query, limit]);
-        if (result.isNotEmpty) return result;
-      }
+      // 2. Prefix search by default
+      final String matchPattern = '$safeQuery*';
+      final String sql = '''
+        SELECT word, dict_id, offset, length 
+        FROM word_index 
+        WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
+        AND (word MATCH ? ${searchDefinitions ? "OR content MATCH ?" : ""})
+        ORDER BY 
+          (LOWER(word) = LOWER(?)) DESC,
+          (LOWER(word) LIKE ?) DESC,
+          word ASC
+        LIMIT ?
+      ''';
 
-      // 2. Fuzzy search (if requested)
-      if (fuzzy) {
-        final String sql = '''
+      final List<Object?> args = [
+        matchPattern,
+        if (searchDefinitions) matchPattern,
+        query,
+        '$query%',
+        limit
+      ];
+
+      final result = await db.rawQuery(sql, args);
+      _log('RAW_QUERY (Prefix Search)', sql, args, result);
+
+      if (result.isEmpty && fuzzy) {
+        final String fuzzySql = '''
           SELECT word, dict_id, offset, length 
           FROM word_index 
           WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
           AND word LIKE ?
           LIMIT ?
         ''';
-        final results = await db.rawQuery(sql, ['%$query%', limit]);
-        if (results.isNotEmpty) return results;
+        final fuzzyResults = await db.rawQuery(fuzzySql, ['%$query%', limit]);
+        _log('RAW_QUERY (Fuzzy Fallback)', fuzzySql, ['%$query%', limit], fuzzyResults);
+        return fuzzyResults;
       }
 
-      // 3. Prefix fallback
-      String prefix = query;
-      while (prefix.length > 2) {
-        final String prefixSafe = prefix.replaceAll('"', '""');
-        final String prefixMatchQuery = '$prefixSafe*';
-        final String sql = '''
-          SELECT word, dict_id, offset, length 
-          FROM word_index 
-          WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
-          AND word MATCH ?
-          ORDER BY length(word) ASC
-          LIMIT ?
-        ''';
-        final List<Map<String, dynamic>> prefixResults = await db.rawQuery(
-          sql,
-          [prefixMatchQuery, limit],
-        );
-        if (prefixResults.isNotEmpty) return prefixResults;
-        prefix = prefix.substring(0, prefix.length - 1);
-      }
-
-      return [];
+      return result;
     } catch (e) {
       debugPrint("Search error: $e");
       return [];
@@ -633,6 +632,7 @@ class DatabaseHelper {
           LIMIT ?
         ''';
         final results = await db.rawQuery(sql, ['%$prefix%', limit]);
+        _log('RAW_QUERY (Suggest Fuzzy)', sql, ['%$prefix%', limit], results);
         return results.map((r) => r['word'] as String).toList();
       } else {
         final String prefixMatchQuery = '$safePrefix*';
@@ -645,6 +645,7 @@ class DatabaseHelper {
           LIMIT ?
         ''';
         final results = await db.rawQuery(sql, [prefixMatchQuery, limit]);
+        _log('RAW_QUERY (Suggest Prefix)', sql, [prefixMatchQuery, limit], results);
         return results.map((r) => r['word'] as String).toList();
       }
     } catch (e) {

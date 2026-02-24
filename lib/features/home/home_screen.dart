@@ -96,21 +96,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         searchDefinitions: settings.isSearchWithinDefinitionsEnabled,
       );
 
-      // Custom logic: exact match or prefix match sorted by headword length
-      List<Map<String, dynamic>> filteredResults = [];
-      if (results.isNotEmpty) {
-        // Check for exact match
-        final exactMatches = results.where((r) => (r['word'] as String).toLowerCase() == word.toLowerCase()).toList();
-        if (exactMatches.isNotEmpty) {
-          filteredResults = exactMatches;
-        } else {
-          // Prefix matches sorted by headword length
-          filteredResults = results
-              .where((r) => (r['word'] as String).toLowerCase().startsWith(word.toLowerCase()))
-              .toList();
-          filteredResults.sort((a, b) => (a['word'] as String).length.compareTo((b['word'] as String).length));
-        }
-      }
+      // Use the results directly from the database search (already prioritized/sorted)
+      List<Map<String, dynamic>> filteredResults = results;
 
       // 2. Fetch definitions
       final Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults = {};
