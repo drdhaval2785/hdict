@@ -135,23 +135,39 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   static List<Map<String, dynamic>> consolidateDefinitions(
       Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults) {
     final List<Map<String, dynamic>> consolidated = [];
-    const sep = '<hr style="border: 0; border-top: 1px solid #eee; margin: 16px 0;">';
     groupedResults.forEach((dictId, wordMap) {
-      final buffer = StringBuffer();
+      // map definition text -> list of headwords sharing it
+      final Map<String, List<String>> defToWords = {};
       String? dictName;
-      bool first = true;
       wordMap.forEach((headword, entries) {
-        if (dictName == null && entries.isNotEmpty) {
-          dictName = entries.first['dict_name'] as String;
+        for (final r in entries) {
+          if (dictName == null) {
+            dictName = r['dict_name'] as String;
+          }
+          final String defText = r['definition'] as String;
+          defToWords.putIfAbsent(defText, () => []);
+          if (!defToWords[defText]!.contains(headword)) {
+            defToWords[defText]!.add(headword);
+          }
         }
-        if (!first) {
+      });
+
+      final buffer = StringBuffer();
+      bool firstGroup = true;
+      defToWords.forEach((defText, words) {
+        if (!firstGroup) {
           buffer.writeln('<hr style="border: 0; border-top: 2px solid #bbb; margin: 24px 0;">');
         }
-        first = false;
-        buffer.write(entries.map((r) => r['definition'] as String).join(sep));
+        firstGroup = false;
+        final heading = words.join(' | ');
+        buffer.writeln('<div class="headword" style="font-size:1.3em;font-weight:bold;margin-bottom:8px;">$heading</div>');
+        buffer.writeln(normalizeWhitespace(defText));
       });
+
+      // title word for overall entry: list all headwords present
+      final allWords = wordMap.keys.join(' | ');
       consolidated.add({
-        'word': wordMap.keys.first,
+        'word': allWords,
         'dict_id': dictId,
         'dict_name': dictName ?? '',
         'definition': buffer.toString(),

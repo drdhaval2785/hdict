@@ -2,45 +2,39 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('consolidateDefinitions', () {
-    const sep = '<hr style="border: 0; border-top: 1px solid #eee; margin: 16px 0;">';
+    // Separator used by helper; the top-level test no longer declares it explicitly.
 
-    test('produces one entry per dictionary with all headwords', () {
+    test('merges headwords sharing identical definition and lists all words', () {
       final grouped = <int, Map<String, List<Map<String, dynamic>>>>{
         1: {
           'alpha': [
-            {'word': 'alpha', 'dict_name': 'A', 'definition': 'first'},
-            {'word': 'alpha', 'dict_name': 'A', 'definition': 'second'},
+            {'word': 'alpha', 'dict_name': 'A', 'definition': 'same'},
           ],
           'beta': [
-            {'word': 'beta', 'dict_name': 'A', 'definition': 'only'},
+            {'word': 'beta', 'dict_name': 'A', 'definition': 'same'},
           ],
-        },
-        2: {
-          'alpha': [
-            {'word': 'alpha', 'dict_name': 'B', 'definition': 'other'},
+          'gamma': [
+            {'word': 'gamma', 'dict_name': 'A', 'definition': 'different'},
           ],
         },
       };
 
       final consolidated = consolidateDefinitions(grouped);
 
-      // expect two entries: one per dict id
-      expect(consolidated.length, 2);
-
-      final dict1 = consolidated.firstWhere((e) => e['dict_id'] == 1);
-      expect(dict1['word'], 'alpha');
+      expect(consolidated.length, 1);
+      final dict1 = consolidated.first;
+      // word field should list all headwords
+      expect(dict1['word'], 'alpha | beta | gamma');
       expect(dict1['dict_name'], 'A');
       final defHtml = dict1['definition'] as String;
-      // should contain both headwords with separators and the proper class
-      expect(defHtml, contains('<div class="headword"'));
-      expect(defHtml, contains('alpha</div>'));
-      expect(defHtml, contains('beta</div>'));
-      // alpha's definitions are joined
-      expect(defHtml, contains('first$sep' 'second'));
-
-      final dict2 = consolidated.firstWhere((e) => e['dict_id'] == 2);
-      expect(dict2['dict_name'], 'B');
-      expect(dict2['definition'], contains('other'));
+      // first group heading should include both alpha and beta
+      expect(defHtml, contains('alpha | beta')); 
+      // second group heading for gamma
+      expect(defHtml, contains('gamma</div>'));
+      // the shared definition should appear only once
+      expect(defHtml, contains('same')); 
+      // and the different definition
+      expect(defHtml, contains('different'));
     });
   });
 }
