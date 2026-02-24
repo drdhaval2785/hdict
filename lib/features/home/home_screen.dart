@@ -141,9 +141,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       String? dictName;
       wordMap.forEach((headword, entries) {
         for (final r in entries) {
-          if (dictName == null) {
-            dictName = r['dict_name'] as String;
-          }
+          dictName ??= r['dict_name'] as String;
           final String defText = r['definition'] as String;
           defToWords.putIfAbsent(defText, () => []);
           if (!defToWords[defText]!.contains(headword)) {

@@ -454,7 +454,7 @@ class DatabaseHelper {
         debugPrint('[SQLITE][searchWords] SQL: $sql');
         debugPrint('[SQLITE][searchWords] ARGS: $args');
         final result = await db.rawQuery(sql, args);
-        debugPrint('[SQLITE][searchWords] RESULT: ' + result.toString());
+          debugPrint('[SQLITE][searchWords] RESULT: ${result.toString()}');
         return result;
       }
 
@@ -471,7 +471,7 @@ class DatabaseHelper {
         debugPrint('[SQLITE][searchWords] SQL: $sql');
         debugPrint('[SQLITE][searchWords] ARGS: [$matchQuery, $matchQuery, $limit]');
         final result = await db.rawQuery(sql, [matchQuery, matchQuery, limit]);
-        debugPrint('[SQLITE][searchWords] RESULT: ' + result.toString());
+          debugPrint('[SQLITE][searchWords] RESULT: ${result.toString()}');
         if (result.isNotEmpty) return result;
       } else {
         final String matchQuery = '"$safeQuery"';
@@ -494,7 +494,7 @@ class DatabaseHelper {
       String prefix = query;
       while (prefix.length > 2) {
         final String prefixSafe = prefix.replaceAll('"', '""');
-        final String prefixMatchQuery = prefixSafe + '*';
+        final String prefixMatchQuery = '$prefixSafe*';
         final String sql = '''
           SELECT word, dict_id, offset, length 
           FROM word_index 
@@ -540,7 +540,7 @@ class DatabaseHelper {
         final results = await db.rawQuery(sql, ['%$prefix%', limit]);
         return results.map((r) => r['word'] as String).toList();
       } else {
-        final String prefixMatchQuery = safePrefix + '*';
+        final String prefixMatchQuery = '$safePrefix*';
         final String sql = '''
           SELECT DISTINCT word 
           FROM word_index 
