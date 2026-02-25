@@ -184,6 +184,11 @@ class _DictionaryManagementScreenState
         'dict',
         'dz',
         'syn',
+        // New formats
+        'mdx',
+        'mdd',
+        'slob',
+        'index',
       ],
       uniformTypeIdentifiers: [
         'public.item',
@@ -275,7 +280,8 @@ class _DictionaryManagementScreenState
 
         if (files.length > 1 ||
             files.any(
-              (f) => f.name.endsWith('.ifo') || f.name.endsWith('.idx'),
+              (f) => f.name.endsWith('.ifo') || f.name.endsWith('.idx') ||
+                     f.name.endsWith('.index') || f.name.endsWith('.mdd'),
             )) {
           if (kIsWeb) {
             final fileData = await Future.wait(files.map((f) async => (name: f.name, bytes: await f.readAsBytes())));
@@ -291,15 +297,32 @@ class _DictionaryManagementScreenState
             );
           }
         } else {
-          if (kIsWeb) {
+          // Single file — detect format
+          final singleFile = files.single;
+          final lowerName = singleFile.name.toLowerCase();
+
+          if (lowerName.endsWith('.mdx') || lowerName.endsWith('.slob')) {
+            // These are self-contained — use multi-file stream which handles detection
+            if (kIsWeb) {
+              stream = _dictionaryManager.importMultipleFilesWebStream(
+                [(name: singleFile.name, bytes: await singleFile.readAsBytes())],
+                indexDefinitions: indexDefinitions,
+              );
+            } else {
+              stream = _dictionaryManager.importMultipleFilesStream(
+                [singleFile.path],
+                indexDefinitions: indexDefinitions,
+              );
+            }
+          } else if (kIsWeb) {
             stream = _dictionaryManager.importDictionaryWebStream(
-              files.single.name,
-              await files.single.readAsBytes(),
+              singleFile.name,
+              await singleFile.readAsBytes(),
               indexDefinitions: indexDefinitions,
             );
           } else {
             stream = _dictionaryManager.importDictionaryStream(
-              files.single.path,
+              singleFile.path,
               indexDefinitions: indexDefinitions,
             );
           }

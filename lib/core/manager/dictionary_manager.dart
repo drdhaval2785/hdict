@@ -13,6 +13,9 @@ import 'package:hdict/core/parser/ifo_parser.dart';
 import 'package:hdict/core/parser/idx_parser.dart';
 import 'package:hdict/core/parser/syn_parser.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
+import 'package:hdict/core/parser/mdict_reader.dart';
+import 'package:hdict/core/parser/dictd_parser.dart';
+import 'package:hdict/core/parser/slob_reader.dart';
 
 // Top-level functions for compute
 List<int> _decompressGzip(List<int> bytes) {
@@ -480,6 +483,93 @@ class DictionaryManager {
         processedFiles++;
       }
 
+      // ── Detect and dispatch new formats ────────────────────────────────────
+      // 1. MDict: any .mdx file in filePaths (may be alongside .mdd)
+      final mdxPaths = filePaths.where((p_) => p_.toLowerCase().endsWith('.mdx')).toList();
+      if (mdxPaths.isNotEmpty) {
+        int current = 0;
+        for (final mdxPath in mdxPaths) {
+          current++;
+          yield ImportProgress(
+            message: 'Importing MDict $current/${mdxPaths.length}: ${p.basenameWithoutExtension(mdxPath)}',
+            value: 0.45 + (current - 1) / mdxPaths.length * 0.5,
+          );
+          final stream = importMdictStream(mdxPath, indexDefinitions: indexDefinitions);
+          await for (final progress in stream) {
+            yield ImportProgress(
+              message: '[MDict $current/${mdxPaths.length}] ${progress.message}',
+              value: 0.45 + ((current - 1) + progress.value) / mdxPaths.length * 0.5,
+              headwordCount: progress.headwordCount,
+              isCompleted: progress.isCompleted && current == mdxPaths.length,
+              dictId: progress.dictId,
+              sampleWords: progress.sampleWords,
+              error: progress.error,
+            );
+            if (progress.isCompleted) break;
+          }
+        }
+        return;
+      }
+
+      // 2. Slob: any .slob file
+      final slobPaths = filePaths.where((p_) => p_.toLowerCase().endsWith('.slob')).toList();
+      if (slobPaths.isNotEmpty) {
+        int current = 0;
+        for (final slobPath in slobPaths) {
+          current++;
+          yield ImportProgress(
+            message: 'Importing Slob $current/${slobPaths.length}: ${p.basenameWithoutExtension(slobPath)}',
+            value: 0.45 + (current - 1) / slobPaths.length * 0.5,
+          );
+          final stream = importSlobStream(slobPath, indexDefinitions: indexDefinitions);
+          await for (final progress in stream) {
+            yield ImportProgress(
+              message: '[Slob $current/${slobPaths.length}] ${progress.message}',
+              value: 0.45 + ((current - 1) + progress.value) / slobPaths.length * 0.5,
+              headwordCount: progress.headwordCount,
+              isCompleted: progress.isCompleted && current == slobPaths.length,
+              dictId: progress.dictId,
+              sampleWords: progress.sampleWords,
+              error: progress.error,
+            );
+            if (progress.isCompleted) break;
+          }
+        }
+        return;
+      }
+
+      // 3. DICTD: .index file present alongside a .dict or .dict.dz
+      final indexFilePaths = filePaths.where((p_) => p_.toLowerCase().endsWith('.index')).toList();
+      if (indexFilePaths.isNotEmpty) {
+        int current = 0;
+        for (final indexPath in indexFilePaths) {
+          current++;
+          // Find the companion .dict or .dict.dz
+          final base = p.withoutExtension(indexPath); // strips .index
+          final dictPath = [base + '.dict.dz', base + '.dict']
+              .firstWhere((dp) => File(dp).existsSync(), orElse: () => '');
+          if (dictPath.isEmpty) {
+            yield ImportProgress(message: 'No .dict file found for $indexPath', value: 0.0, error: 'Missing .dict', isCompleted: true);
+            continue;
+          }
+          final stream = importDictdStream(indexPath, dictPath, indexDefinitions: indexDefinitions);
+          await for (final progress in stream) {
+            yield ImportProgress(
+              message: '[DICTD $current/${indexFilePaths.length}] ${progress.message}',
+              value: 0.45 + ((current - 1) + progress.value) / indexFilePaths.length * 0.5,
+              headwordCount: progress.headwordCount,
+              isCompleted: progress.isCompleted && current == indexFilePaths.length,
+              dictId: progress.dictId,
+              sampleWords: progress.sampleWords,
+              error: progress.error,
+            );
+            if (progress.isCompleted) break;
+          }
+        }
+        return;
+      }
+
+      // ── Fallback: StarDict format (.ifo) ───────────────────────────────────
       yield ImportProgress(message: 'Scanning for dictionaries...', value: 0.45);
       final ifoFiles = <File>[];
       await for (final entity in workspaceDir.list(recursive: true)) {
@@ -494,7 +584,7 @@ class DictionaryManager {
       }
 
       if (ifoFiles.isEmpty) {
-        throw Exception('No valid dictionary (.ifo) files found in selection');
+        throw Exception('No valid dictionary files found. Supported direct imports: .ifo (StarDict), .mdx (MDict), .slob (Slob), .index+.dict (DICTD)');
       }
 
       int totalDicts = ifoFiles.length;
@@ -508,10 +598,8 @@ class DictionaryManager {
         );
 
         try {
-          // Process this specific dictionary
           final stream = _processDictionaryFiles(ifoFile.path, indexDefinitions: indexDefinitions);
           await for (final progress in stream) {
-            // Update message to show which dictionary we are on
             yield ImportProgress(
               message: '[$currentDict/$totalDicts] ${progress.message}',
               value: 0.5 + ((currentDict - 1) + (progress.value)) / totalDicts * 0.5,
@@ -520,7 +608,6 @@ class DictionaryManager {
           }
         } catch (e) {
           debugPrint('Error importing ${ifoFile.path}: $e');
-          // Continue with next dictionary
         }
       }
 
@@ -960,6 +1047,407 @@ class DictionaryManager {
 
   Future<void> reorderDictionaries(List<int> sortedIds) async {
     await _dbHelper.reorderDictionaries(sortedIds);
+  }
+
+  // ── MDict Import ────────────────────────────────────────────────────────────
+
+  /// Imports a MDict (.mdx) file on native platforms.
+  Stream<ImportProgress> importMdictStream(
+    String mdxPath, {
+    bool indexDefinitions = false,
+  }) async* {
+    if (kIsWeb) {
+      yield ImportProgress(
+        message: 'Error: MDict import is not supported on Web.',
+        value: 0.0, error: 'Web unsupported', isCompleted: true,
+      );
+      return;
+    }
+
+    yield ImportProgress(message: 'Opening MDict file...', value: 0.05);
+
+    try {
+      final reader = MdictReader(mdxPath);
+      await reader.open();
+
+      // Use the filename (without extension) as a fallback book name
+      final bookName = p.basenameWithoutExtension(mdxPath);
+
+      yield ImportProgress(message: 'Copying to permanent storage...', value: 0.15);
+
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final dictsDir = Directory(p.join(appDocDir.path, 'dictionaries'));
+      if (!await dictsDir.exists()) await dictsDir.create(recursive: true);
+
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final permanentDir = Directory(p.join(dictsDir.path, 'mdict_$timestamp'));
+      await permanentDir.create(recursive: true);
+
+      final finalMdxPath = p.join(permanentDir.path, p.basename(mdxPath));
+      await File(mdxPath).copy(finalMdxPath);
+
+      // Also copy the companion .mdd file if it exists
+      final mddPath = mdxPath.replaceAll(RegExp(r'\.mdx$', caseSensitive: false), '.mdd');
+      if (await File(mddPath).exists()) {
+        await File(mddPath).copy(p.join(permanentDir.path, p.basename(mddPath)));
+      }
+
+      await reader.close();
+
+      yield ImportProgress(message: 'Registering dictionary...', value: 0.3);
+      final dictId = await _dbHelper.insertDictionary(
+        bookName,
+        finalMdxPath,
+        indexDefinitions: indexDefinitions,
+        format: 'mdict',
+      );
+
+      yield ImportProgress(message: 'Enumerating headwords...', value: 0.4);
+
+      // Re-open the permanent copy for indexing
+      final permanentReader = MdictReader(finalMdxPath);
+      await permanentReader.open();
+
+      // Fetch all keys via prefix search with empty prefix
+      final allKeys = await permanentReader.prefixSearch('', limit: 500000);
+      final totalKeys = allKeys.length;
+      yield ImportProgress(message: 'Indexing $totalKeys headwords...', value: 0.5);
+
+      List<Map<String, dynamic>> batch = [];
+      int indexed = 0;
+
+      for (final word in allKeys) {
+        // For MDict, we store offset=0,length=0 (lookup uses the word key directly)
+        String content = '';
+        if (indexDefinitions) {
+          content = await permanentReader.lookup(word) ?? '';
+        }
+
+        batch.add({
+          'word': word,
+          'content': content,
+          'dict_id': dictId,
+          'offset': 0,
+          'length': 0,
+        });
+        indexed++;
+
+        if (batch.length >= 2000) {
+          await _dbHelper.batchInsertWords(dictId, batch);
+          batch.clear();
+          yield ImportProgress(
+            message: 'Indexing $indexed / $totalKeys headwords...',
+            value: 0.5 + (indexed / (totalKeys == 0 ? 1 : totalKeys)) * 0.4,
+            headwordCount: indexed,
+          );
+        }
+      }
+
+      if (batch.isNotEmpty) await _dbHelper.batchInsertWords(dictId, batch);
+      await permanentReader.close();
+      await _dbHelper.updateDictionaryWordCount(dictId, indexed);
+
+      final sampleWords = await _dbHelper.getSampleWords(dictId);
+
+      yield ImportProgress(
+        message: 'MDict import complete!',
+        value: 1.0,
+        isCompleted: true,
+        dictId: dictId,
+        sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
+        headwordCount: indexed,
+      );
+    } catch (e, s) {
+      debugPrint('MDict import error: $e\n$s');
+      yield ImportProgress(
+        message: 'MDict import error: $e',
+        value: 0.0, error: e.toString(), isCompleted: true,
+      );
+    }
+  }
+
+  // ── DICTD Import ────────────────────────────────────────────────────────────
+
+  /// Imports a DICTD dictionary (`.index` + `.dict` or `.dict.dz`).
+  /// [indexPath] is the `.index` file; [dictPath] may be `.dict` or `.dict.dz`.
+  Stream<ImportProgress> importDictdStream(
+    String indexPath,
+    String dictPath, {
+    bool indexDefinitions = false,
+  }) async* {
+    if (kIsWeb) {
+      yield ImportProgress(
+        message: 'Error: DICTD import is not supported on Web.',
+        value: 0.0, error: 'Web unsupported', isCompleted: true,
+      );
+      return;
+    }
+
+    yield ImportProgress(message: 'Setting up DICTD import...', value: 0.05);
+
+    try {
+      final dictdParser = DictdParser();
+
+      // Decompress .dict.dz if needed
+      yield ImportProgress(message: 'Decompressing dictionary data...', value: 0.1);
+      final decompressedDictPath = await dictdParser.maybeDecompressDictZ(dictPath);
+
+      final bookName = p.basenameWithoutExtension(indexPath)
+          .replaceAll(RegExp(r'\.dict$'), '');
+
+      yield ImportProgress(message: 'Copying to permanent storage...', value: 0.2);
+
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final dictsDir = Directory(p.join(appDocDir.path, 'dictionaries'));
+      if (!await dictsDir.exists()) await dictsDir.create(recursive: true);
+
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final permanentDir = Directory(p.join(dictsDir.path, 'dictd_$timestamp'));
+      await permanentDir.create(recursive: true);
+
+      final finalDictPath = p.join(permanentDir.path, p.basename(decompressedDictPath));
+      final finalIndexPath = p.join(permanentDir.path, p.basename(indexPath));
+      await File(decompressedDictPath).copy(finalDictPath);
+      await File(indexPath).copy(finalIndexPath);
+
+      yield ImportProgress(message: 'Registering dictionary...', value: 0.35);
+      final dictId = await _dbHelper.insertDictionary(
+        bookName,
+        finalDictPath,
+        indexDefinitions: indexDefinitions,
+        format: 'dictd',
+      );
+
+      yield ImportProgress(message: 'Indexing DICTD words...', value: 0.45);
+
+      final dictdReader = DictdReader(finalDictPath);
+      await dictdReader.open();
+      final indexStream = dictdParser.parseIndex(finalIndexPath);
+
+      List<Map<String, dynamic>> batch = [];
+      int headwordCount = 0;
+      int defWordCount = 0;
+
+      await for (final entry in indexStream) {
+        final word = entry['word'] as String;
+        final offset = entry['offset'] as int;
+        final length = entry['length'] as int;
+
+        String content = '';
+        if (indexDefinitions) {
+          content = await dictdReader.readAtOffset(offset, length);
+        }
+
+        batch.add({
+          'word': word,
+          'content': content,
+          'dict_id': dictId,
+          'offset': offset,
+          'length': length,
+        });
+        headwordCount++;
+
+        if (content.isNotEmpty) {
+          defWordCount += content.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
+        }
+
+        if (batch.length >= 2000) {
+          await _dbHelper.batchInsertWords(dictId, batch);
+          batch.clear();
+          yield ImportProgress(
+            message: 'Indexing $headwordCount words...',
+            value: 0.45 + (headwordCount / 100000) * 0.45,
+            headwordCount: headwordCount,
+          );
+        }
+      }
+
+      if (batch.isNotEmpty) await _dbHelper.batchInsertWords(dictId, batch);
+      await dictdReader.close();
+      await _dbHelper.updateDictionaryWordCount(dictId, headwordCount);
+
+      final sampleWords = await _dbHelper.getSampleWords(dictId);
+
+      yield ImportProgress(
+        message: 'DICTD import complete!',
+        value: 1.0,
+        isCompleted: true,
+        dictId: dictId,
+        sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
+        headwordCount: headwordCount,
+        definitionWordCount: defWordCount,
+      );
+    } catch (e, s) {
+      debugPrint('DICTD import error: $e\n$s');
+      yield ImportProgress(
+        message: 'DICTD import error: $e',
+        value: 0.0, error: e.toString(), isCompleted: true,
+      );
+    }
+  }
+
+  // ── Slob Import ─────────────────────────────────────────────────────────────
+
+  /// Imports a Slob (.slob) dictionary file.
+  Stream<ImportProgress> importSlobStream(
+    String slobPath, {
+    bool indexDefinitions = false,
+  }) async* {
+    if (kIsWeb) {
+      yield ImportProgress(
+        message: 'Error: Slob import is not supported on Web.',
+        value: 0.0, error: 'Web unsupported', isCompleted: true,
+      );
+      return;
+    }
+
+    yield ImportProgress(message: 'Opening Slob file...', value: 0.05);
+
+    try {
+      final reader = SlobReader(slobPath);
+      await reader.open();
+
+      final bookName = p.basenameWithoutExtension(slobPath);
+
+      yield ImportProgress(message: 'Copying to permanent storage...', value: 0.15);
+
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final dictsDir = Directory(p.join(appDocDir.path, 'dictionaries'));
+      if (!await dictsDir.exists()) await dictsDir.create(recursive: true);
+
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final permanentDir = Directory(p.join(dictsDir.path, 'slob_$timestamp'));
+      await permanentDir.create(recursive: true);
+
+      final finalSlobPath = p.join(permanentDir.path, p.basename(slobPath));
+      await File(slobPath).copy(finalSlobPath);
+
+      await reader.close();
+
+      yield ImportProgress(message: 'Registering dictionary...', value: 0.3);
+      final dictId = await _dbHelper.insertDictionary(
+        bookName,
+        finalSlobPath,
+        indexDefinitions: indexDefinitions,
+        format: 'slob',
+      );
+
+      yield ImportProgress(message: 'Indexing Slob entries...', value: 0.4);
+
+      // Re-open permanent copy for indexing
+      final permanentReader = SlobReader(finalSlobPath);
+      await permanentReader.open();
+
+      List<Map<String, dynamic>> batch = [];
+      int headwordCount = 0;
+      int defWordCount = 0;
+
+      await for (final ref in permanentReader.getAllRefs()) {
+        final word = ref['word'] as String;
+        final binIndex = ref['bin_index'] as int;
+        final itemIndex = ref['item_index'] as int;
+
+        // Encode bin_index and item_index into offset and length fields
+        // offset = binIndex, length = itemIndex (both are ints and fit fine)
+        String content = '';
+        if (indexDefinitions) {
+          content = await permanentReader.readItem(binIndex, itemIndex) ?? '';
+        }
+
+        batch.add({
+          'word': word,
+          'content': content,
+          'dict_id': dictId,
+          'offset': binIndex,   // repurposed: bin index within slob
+          'length': itemIndex,  // repurposed: item index within bin
+        });
+        headwordCount++;
+
+        if (content.isNotEmpty) {
+          defWordCount += content.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
+        }
+
+        if (batch.length >= 2000) {
+          await _dbHelper.batchInsertWords(dictId, batch);
+          batch.clear();
+          yield ImportProgress(
+            message: 'Indexing $headwordCount entries...',
+            value: 0.4 + (headwordCount / 100000).clamp(0.0, 0.5),
+            headwordCount: headwordCount,
+          );
+        }
+      }
+
+      if (batch.isNotEmpty) await _dbHelper.batchInsertWords(dictId, batch);
+      await permanentReader.close();
+      await _dbHelper.updateDictionaryWordCount(dictId, headwordCount);
+
+      final sampleWords = await _dbHelper.getSampleWords(dictId);
+
+      yield ImportProgress(
+        message: 'Slob import complete!',
+        value: 1.0,
+        isCompleted: true,
+        dictId: dictId,
+        sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
+        headwordCount: headwordCount,
+        definitionWordCount: defWordCount,
+      );
+    } catch (e, s) {
+      debugPrint('Slob import error: $e\n$s');
+      yield ImportProgress(
+        message: 'Slob import error: $e',
+        value: 0.0, error: e.toString(), isCompleted: true,
+      );
+    }
+  }
+
+  // ── Definition Lookup Dispatch ──────────────────────────────────────────────
+
+  /// Fetches the definition for a word entry from the correct format reader.
+  ///
+  /// [dictRecord] is the full dictionary row from the DB (includes `format`, `path`).
+  /// [word] is the headword string (used for MDict lookup).
+  /// [offset] and [length] are the values stored in `word_index`.
+  Future<String?> fetchDefinition(
+    Map<String, dynamic> dictRecord,
+    String word,
+    int offset,
+    int length,
+  ) async {
+    if (kIsWeb) return null;
+    final format = (dictRecord['format'] as String?) ?? 'stardict';
+    final rawPath = dictRecord['path'] as String;
+    final dictPath = await _dbHelper.resolvePath(rawPath);
+
+    switch (format) {
+      case 'mdict':
+        final reader = MdictReader(dictPath);
+        try {
+          await reader.open();
+          return await reader.lookup(word);
+        } finally {
+          await reader.close();
+        }
+
+      case 'dictd':
+        final reader = DictdReader(dictPath);
+        return await reader.readEntry(offset, length);
+
+      case 'slob':
+        final reader = SlobReader(dictPath);
+        try {
+          await reader.open();
+          return await reader.readItem(offset, length); // offset=binIndex, length=itemIndex
+        } finally {
+          await reader.close();
+        }
+
+      case 'stardict':
+      default:
+        final reader = DictReader(dictPath);
+        return await reader.readEntry(offset, length);
+    }
   }
 
   Stream<ImportProgress> reIndexDictionariesStream() async* {

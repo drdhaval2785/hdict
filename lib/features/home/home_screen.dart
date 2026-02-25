@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:hdict/core/database/database_helper.dart';
-import 'package:hdict/core/parser/dict_reader.dart';
+import 'package:hdict/core/manager/dictionary_manager.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:flutter/services.dart';
 import 'package:hdict/core/utils/html_lookup_wrapper.dart';
@@ -65,6 +65,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final TextEditingController _headwordController = TextEditingController();
   final TextEditingController _definitionController = TextEditingController();
   final DatabaseHelper _dbHelper = DatabaseHelper();
+  final DictionaryManager _dictManager = DictionaryManager();
 
   List<Map<String, dynamic>> _currentDefinitions = [];
   bool _isLoading = false;
@@ -132,18 +133,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         final dict = await _dbHelper.getDictionaryById(dictId);
         if (dict != null && dict['is_enabled'] == 1) {
           resultCount++;
-          String dictPath = await _dbHelper.resolvePath(dict['path']);
-          if (dictPath.endsWith('.ifo')) {
-            dictPath = dictPath.replaceAll('.ifo', '.dict');
-          }
+          final word = result['word'] as String;
+          final offset = result['offset'] as int;
+          final length = result['length'] as int;
 
-          final reader = DictReader(dictPath, dictId: dictId);
-          final content = await reader.readEntry(
-            result['offset'],
-            result['length'],
-          );
+          final content = await _dictManager.fetchDefinition(dict, word, offset, length) ?? '';
 
-          final String uniqueKey = '${result['offset']}_${result['length']}';
+          final String uniqueKey = '${offset}_$length';
 
           groupedResults.putIfAbsent(dictId, () => {});
           groupedResults[dictId]!.putIfAbsent(uniqueKey, () => []);
@@ -628,10 +624,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       final wordValue = res['word'] as String;
                       final dict = await _dbHelper.getDictionaryById(dictId);
                       if (dict == null || dict['is_enabled'] != 1) continue;
-                      String dictPath = await _dbHelper.resolvePath(dict['path']);
-                      if (dictPath.endsWith('.ifo')) dictPath = dictPath.replaceAll('.ifo', '.dict');
-                      final reader = DictReader(dictPath, dictId: dictId);
-                      final content = await reader.readEntry(res['offset'], res['length']);
+                      final content = await _dictManager.fetchDefinition(
+                        dict,
+                        wordValue,
+                        res['offset'] as int,
+                        res['length'] as int,
+                      ) ?? '';
                       groupedResults.putIfAbsent(dictId, () => {});
                       groupedResults[dictId]!.putIfAbsent(wordValue, () => []);
                       groupedResults[dictId]![wordValue]!.add({

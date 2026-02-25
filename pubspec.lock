@@ -376,6 +376,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.13.0"
+  mdict_flutter:
+    dependency: "direct main"
+    description:
+      name: mdict_flutter
+      sha256: f5e0db4fde40548607df66b523baf58ba5b8e00216db6898e8cc05732bce5ecd
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.1.1"
   meta:
     dependency: transitive
     description:

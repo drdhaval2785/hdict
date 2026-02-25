@@ -82,7 +82,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 9, // Incremented for index_definitions tracking
+      version: 10, // Version 10: added 'format' column to dictionaries
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -100,7 +100,8 @@ class DatabaseHelper {
         word_count INTEGER DEFAULT 0,
         display_order INTEGER DEFAULT 0,
         start_rowid INTEGER,
-        end_rowid INTEGER
+        end_rowid INTEGER,
+        format TEXT DEFAULT 'stardict'
       )
     ''');
 
@@ -189,7 +190,6 @@ class DatabaseHelper {
     }
     if (oldVersion < 9) {
       try {
-        // Check if column already exists to prevent duplicate column error
         final tableInfo = await db.rawQuery("PRAGMA table_info('dictionaries')");
         bool hasIndexDefinitions = false;
         for (final row in tableInfo) {
@@ -198,7 +198,6 @@ class DatabaseHelper {
             break;
           }
         }
-        
         if (!hasIndexDefinitions) {
           await db.execute(
             'ALTER TABLE dictionaries ADD COLUMN index_definitions INTEGER DEFAULT 0',
@@ -206,6 +205,25 @@ class DatabaseHelper {
         }
       } catch (e) {
         debugPrint('Migration error (version 9): $e');
+      }
+    }
+    if (oldVersion < 10) {
+      try {
+        final tableInfo = await db.rawQuery("PRAGMA table_info('dictionaries')");
+        bool hasFormat = false;
+        for (final row in tableInfo) {
+          if (row['name'] == 'format') {
+            hasFormat = true;
+            break;
+          }
+        }
+        if (!hasFormat) {
+          await db.execute(
+            "ALTER TABLE dictionaries ADD COLUMN format TEXT DEFAULT 'stardict'",
+          );
+        }
+      } catch (e) {
+        debugPrint('Migration error (version 10): $e');
       }
     }
   }
@@ -289,6 +307,7 @@ class DatabaseHelper {
     String name,
     String path, {
     bool indexDefinitions = false,
+    String format = 'stardict',
   }) async {
     final db = await database;
 
@@ -303,6 +322,7 @@ class DatabaseHelper {
       'path': storedPath,
       'is_enabled': 1,
       'index_definitions': indexDefinitions ? 1 : 0,
+      'format': format,
     });
   }
 

@@ -5,6 +5,8 @@ import 'package:hdict/core/parser/ifo_parser.dart';
 import 'package:hdict/core/parser/idx_parser.dart';
 import 'package:hdict/core/parser/syn_parser.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
+import 'package:hdict/core/parser/dictd_parser.dart';
+import 'package:hdict/core/parser/slob_reader.dart';
 import 'package:hdict/core/utils/html_lookup_wrapper.dart';
 import 'package:path/path.dart' as p;
 
@@ -133,6 +135,97 @@ author=Tester
       expect(synonyms[1]['original_word_index'], 1);
     });
   });
+
+  // ── DICTD Parser Tests ──────────────────────────────────────────────────────
+
+  group('DictdParser Tests', () {
+    late Directory tempDir;
+
+    setUp(() async {
+      tempDir = await Directory.systemTemp.createTemp('hdict_dictd_test_');
+    });
+
+    tearDown(() async {
+      await tempDir.delete(recursive: true);
+    });
+
+    test('DictdParser decodes base64 integers from byte stream', () async {
+      // DICTD base64 alphabet: ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/
+      // 'A'=0, 'L'=11, 'S'=18
+      final parser = DictdParser();
+      final indexContent = 'hello\tA\tL\ntest\tL\tS\n';
+      final bytes = Uint8List.fromList(indexContent.codeUnits);
+      final entries = await parser.parseIndexFromBytes(bytes).toList();
+
+      expect(entries.length, 2);
+      expect(entries[0]['word'], 'hello');
+      expect(entries[0]['offset'], 0);
+      expect(entries[0]['length'], 11);
+      expect(entries[1]['word'], 'test');
+      expect(entries[1]['offset'], 11);
+      expect(entries[1]['length'], 18);
+    });
+
+    test('DictdParser parseIndex reads .index file from disk', () async {
+      final indexPath = p.join(tempDir.path, 'test.index');
+      // 'A'=0, 'L'=11, 'S'=18
+      await File(indexPath).writeAsString('hello\tA\tL\ntest\tL\tS\n');
+
+      final parser = DictdParser();
+      final entries = await parser.parseIndex(indexPath).toList();
+
+      expect(entries.length, 2);
+      expect(entries[0]['word'], 'hello');
+      expect(entries[0]['offset'], 0);
+      expect(entries[0]['length'], 11);
+    });
+
+    test('DictdReader reads definition from .dict file', () async {
+      final dictFilePath = p.join(tempDir.path, 'test.dict');
+      await File(dictFilePath).writeAsString('hello worlddefinition of test');
+
+      final reader = DictdReader(dictFilePath);
+      final def1 = await reader.readEntry(0, 11);
+      expect(def1, 'hello world');
+
+      final def2 = await reader.readEntry(11, 18);
+      expect(def2, 'definition of test');
+    });
+
+    test('DictdParser maybeDecompressDictZ is a no-op for plain .dict', () async {
+      final dictFilePath = p.join(tempDir.path, 'test.dict');
+      await File(dictFilePath).writeAsString('content');
+
+      final parser = DictdParser();
+      final result = await parser.maybeDecompressDictZ(dictFilePath);
+      expect(result, dictFilePath);
+    });
+  });
+
+  // ── SlobReader Tests ────────────────────────────────────────────────────────
+
+  group('SlobReader Tests', () {
+    late Directory tempDir;
+
+    setUp(() async {
+      tempDir = await Directory.systemTemp.createTemp('hdict_slob_test_');
+    });
+
+    tearDown(() async {
+      await tempDir.delete(recursive: true);
+    });
+
+    test('SlobReader throws on invalid magic bytes', () async {
+      final slobPath = p.join(tempDir.path, 'invalid.slob');
+      // Write garbage bytes — not a valid slob file
+      await File(slobPath).writeAsBytes(List.filled(64, 0));
+
+      final reader = SlobReader(slobPath);
+      expect(() async => await reader.open(), throwsException);
+    });
+  });
+
+  // ── HtmlLookupWrapper Tests ─────────────────────────────────────────────────
 
   group('HtmlLookupWrapper Tests', () {
     test('wrapWords handles Devanagari with marks correctly', () {
