@@ -616,21 +616,22 @@ class DatabaseHelper {
         final String dQuery = definitionQuery.trim();
         final String safeDQuery = dQuery.replaceAll('"', '""');
 
-        if (dQuery.contains('*') || dQuery.contains('?')) {
+        if ((dQuery.contains('*') || dQuery.contains('?')) && definitionMode == SearchMode.suffix) {
           whereClauses.add('content GLOB ?');
           whereArgs.add(dQuery);
         } else {
           switch (definitionMode) {
             case SearchMode.prefix:
               whereClauses.add('content MATCH ?');
-              whereArgs.add('$safeDQuery*');
+              whereArgs.add('"$safeDQuery" *');
               break;
             case SearchMode.suffix:
-              // FTS5 doesn't easily support suffix match via MATCH. Use LIKE.
+              // FTS5 doesn't fully support suffix match natively. Use LIKE.
               whereClauses.add('content LIKE ?');
               whereArgs.add('%$dQuery');
               break;
             case SearchMode.substring:
+              // FTS5 doesn't easily support infix match via MATCH without trigrams. Use LIKE.
               whereClauses.add('content LIKE ?');
               whereArgs.add('%$dQuery%');
               break;

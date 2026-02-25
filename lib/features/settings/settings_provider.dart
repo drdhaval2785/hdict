@@ -47,7 +47,7 @@ class SettingsProvider with ChangeNotifier {
   bool _isSearchInHeadwordsEnabled = true;
   bool _isSearchInDefinitionsEnabled = false;
   SearchMode _headwordSearchMode = SearchMode.prefix;
-  SearchMode _definitionSearchMode = SearchMode.substring;
+  SearchMode _definitionSearchMode = SearchMode.prefix;
   Color _headwordColor = Colors.black;
   int _searchResultLimit = 50;
 
@@ -88,7 +88,7 @@ class SettingsProvider with ChangeNotifier {
     _headwordSearchMode = SearchMode.fromString(
         prefs.getString(_keyHeadwordSearchMode) ?? 'prefix');
     _definitionSearchMode = SearchMode.fromString(
-        prefs.getString(_keyDefinitionSearchMode) ?? 'substring');
+        prefs.getString(_keyDefinitionSearchMode) ?? 'prefix');
     _headwordColor =
         Color(prefs.getInt(_keyHeadwordColor) ?? Colors.black.toARGB32());
     _searchResultLimit = prefs.getInt(_keySearchResultLimit) ?? 50;

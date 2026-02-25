@@ -77,6 +77,14 @@ class SettingsScreen extends StatelessWidget {
                     settings.setDefinitionSearchMode(set.first),
               ),
             ),
+          if (settings.isSearchInDefinitionsEnabled)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 32.0, vertical: 8.0),
+              child: Text(
+                'Note: "Suffix" and "Substring" searches require exhaustive full-table scans which take significantly longer. It is strongly advised to stick with "Prefix" or "Exact" searches for instantaneous FTS5 results.',
+                style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
+              ),
+            ),
           const Divider(),
           _buildSectionHeader(theme, 'Appearance'),
           ListTile(

@@ -147,7 +147,7 @@ void main() {
       );
       expect(results.length, 2);
 
-      // Search for partial 'frui' in definition - should work with LIKE
+      // Search for partial 'frui' utilizing LIKE exact subset match
       results = await dbHelper.searchWords(
         definitionQuery: 'frui',
         definitionMode: SearchMode.substring,
