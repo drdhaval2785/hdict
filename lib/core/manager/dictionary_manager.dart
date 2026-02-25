@@ -966,8 +966,82 @@ class DictionaryManager {
     yield ImportProgress(message: 'Re-indexing not fully implemented for Web yet.', value: 1.0, isCompleted: true);
   }
 
-  Stream<ImportProgress> reIndexDictionaryStream(int dictId) async* {
-    yield ImportProgress(message: 'Re-indexing not fully implemented for Web yet.', value: 1.0, isCompleted: true);
+  Stream<ImportProgress> reindexDictionaryStream(int dictId) async* {
+    yield ImportProgress(message: 'Preparing to re-index...', value: 0.1);
+
+    if (kIsWeb) {
+      yield ImportProgress(
+        message: 'Re-indexing not fully implemented for Web yet.',
+        value: 1.0,
+        isCompleted: true,
+      );
+      return;
+    }
+
+    try {
+      final dict = await _dbHelper.getDictionaryById(dictId);
+      if (dict == null) throw Exception('Dictionary not found');
+
+      final String dictPath = await _dbHelper.resolvePath(dict['path']);
+      final String ifoPath = dictPath.replaceAll('.dict', '.ifo');
+      final String idxPath = dictPath.replaceAll('.dict', '.idx');
+      final String synPathCandidate = dictPath.replaceAll('.dict', '.syn');
+      final String? synPath =
+          File(synPathCandidate).existsSync() ? synPathCandidate : null;
+
+      final ifoParser = IfoParser();
+      await ifoParser.parse(ifoPath);
+
+      // Wipe existing index
+      yield ImportProgress(message: 'Wiping existing index...', value: 0.2);
+      await _dbHelper.deleteWordsByDictionaryId(dictId);
+      await _dbHelper.updateDictionaryIndexDefinitions(dictId, true);
+
+      yield ImportProgress(message: 'Starting re-indexing...', value: 0.3);
+
+      final receivePort = ReceivePort();
+      final rootIsolateToken = RootIsolateToken.instance!;
+
+      await Isolate.spawn(
+        _indexEntry,
+        _IndexArgs(
+          dictId,
+          idxPath,
+          dictPath,
+          synPath,
+          true, // indexDefinitions
+          ifoParser,
+          receivePort.sendPort,
+          rootIsolateToken,
+        ),
+      );
+
+      await for (final message in receivePort) {
+        if (message is ImportProgress) {
+          if (message.error != null) {
+            receivePort.close();
+            throw Exception(message.error);
+          }
+          if (message.isCompleted) {
+            receivePort.close();
+            break;
+          }
+          yield message;
+        }
+      }
+      yield ImportProgress(
+        message: 'Re-indexing complete!',
+        value: 1.0,
+        isCompleted: true,
+      );
+    } catch (e) {
+      yield ImportProgress(
+        message: 'Re-indexing failed: $e',
+        value: 0.0,
+        error: e.toString(),
+        isCompleted: true,
+      );
+    }
   }
 
   String _resolveDownloadFilename(String url, Map<String, String> headers) {

@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'dart:math';
+import 'package:hdict/features/settings/settings_provider.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -37,13 +38,13 @@ class DatabaseHelper {
   static Future<void> initializeDatabaseFactory() async {
     if (kIsWeb) {
       databaseFactory = createDatabaseFactoryFfiWeb();
-    } else if (Platform.isWindows ||
-        Platform.isLinux ||
-        Platform.isAndroid ||
-        Platform.isMacOS) {
+    } else if (Platform.isWindows || Platform.isLinux) {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
     }
+    // On macOS, iOS, and Android, we use the default sqflite implementation
+    // which is more stable and prevents "bad parameter" or API misuse errors
+    // that happen when forcefully overriding with FFI.
   }
 
   Future<Database> get database async {
@@ -81,7 +82,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 8, // Incremented for start_rowid tracking
+      version: 9, // Incremented for index_definitions tracking
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -184,6 +185,27 @@ class DatabaseHelper {
         );
       } catch (e) {
         debugPrint('Migration error (version 8): $e');
+      }
+    }
+    if (oldVersion < 9) {
+      try {
+        // Check if column already exists to prevent duplicate column error
+        final tableInfo = await db.rawQuery("PRAGMA table_info('dictionaries')");
+        bool hasIndexDefinitions = false;
+        for (final row in tableInfo) {
+          if (row['name'] == 'index_definitions') {
+            hasIndexDefinitions = true;
+            break;
+          }
+        }
+        
+        if (!hasIndexDefinitions) {
+          await db.execute(
+            'ALTER TABLE dictionaries ADD COLUMN index_definitions INTEGER DEFAULT 0',
+          );
+        }
+      } catch (e) {
+        debugPrint('Migration error (version 9): $e');
       }
     }
   }
@@ -411,6 +433,11 @@ class DatabaseHelper {
     );
   }
 
+  Future<void> deleteWordsByDictionaryId(int dictId) async {
+    final db = await database;
+    await db.delete('word_index', where: 'dict_id = ?', whereArgs: [dictId]);
+  }
+
   Future<void> deleteDictionary(int id) async {
     final db = await database;
     await db.transaction((txn) async {
@@ -539,73 +566,102 @@ class DatabaseHelper {
     });
   }
 
-  Future<List<Map<String, dynamic>>> searchWords(
-    String query, {
+  Future<List<Map<String, dynamic>>> searchWords({
+    String? headwordQuery,
+    SearchMode headwordMode = SearchMode.prefix,
+    String? definitionQuery,
+    SearchMode definitionMode = SearchMode.substring,
     int limit = 50,
-    bool fuzzy = false,
-    bool searchDefinitions = false,
   }) async {
     try {
       final db = await database;
-      final String safeQuery = query.replaceAll('"', '""');
+      final List<String> whereClauses = [];
+      final List<Object?> whereArgs = [];
 
-      // 1. Explicit wildcard support (* or ?)
-      final bool hasExplicitWildcards = query.contains('*') || query.contains('?');
-      if (hasExplicitWildcards) {
-        final String sql = '''
-          SELECT word, dict_id, offset, length 
-          FROM word_index 
-          WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
-          AND (word GLOB ? ${searchDefinitions ? "OR content MATCH ?" : ""})
-          ORDER BY word ASC
-          LIMIT ?
-        ''';
-        final List<Object?> args = [query];
-        if (searchDefinitions) args.add('"$safeQuery"');
-        args.add(limit);
-        final result = await db.rawQuery(sql, args);
-        _log('RAW_QUERY (Explicit Wildcard)', sql, args, result);
-        return result;
+      whereClauses.add(
+          'dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1)');
+
+      // 1. Process Headword Query
+      if (headwordQuery != null && headwordQuery.trim().isNotEmpty) {
+        final String hQuery = headwordQuery.trim();
+        final String safeHQuery = hQuery.replaceAll('"', '""');
+
+        if (hQuery.contains('*') || hQuery.contains('?')) {
+          whereClauses.add('word GLOB ?');
+          whereArgs.add(hQuery);
+        } else {
+          switch (headwordMode) {
+            case SearchMode.prefix:
+              whereClauses.add('word MATCH ?');
+              whereArgs.add('$safeHQuery*');
+              break;
+            case SearchMode.suffix:
+              whereClauses.add('word LIKE ?');
+              whereArgs.add('%$hQuery');
+              break;
+            case SearchMode.substring:
+              whereClauses.add('word LIKE ?');
+              whereArgs.add('%$hQuery%');
+              break;
+            case SearchMode.exact:
+              whereClauses.add('word MATCH ?');
+              whereArgs.add('"$safeHQuery"');
+              break;
+          }
+        }
       }
 
-      // 2. Prefix search by default
-      final String matchPattern = '$safeQuery*';
+      // 2. Process Definition Query
+      if (definitionQuery != null && definitionQuery.trim().isNotEmpty) {
+        final String dQuery = definitionQuery.trim();
+        final String safeDQuery = dQuery.replaceAll('"', '""');
+
+        if (dQuery.contains('*') || dQuery.contains('?')) {
+          whereClauses.add('content GLOB ?');
+          whereArgs.add(dQuery);
+        } else {
+          switch (definitionMode) {
+            case SearchMode.prefix:
+              whereClauses.add('content MATCH ?');
+              whereArgs.add('$safeDQuery*');
+              break;
+            case SearchMode.suffix:
+              // FTS5 doesn't easily support suffix match via MATCH. Use LIKE.
+              whereClauses.add('content LIKE ?');
+              whereArgs.add('%$dQuery');
+              break;
+            case SearchMode.substring:
+              whereClauses.add('content LIKE ?');
+              whereArgs.add('%$dQuery%');
+              break;
+            case SearchMode.exact:
+              whereClauses.add('content MATCH ?');
+              whereArgs.add('"$safeDQuery"');
+              break;
+          }
+        }
+      }
+
+      // If no search terms, return empty
+      if (whereArgs.isEmpty) return [];
+
       final String sql = '''
         SELECT word, dict_id, offset, length 
         FROM word_index 
-        WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
-        AND (word MATCH ? ${searchDefinitions ? "OR content MATCH ?" : ""})
+        WHERE ${whereClauses.join(' AND ')}
         ORDER BY 
-          (LOWER(word) = LOWER(?)) DESC,
-          (LOWER(word) LIKE ?) DESC,
+          ${headwordQuery != null ? "(LOWER(word) = LOWER(?)) DESC," : ""}
           word ASC
         LIMIT ?
       ''';
 
-      final List<Object?> args = [
-        matchPattern,
-        if (searchDefinitions) matchPattern,
-        query,
-        '$query%',
-        limit
-      ];
-
-      final result = await db.rawQuery(sql, args);
-      _log('RAW_QUERY (Prefix Search)', sql, args, result);
-
-      if (result.isEmpty && fuzzy) {
-        final String fuzzySql = '''
-          SELECT word, dict_id, offset, length 
-          FROM word_index 
-          WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
-          AND word LIKE ?
-          LIMIT ?
-        ''';
-        final fuzzyResults = await db.rawQuery(fuzzySql, ['%$query%', limit]);
-        _log('RAW_QUERY (Fuzzy Fallback)', fuzzySql, ['%$query%', limit], fuzzyResults);
-        return fuzzyResults;
+      if (headwordQuery != null) {
+        whereArgs.add(headwordQuery.trim());
       }
+      whereArgs.add(limit);
 
+      final result = await db.rawQuery(sql, whereArgs);
+      _log('RAW_QUERY (Advanced Search)', sql, whereArgs, result);
       return result;
     } catch (e) {
       debugPrint("Search error: $e");

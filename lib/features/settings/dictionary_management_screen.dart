@@ -39,45 +39,61 @@ class _DictionaryManagementScreenState
   }
 
   Future<void> _downloadDictionary() async {
-    const bool indexDefinitions = false; // Default behavior
     final TextEditingController urlController = TextEditingController();
-
     final dynamic urlString = await showDialog<dynamic>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Download Dictionary'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Enter the URL of the dictionary file (.zip, .tar.gz):',
+        bool localIndex = false;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Download Dictionary'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Enter the URL of the dictionary file (.zip, .tar.gz):',
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: urlController,
+                    decoration: const InputDecoration(
+                      labelText: 'URL',
+                      border: OutlineInputBorder(),
+                      hintText: 'http://example.com/dict.zip',
+                    ),
+                    keyboardType: TextInputType.url,
+                  ),
+                  const SizedBox(height: 8),
+                  CheckboxListTile(
+                    title: const Text('Index definitions'),
+                    subtitle: const Text('Enables search inside meanings (Slower import)'),
+                    value: localIndex,
+                    onChanged: (val) {
+                      setDialogState(() {
+                        localIndex = val ?? false;
+                      });
+                    },
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: urlController,
-                decoration: const InputDecoration(
-                  labelText: 'URL',
-                  border: OutlineInputBorder(),
-                  hintText: 'http://example.com/dict.zip',
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
                 ),
-                keyboardType: TextInputType.url,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, {
-                'url': urlController.text,
-                'index': indexDefinitions,
-              }),
-              child: const Text('Download'),
-            ),
-          ],
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, {
+                    'url': urlController.text,
+                    'index': localIndex,
+                  }),
+                  child: const Text('Download'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -152,8 +168,6 @@ class _DictionaryManagementScreenState
   }
 
   Future<void> _importDictionary() async {
-    const bool indexDefinitions = false; // Default behavior
-    // Pick file(s)
     const XTypeGroup typeGroup = XTypeGroup(
       label: 'Dictionaries',
       extensions: [
@@ -188,7 +202,55 @@ class _DictionaryManagementScreenState
     if (files.isNotEmpty) {
       if (!mounted) return;
 
-      // Show progress dialog immediately
+      final dynamic importConfig = await showDialog<dynamic>(
+        context: context,
+        builder: (context) {
+          bool localIndex = false;
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              return AlertDialog(
+                title: const Text('Import Dictionary'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Importing ${files.length} file(s).'),
+                    const SizedBox(height: 8),
+                    CheckboxListTile(
+                      title: const Text('Index definitions'),
+                      subtitle: const Text('Enables search inside meanings (Slower import)'),
+                      value: localIndex,
+                      onChanged: (val) {
+                        setDialogState(() {
+                          localIndex = val ?? false;
+                        });
+                      },
+                      controlAffinity: ListTileControlAffinity.leading,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context, localIndex),
+                    child: const Text('Proceed'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+
+      if (importConfig == null) return;
+      final bool indexDefinitions = importConfig as bool;
+
+      if (!mounted) return;
+
+      // Show progress dialog
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -429,6 +491,18 @@ class _DictionaryManagementScreenState
                                 },
                               ),
                               IconButton(
+                                icon: Icon(
+                                  dict['index_definitions'] == 1
+                                      ? Icons.refresh
+                                      : Icons.search,
+                                  color: Colors.blueAccent,
+                                ),
+                                tooltip: dict['index_definitions'] == 1
+                                    ? 'Re-index'
+                                    : 'Enable meaning search',
+                                onPressed: () => _showReindexDialog(dict),
+                              ),
+                              IconButton(
                                 icon: const Icon(
                                   Icons.delete_outline,
                                   color: Colors.redAccent,
@@ -490,6 +564,76 @@ class _DictionaryManagementScreenState
     if (confirm == true) {
       await _dictionaryManager.deleteDictionary(dict['id']);
       _loadDictionaries();
+    }
+  }
+
+  Future<void> _showReindexDialog(Map<String, dynamic> dict) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(dict['index_definitions'] == 1 ? 'Re-index Dictionary?' : 'Enable Meaning Search?'),
+        content: Text(
+          dict['index_definitions'] == 1
+              ? 'Are you sure you want to re-index "${dict['name']}"? This might take a while.'
+              : 'Index definitions for "${dict['name']}"? This will enable searching inside meanings but will take some time.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Start'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return PopScope(
+            canPop: false,
+            child: AlertDialog(
+              title: const Text('Re-indexing'),
+              content: ValueListenableBuilder<ImportProgress>(
+                valueListenable: _progressNotifier,
+                builder: (context, progress, child) {
+                  return _buildProgressContent(progress);
+                },
+              ),
+            ),
+          );
+        },
+      );
+
+      try {
+        final stream = _dictionaryManager.reindexDictionaryStream(dict['id']);
+        await for (final progress in stream) {
+          _progressNotifier.value = progress;
+          if (progress.isCompleted && progress.error != null) {
+            throw Exception(progress.error);
+          }
+        }
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Re-indexing of "${dict['name']}" complete.')),
+          );
+          _loadDictionaries();
+        }
+      } catch (e) {
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Re-indexing failed: $e')),
+          );
+        }
+      }
     }
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:hdict/core/database/database_helper.dart';
+import 'package:hdict/features/settings/settings_provider.dart';
 
 void main() {
   // Initialize FFI for unit tests
@@ -79,7 +80,7 @@ void main() {
       expect(dicts.last['name'], 'Another Dict');
     });
 
-    test('Search Words (Exact vs Wildcard)', () async {
+    test('Search Words (Advanced Modes)', () async {
       int dictId = 1;
       List<Map<String, dynamic>> words = [
         {'word': 'apple', 'offset': 100, 'length': 50},
@@ -90,25 +91,35 @@ void main() {
       await dbHelper.batchInsertWords(dictId, words);
 
       // 1. Exact match 'apple'
-      List<Map<String, dynamic>> results = await dbHelper.searchWords('apple');
+      List<Map<String, dynamic>> results = await dbHelper.searchWords(
+        headwordQuery: 'apple',
+        headwordMode: SearchMode.exact,
+      );
       expect(results.length, 1);
       expect(results.first['word'], 'apple');
 
-      // 2. Search for 'app'
-      // Production code now has a prefix fallback logic. 
-      // It tries exact match (0 found), then falls back to prefix matches.
-      results = await dbHelper.searchWords('app');
-      expect(results.length, 2); // 'apple' and 'application'
-      expect(results.any((r) => r['word'] == 'apple'), isTrue);
-
-      // 3. Explicit wildcard 'app*'
-      results = await dbHelper.searchWords('app*');
+      // 2. Prefix 'app'
+      results = await dbHelper.searchWords(
+        headwordQuery: 'app',
+        headwordMode: SearchMode.prefix,
+      );
       expect(results.length, 2);
 
-      // 4. Wildcard 'a?ple'
-      results = await dbHelper.searchWords('a?ple');
+      // 3. Suffix 'nana'
+      results = await dbHelper.searchWords(
+        headwordQuery: 'nana',
+        headwordMode: SearchMode.suffix,
+      );
       expect(results.length, 1);
-      expect(results.first['word'], 'apple');
+      expect(results.first['word'], 'banana');
+
+      // 4. Substring 'at'
+      results = await dbHelper.searchWords(
+        headwordQuery: 'at',
+        headwordMode: SearchMode.substring,
+      );
+      expect(results.length, 1);
+      expect(results.first['word'], 'application');
     });
 
     test('Search within Definitions', () async {
@@ -129,15 +140,25 @@ void main() {
       ];
       await dbHelper.batchInsertWords(dictId, words);
 
-      // Search for 'fruit' with searchDefinitions: true
+      // Search for 'fruit' in definition
       List<Map<String, dynamic>> results = await dbHelper.searchWords(
-        'fruit',
-        searchDefinitions: true,
+        definitionQuery: 'fruit',
+        definitionMode: SearchMode.substring,
+      );
+      expect(results.length, 2);
+
+      // Search for partial 'frui' in definition - should work with LIKE
+      results = await dbHelper.searchWords(
+        definitionQuery: 'frui',
+        definitionMode: SearchMode.substring,
       );
       expect(results.length, 2);
 
       // Search for 'red' (only in apple content)
-      results = await dbHelper.searchWords('red', searchDefinitions: true);
+      results = await dbHelper.searchWords(
+        definitionQuery: 'red',
+        definitionMode: SearchMode.exact, // MATCH "red"
+      );
       expect(results.length, 1);
       expect(results.first['word'], 'apple');
     });
@@ -167,8 +188,8 @@ void main() {
 
       // Fuzzy search "ple" should find "apple" via LIKE '%ple%'
       List<Map<String, dynamic>> results = await dbHelper.searchWords(
-        'ple',
-        fuzzy: true,
+        headwordQuery: 'ple',
+        headwordMode: SearchMode.substring,
       );
       expect(results.any((r) => r['word'] == 'apple'), isTrue);
 
@@ -182,6 +203,7 @@ void main() {
 
     test('Search History Management', () async {
       await dbHelper.addSearchHistory('apple');
+      await Future.delayed(const Duration(milliseconds: 10));
       await dbHelper.addSearchHistory('banana');
 
       List<Map<String, dynamic>> history = await dbHelper.getSearchHistory();

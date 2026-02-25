@@ -23,6 +23,42 @@ class SettingsScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16.0),
         children: [
+          _buildSectionHeader(theme, 'Search settings'),
+          SwitchListTile(
+            title: const Text('Search in Headwords'),
+            value: settings.isSearchInHeadwordsEnabled,
+            onChanged: (value) => settings.searchInHeadwords(value),
+          ),
+          if (settings.isSearchInHeadwordsEnabled)
+            Padding(
+              padding: const EdgeInsets.only(left: 32.0, bottom: 8.0),
+              child: SegmentedButton<SearchMode>(
+                segments: SearchMode.values
+                    .map((m) => ButtonSegment(value: m, label: Text(m.label)))
+                    .toList(),
+                selected: {settings.headwordSearchMode},
+                onSelectionChanged: (set) =>
+                    settings.setHeadwordSearchMode(set.first),
+              ),
+            ),
+          SwitchListTile(
+            title: const Text('Search in Definitions'),
+            value: settings.isSearchInDefinitionsEnabled,
+            onChanged: (value) => settings.searchInDefinitions(value),
+          ),
+          if (settings.isSearchInDefinitionsEnabled)
+            Padding(
+              padding: const EdgeInsets.only(left: 32.0, bottom: 8.0),
+              child: SegmentedButton<SearchMode>(
+                segments: SearchMode.values
+                    .map((m) => ButtonSegment(value: m, label: Text(m.label)))
+                    .toList(),
+                selected: {settings.definitionSearchMode},
+                onSelectionChanged: (set) =>
+                    settings.setDefinitionSearchMode(set.first),
+              ),
+            ),
+          const Divider(),
           _buildSectionHeader(theme, 'Appearance'),
           ListTile(
             title: const Text('Font Family'),
@@ -81,18 +117,12 @@ class SettingsScreen extends StatelessWidget {
             value: settings.isOpenPopupOnTap,
             onChanged: (value) => settings.setOpenPopup(value),
           ),
-          SwitchListTile(
-            title: const Text('Search within Definitions'),
-            subtitle: const Text('Include dictionary definitions in search results'),
-            value: settings.isSearchWithinDefinitionsEnabled,
-            onChanged: (value) => settings.setSearchWithinDefinitions(value),
-          ),
           const Divider(),
           _buildSectionHeader(theme, 'History'),
           ListTile(
-            title: const Text('Retain Search History'),
+            title: const Text('Retain Search History for how many days'),
             subtitle: Text(
-              'Keep history for ${settings.historyRetentionDays} days',
+              'Currently set to ${settings.historyRetentionDays} days',
             ),
             trailing: SizedBox(
               width: 80,

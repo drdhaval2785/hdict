@@ -1,6 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+enum SearchMode {
+  prefix('Prefix'),
+  suffix('Suffix'),
+  substring('Substring'),
+  exact('Exact');
+
+  final String label;
+  const SearchMode(this.label);
+
+  static SearchMode fromString(String value) {
+    return SearchMode.values.firstWhere(
+      (e) => e.name == value,
+      orElse: () => SearchMode.prefix,
+    );
+  }
+}
+
 class SettingsProvider with ChangeNotifier {
   static const String _keyFontFamily = 'font_family';
   static const String _keyFontSize = 'font_size';
@@ -11,7 +28,10 @@ class SettingsProvider with ChangeNotifier {
   static const String _keyTapMeaning = 'tap_meaning';
   static const String _keyOpenPopup = 'open_popup';
   static const String _keyHistoryDays = 'history_days';
-  static const String _keySearchWithinDefinitions = 'search_within_definitions';
+  static const String _keySearchInHeadwords = 'search_in_headwords';
+  static const String _keySearchInDefinitions = 'search_in_definitions';
+  static const String _keyHeadwordSearchMode = 'headword_search_mode';
+  static const String _keyDefinitionSearchMode = 'definition_search_mode';
   static const String _keyHeadwordColor = 'headword_color';
 
   String _fontFamily = 'Roboto';
@@ -23,7 +43,10 @@ class SettingsProvider with ChangeNotifier {
   bool _isTapOnMeaningEnabled = true;
   bool _isOpenPopupOnTap = true;
   int _historyRetentionDays = 30;
-  bool _isSearchWithinDefinitionsEnabled = false;
+  bool _isSearchInHeadwordsEnabled = true;
+  bool _isSearchInDefinitionsEnabled = false;
+  SearchMode _headwordSearchMode = SearchMode.prefix;
+  SearchMode _definitionSearchMode = SearchMode.substring;
   Color _headwordColor = Colors.black;
 
   String get fontFamily => _fontFamily;
@@ -35,8 +58,10 @@ class SettingsProvider with ChangeNotifier {
   bool get isTapOnMeaningEnabled => _isTapOnMeaningEnabled;
   bool get isOpenPopupOnTap => _isOpenPopupOnTap;
   int get historyRetentionDays => _historyRetentionDays;
-  bool get isSearchWithinDefinitionsEnabled =>
-      _isSearchWithinDefinitionsEnabled;
+  bool get isSearchInHeadwordsEnabled => _isSearchInHeadwordsEnabled;
+  bool get isSearchInDefinitionsEnabled => _isSearchInDefinitionsEnabled;
+  SearchMode get headwordSearchMode => _headwordSearchMode;
+  SearchMode get definitionSearchMode => _definitionSearchMode;
   Color get headwordColor => _headwordColor;
 
   SettingsProvider() {
@@ -54,9 +79,15 @@ class SettingsProvider with ChangeNotifier {
     _isTapOnMeaningEnabled = prefs.getBool(_keyTapMeaning) ?? true;
     _isOpenPopupOnTap = prefs.getBool(_keyOpenPopup) ?? true;
     _historyRetentionDays = prefs.getInt(_keyHistoryDays) ?? 30;
-    _isSearchWithinDefinitionsEnabled =
-        prefs.getBool(_keySearchWithinDefinitions) ?? false;
-    _headwordColor = Color(prefs.getInt(_keyHeadwordColor) ?? Colors.black.toARGB32());
+    _isSearchInHeadwordsEnabled = prefs.getBool(_keySearchInHeadwords) ?? true;
+    _isSearchInDefinitionsEnabled =
+        prefs.getBool(_keySearchInDefinitions) ?? false;
+    _headwordSearchMode = SearchMode.fromString(
+        prefs.getString(_keyHeadwordSearchMode) ?? 'prefix');
+    _definitionSearchMode = SearchMode.fromString(
+        prefs.getString(_keyDefinitionSearchMode) ?? 'substring');
+    _headwordColor =
+        Color(prefs.getInt(_keyHeadwordColor) ?? Colors.black.toARGB32());
     notifyListeners();
   }
 
@@ -123,10 +154,31 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setSearchWithinDefinitions(bool enabled) async {
-    _isSearchWithinDefinitionsEnabled = enabled;
+  Future<void> searchInHeadwords(bool enabled) async {
+    _isSearchInHeadwordsEnabled = enabled;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keySearchWithinDefinitions, enabled);
+    await prefs.setBool(_keySearchInHeadwords, enabled);
+    notifyListeners();
+  }
+
+  Future<void> searchInDefinitions(bool enabled) async {
+    _isSearchInDefinitionsEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keySearchInDefinitions, enabled);
+    notifyListeners();
+  }
+
+  Future<void> setHeadwordSearchMode(SearchMode mode) async {
+    _headwordSearchMode = mode;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyHeadwordSearchMode, mode.name);
+    notifyListeners();
+  }
+
+  Future<void> setDefinitionSearchMode(SearchMode mode) async {
+    _definitionSearchMode = mode;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyDefinitionSearchMode, mode.name);
     notifyListeners();
   }
 

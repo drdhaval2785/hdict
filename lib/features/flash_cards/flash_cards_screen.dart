@@ -537,7 +537,8 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
               child: FutureBuilder<List<Map<String, dynamic>>>(
                 future: () async {
                   // Get all exact matches for this word across all dictionaries
-                  final candidates = await _dbHelper.searchWords(word);
+                  final candidates =
+                      await _dbHelper.searchWords(headwordQuery: word);
                   final List<Map<String, dynamic>> defs = [];
 
                   for (final res in candidates) {

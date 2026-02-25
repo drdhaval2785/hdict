@@ -62,46 +62,56 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
-  final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _headwordController = TextEditingController();
+  final TextEditingController _definitionController = TextEditingController();
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
   List<Map<String, dynamic>> _currentDefinitions = [];
   bool _isLoading = false;
   String? _selectedWord;
-  String _lastSearchQuery = '';
+  String _lastHeadwordQuery = '';
+  String _lastDefinitionQuery = '';
   TabController? _tabController;
 
   @override
   void dispose() {
-    _searchController.dispose();
+    _headwordController.dispose();
+    _definitionController.dispose();
     _tabController?.dispose();
     super.dispose();
   }
 
-  Future<void> _onWordSelected(String word) async {
-    await _dbHelper.addSearchHistory(word);
+  Future<void> _performSearch() async {
+    final headword = _headwordController.text.trim();
+    final definition = _definitionController.text.trim();
+
+    if (headword.isEmpty && definition.isEmpty) return;
+
+    if (headword.isNotEmpty) {
+      await _dbHelper.addSearchHistory(headword);
+    }
+
     if (!mounted) return;
     setState(() {
       _isLoading = true;
-      _selectedWord = word;
-      _lastSearchQuery = word;
+      _selectedWord = headword.isNotEmpty ? headword : definition;
+      _lastHeadwordQuery = headword;
+      _lastDefinitionQuery = definition;
       _currentDefinitions = [];
     });
+
     try {
       final settings = context.read<SettingsProvider>();
-      // 1. Search for all occurrences of this word
+      
       List<Map<String, dynamic>> results = await _dbHelper.searchWords(
-        word,
-        fuzzy: settings.isFuzzySearchEnabled,
-        searchDefinitions: settings.isSearchWithinDefinitionsEnabled,
+        headwordQuery: headword.isNotEmpty ? headword : null,
+        headwordMode: settings.headwordSearchMode,
+        definitionQuery: definition.isNotEmpty ? definition : null,
+        definitionMode: settings.definitionSearchMode,
       );
 
-      // Use the results directly from the database search (already prioritized/sorted)
-      List<Map<String, dynamic>> filteredResults = results;
-
-      // 2. Fetch definitions
       final Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults = {};
-      for (final result in filteredResults) {
+      for (final result in results) {
         final dictId = result['dict_id'] as int;
         final wordValue = result['word'] as String;
         final dict = await _dbHelper.getDictionaryById(dictId);
@@ -152,6 +162,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         );
       }
     }
+  }
+
+  Future<void> _onWordSelected(String word) async {
+    _headwordController.text = word;
+    _definitionController.clear();
+    await _performSearch();
   }
 
   bool _hasDictionaries = false;
@@ -207,7 +223,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ? _buildEmptyState(theme)
           : Column(
               children: [
-                _buildSearchBar(theme),
+                _buildSearchBars(theme),
                 if (_isLoading) const LinearProgressIndicator(),
                 Expanded(
                   child: _selectedWord == null
@@ -249,22 +265,41 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildSearchBar(ThemeData theme) {
+  Widget _buildSearchBars(ThemeData theme) {
+    final settings = context.watch<SettingsProvider>();
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-      child: TextField(
-        controller: _searchController,
-        decoration: InputDecoration(
-          hintText: 'Search...',
-          border: InputBorder.none,
-          suffixIcon: IconButton(
-            icon: const Icon(Icons.clear),
-            onPressed: () => _searchController.clear(),
-          ),
-        ),
-        onSubmitted: (value) {
-          if (value.isNotEmpty) _onWordSelected(value);
-        },
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+      child: Column(
+        children: [
+          if (settings.isSearchInHeadwordsEnabled)
+            TextField(
+              controller: _headwordController,
+              decoration: InputDecoration(
+                hintText: 'Type headword to search',
+                border: InputBorder.none,
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.clear),
+                  onPressed: () => _headwordController.clear(),
+                ),
+              ),
+              onSubmitted: (_) => _performSearch(),
+            ),
+          if (settings.isSearchInDefinitionsEnabled)
+            TextField(
+              controller: _definitionController,
+              decoration: InputDecoration(
+                hintText: 'Type word to search in definition',
+                border: InputBorder.none,
+                prefixIcon: const Icon(Icons.manage_search),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.clear),
+                  onPressed: () => _definitionController.clear(),
+                ),
+              ),
+              onSubmitted: (_) => _performSearch(),
+            ),
+        ],
       ),
     );
   }
@@ -354,23 +389,47 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         Expanded(
           child: TabBarView(
             controller: _tabController,
-            children: _currentDefinitions.map((def) => _buildDefinitionContent(theme, def, highlightQuery: _lastSearchQuery)).toList(),
+            children: _currentDefinitions
+                .map((def) => _buildDefinitionContent(theme, def,
+                    highlightHeadword: _lastHeadwordQuery,
+                    highlightDefinition: _lastDefinitionQuery))
+                .toList(),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildDefinitionContent(ThemeData theme, Map<String, dynamic> def, {String? highlightQuery}) {
+  Widget _buildDefinitionContent(ThemeData theme, Map<String, dynamic> def,
+      {String? highlightHeadword, String? highlightDefinition}) {
     final settings = context.watch<SettingsProvider>();
     String definitionHtml = def['definition'];
     definitionHtml = HomeScreen.normalizeWhitespace(definitionHtml);
     if (settings.isTapOnMeaningEnabled) {
       definitionHtml = HtmlLookupWrapper.wrapWords(definitionHtml);
     }
-    if (highlightQuery != null && highlightQuery.isNotEmpty) {
-      final isDark = ThemeData.estimateBrightnessForColor(settings.backgroundColor) == Brightness.dark;
-      definitionHtml = HtmlLookupWrapper.highlightText(definitionHtml, highlightQuery, highlightColor: isDark ? '#ff9900' : '#ffeb3b', textColor: 'black');
+
+    final isDark =
+        ThemeData.estimateBrightnessForColor(settings.backgroundColor) ==
+            Brightness.dark;
+    final highlightCol = isDark ? '#ff9900' : '#ffeb3b';
+
+    if (highlightHeadword != null && highlightHeadword.isNotEmpty) {
+      definitionHtml = HtmlLookupWrapper.highlightText(
+        definitionHtml,
+        highlightHeadword,
+        highlightColor: highlightCol,
+        textColor: 'black',
+      );
+    }
+
+    if (highlightDefinition != null && highlightDefinition.isNotEmpty) {
+      // Underline matches in definition search
+      definitionHtml = definitionHtml.replaceAllMapped(
+        RegExp(RegExp.escape(highlightDefinition), caseSensitive: false),
+        (match) =>
+            '<u style="text-decoration-color: $highlightCol; text-decoration-thickness: 2px;">${match.group(0)}</u>',
+      );
     }
 
     return Container(
@@ -430,7 +489,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final settings = context.read<SettingsProvider>();
     if (!settings.isOpenPopupOnTap) {
       _onWordSelected(word);
-      _searchController.text = word;
       return;
     }
     showModalBottomSheet(
@@ -463,13 +521,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               Expanded(
                 child: FutureBuilder<List<Map<String, dynamic>>>(
                   future: () async {
-                    List<Map<String, dynamic>> candidates = await _dbHelper.searchWords(word);
+                    List<Map<String, dynamic>> candidates =
+                        await _dbHelper.searchWords(
+                      headwordQuery: word,
+                      headwordMode: settings.headwordSearchMode,
+                    );
                     if (candidates.isEmpty) {
                       // fallback: longest prefix match
                       String prefix = word;
                       while (prefix.length > 2) {
                         prefix = prefix.substring(0, prefix.length - 1);
-                        candidates = await _dbHelper.searchWords(prefix);
+                        candidates = await _dbHelper.searchWords(
+                          headwordQuery: prefix,
+                          headwordMode: SearchMode.prefix,
+                        );
                         if (candidates.isNotEmpty) break;
                       }
                     }
