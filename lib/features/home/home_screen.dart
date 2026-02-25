@@ -25,14 +25,15 @@ class HomeScreen extends StatefulWidget {
     final List<Map<String, dynamic>> consolidated = [];
     groupedResults.forEach((dictId, uniqueKeyMap) {
       String? dictName;
+      final List<String> allHeadwords = [];
       final List<String> definitionsList = [];
-
       uniqueKeyMap.forEach((uniqueKey, entries) {
         if (entries.isEmpty) return;
         dictName ??= entries.first['dict_name'] as String;
         
         final headwords = entries.map((e) => e['word'] as String).toSet().toList();
         final headwordStr = headwords.join(' | ');
+        allHeadwords.add(headwordStr);
 
         final buffer = StringBuffer();
         buffer.writeln('<div class="headword" style="font-size:1.3em;font-weight:bold;margin-bottom:8px;">$headwordStr</div>');
@@ -43,6 +44,8 @@ class HomeScreen extends StatefulWidget {
       consolidated.add({
         'dict_id': dictId,
         'dict_name': dictName ?? '',
+        'word': allHeadwords.join(' | '),
+        'definition': definitionsList.join('<hr>'),
         'definitions': definitionsList,
       });
     });

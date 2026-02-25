@@ -27,7 +27,8 @@ void main() {
           word_count INTEGER DEFAULT 0,
           display_order INTEGER DEFAULT 0,
           start_rowid INTEGER,
-          end_rowid INTEGER
+          end_rowid INTEGER,
+          format TEXT DEFAULT 'stardict'
         )
       ''');
 
