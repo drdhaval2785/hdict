@@ -524,36 +524,63 @@ class DictionaryManager {
     yield ImportProgress(message: 'Preparing web import...', value: 0.0);
 
     try {
-      Archive archive;
-      if (fileName.endsWith('.zip')) {
-        archive = ZipDecoder().decodeBytes(bytes);
-      } else if (fileName.endsWith('.tar.gz') || fileName.endsWith('.tgz')) {
-        archive = TarDecoder().decodeBytes(GZipDecoder().decodeBytes(bytes));
-      } else if (fileName.endsWith('.tar.bz2') || fileName.endsWith('.tbz2')) {
-        archive = TarDecoder().decodeBytes(BZip2Decoder().decodeBytes(bytes));
-      } else if (fileName.endsWith('.tar.xz')) {
-        archive = TarDecoder().decodeBytes(XZDecoder().decodeBytes(bytes));
-      } else if (fileName.endsWith('.tar')) {
-        archive = TarDecoder().decodeBytes(bytes);
-      } else {
-        throw Exception('Unsupported archive format');
-      }
-
-      // On Web, we can't extract to a filesystem. We extract to a Map of bytes.
-      Map<String, Uint8List> files = {};
-      String? ifoName;
-
-      for (final file in archive) {
-        if (file.isFile) {
-          final content = file.content as List<int>;
-          files[file.name] = Uint8List.fromList(content);
-          if (file.name.endsWith('.ifo')) ifoName = file.name;
+      final lowerName = fileName.toLowerCase();
+      
+      // 1. Handle Archives
+      if (lowerName.endsWith('.zip') || 
+          lowerName.endsWith('.tar.gz') || lowerName.endsWith('.tgz') ||
+          lowerName.endsWith('.tar.bz2') || lowerName.endsWith('.tbz2') ||
+          lowerName.endsWith('.tar.xz') || lowerName.endsWith('.tar')) {
+        
+        Archive archive;
+        if (lowerName.endsWith('.zip')) {
+          archive = ZipDecoder().decodeBytes(bytes);
+        } else if (lowerName.endsWith('.tar.gz') || lowerName.endsWith('.tgz')) {
+          archive = TarDecoder().decodeBytes(GZipDecoder().decodeBytes(bytes));
+        } else if (lowerName.endsWith('.tar.bz2') || lowerName.endsWith('.tbz2')) {
+          archive = TarDecoder().decodeBytes(BZip2Decoder().decodeBytes(bytes));
+        } else if (lowerName.endsWith('.tar.xz')) {
+          archive = TarDecoder().decodeBytes(XZDecoder().decodeBytes(bytes));
+        } else {
+          archive = TarDecoder().decodeBytes(bytes);
         }
+
+        Map<String, Uint8List> files = {};
+        String? ifoName;
+
+        for (final file in archive) {
+          if (file.isFile) {
+            final content = file.content as List<int>;
+            files[file.name] = Uint8List.fromList(content);
+            if (file.name.toLowerCase().endsWith('.ifo')) ifoName = file.name;
+          }
+        }
+
+        if (ifoName != null) {
+          yield* _processDictionaryFilesWeb(ifoName, files, indexDefinitions: indexDefinitions);
+        } else {
+          // Check for other formats inside archive
+          final mdxNames = files.keys.where((n) => n.toLowerCase().endsWith('.mdx')).toList();
+          if (mdxNames.isNotEmpty) {
+             // Handle MDict in archive... (add implementation if needed)
+             throw Exception('MDict inside archive is not yet supported on Web. Try importing the .mdx file directly.');
+          }
+          throw Exception('No supported dictionary files (.ifo, .mdx) found in archive.');
+        }
+        return;
       }
-
-      if (ifoName == null) throw Exception('No .ifo file found');
-
-      yield* _processDictionaryFilesWeb(ifoName, files, indexDefinitions: indexDefinitions);
+      
+      // 2. Handle Direct Files
+      if (lowerName.endsWith('.ifo')) {
+        yield* _processDictionaryFilesWeb(fileName, {fileName: bytes}, indexDefinitions: indexDefinitions);
+      } else if (lowerName.endsWith('.mdx')) {
+        // TODO: implement importMdictWebStream if possible
+        throw Exception('MDict (.mdx) import on Web is not yet implemented.');
+      } else if (lowerName.endsWith('.slob')) {
+        throw Exception('Slob (.slob) import is not supported on Web.');
+      } else {
+        throw Exception('Unsupported dictionary or archive format.');
+      }
     } catch (e) {
       yield ImportProgress(message: 'Import error: $e', value: 0.0, error: e.toString(), isCompleted: true);
     }
@@ -1571,21 +1598,29 @@ class DictionaryManager {
       final filenameMatch = RegExp(r'filename[*]?=["\s]*([^";\s]+)').firstMatch(contentDisposition);
       if (filenameMatch != null) {
         final name = filenameMatch.group(1)!;
-        if (_hasKnownArchiveExtension(name)) return name;
+        if (_isRecognizedExtension(name)) return name;
       }
     }
     final uri = Uri.parse(url);
     if (uri.pathSegments.isNotEmpty) {
       final urlName = uri.pathSegments.last;
-      if (_hasKnownArchiveExtension(urlName)) return urlName;
+      if (_isRecognizedExtension(urlName)) return urlName;
     }
     return 'downloaded_dict.zip';
   }
 
-  bool _hasKnownArchiveExtension(String name) {
+  bool _isRecognizedExtension(String name) {
     final lower = name.toLowerCase();
-    return lower.endsWith('.zip') || lower.endsWith('.tar.gz') || lower.endsWith('.tgz') ||
-        lower.endsWith('.tar.bz2') || lower.endsWith('.tbz2') || lower.endsWith('.tar.xz') || lower.endsWith('.tar');
+    final recognized = [
+      '.zip', '.tar.gz', '.tgz', '.tar.bz2', '.tbz2', '.tar.xz', '.tar', // Archives
+      '.slob', '.mdx', '.mdd',                                         // Dictionary formats
+      '.ifo', '.ifo.gz', '.ifo.dz', '.ifo.bz2', '.ifo.xz',             // StarDict
+      '.idx', '.idx.gz', '.idx.dz', '.idx.bz2', '.idx.xz',
+      '.dict', '.dict.dz', '.dict.gz', '.dict.bz2', '.dict.xz',
+      '.syn', '.syn.gz', '.syn.dz', '.syn.bz2', '.syn.xz',
+      '.index', '.index.gz', '.index.dz',                              // DICTD
+    ];
+    return recognized.any((ext) => lower.endsWith(ext));
   }
 
   Stream<ImportProgress> downloadAndImportDictionaryStream(
