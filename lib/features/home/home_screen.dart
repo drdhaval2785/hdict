@@ -108,6 +108,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         headwordMode: settings.headwordSearchMode,
         definitionQuery: definition.isNotEmpty ? definition : null,
         definitionMode: settings.definitionSearchMode,
+        limit: settings.searchResultLimit,
       );
 
       final Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults = {};
@@ -424,11 +425,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     }
 
     if (highlightDefinition != null && highlightDefinition.isNotEmpty) {
-      // Underline matches in definition search
-      definitionHtml = definitionHtml.replaceAllMapped(
-        RegExp(RegExp.escape(highlightDefinition), caseSensitive: false),
-        (match) =>
-            '<u style="text-decoration-color: $highlightCol; text-decoration-thickness: 2px;">${match.group(0)}</u>',
+      definitionHtml = HtmlLookupWrapper.underlineText(
+        definitionHtml,
+        highlightDefinition,
+        underlineColor: highlightCol,
       );
     }
 
@@ -443,7 +443,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               data: definitionHtml,
               style: {
                 "body": Style(fontSize: FontSize(settings.fontSize), lineHeight: LineHeight.em(1.5), margin: Margins.zero, padding: HtmlPaddings.zero, color: settings.textColor, fontFamily: settings.fontFamily),
-                "a": Style(color: settings.textColor, textDecoration: TextDecoration.none),
+                "a": Style(color: theme.colorScheme.primary, textDecoration: TextDecoration.underline),
                 ".dict-word": Style(color: settings.textColor, textDecoration: TextDecoration.none),
                 ".headword": Style(color: settings.headwordColor, fontWeight: FontWeight.bold),
                 ".headword a": Style(color: settings.headwordColor, textDecoration: TextDecoration.none),

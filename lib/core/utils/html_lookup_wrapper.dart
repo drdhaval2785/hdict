@@ -72,4 +72,36 @@ class HtmlLookupWrapper {
 
     return buffer.toString();
   }
+
+  static String underlineText(
+    String html,
+    String query, {
+    String underlineColor = '#ffeb3b',
+  }) {
+    if (query.isEmpty) return html;
+
+    final tagRegExp = RegExp(r'<[^>]*>|[^<]+');
+    final queryRegExp = RegExp(
+      RegExp.escape(query),
+      caseSensitive: false,
+    );
+
+    final StringBuffer buffer = StringBuffer();
+    final matches = tagRegExp.allMatches(html);
+
+    for (final match in matches) {
+      final part = match.group(0)!;
+      if (part.startsWith('<')) {
+        buffer.write(part);
+      } else {
+        final underlined = part.replaceAllMapped(queryRegExp, (m) {
+          final matchedText = m.group(0)!;
+          return '<span style="text-decoration: underline; text-decoration-color: $underlineColor; text-decoration-thickness: 2px;">$matchedText</span>';
+        });
+        buffer.write(underlined);
+      }
+    }
+
+    return buffer.toString();
+  }
 }

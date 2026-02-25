@@ -33,6 +33,7 @@ class SettingsProvider with ChangeNotifier {
   static const String _keyHeadwordSearchMode = 'headword_search_mode';
   static const String _keyDefinitionSearchMode = 'definition_search_mode';
   static const String _keyHeadwordColor = 'headword_color';
+  static const String _keySearchResultLimit = 'search_result_limit';
 
   String _fontFamily = 'Roboto';
   double _fontSize = 16.0;
@@ -48,6 +49,7 @@ class SettingsProvider with ChangeNotifier {
   SearchMode _headwordSearchMode = SearchMode.prefix;
   SearchMode _definitionSearchMode = SearchMode.substring;
   Color _headwordColor = Colors.black;
+  int _searchResultLimit = 50;
 
   String get fontFamily => _fontFamily;
   double get fontSize => _fontSize;
@@ -63,6 +65,7 @@ class SettingsProvider with ChangeNotifier {
   SearchMode get headwordSearchMode => _headwordSearchMode;
   SearchMode get definitionSearchMode => _definitionSearchMode;
   Color get headwordColor => _headwordColor;
+  int get searchResultLimit => _searchResultLimit;
 
   SettingsProvider() {
     _loadSettings();
@@ -88,6 +91,7 @@ class SettingsProvider with ChangeNotifier {
         prefs.getString(_keyDefinitionSearchMode) ?? 'substring');
     _headwordColor =
         Color(prefs.getInt(_keyHeadwordColor) ?? Colors.black.toARGB32());
+    _searchResultLimit = prefs.getInt(_keySearchResultLimit) ?? 50;
     notifyListeners();
   }
 
@@ -186,6 +190,13 @@ class SettingsProvider with ChangeNotifier {
     _headwordColor = color;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_keyHeadwordColor, color.toARGB32());
+    notifyListeners();
+  }
+
+  Future<void> setSearchResultLimit(int limit) async {
+    _searchResultLimit = limit;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keySearchResultLimit, limit);
     notifyListeners();
   }
 }

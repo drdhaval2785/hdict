@@ -24,6 +24,27 @@ class SettingsScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16.0),
         children: [
           _buildSectionHeader(theme, 'Search settings'),
+          ListTile(
+            title: const Text('How many results to return from database'),
+            subtitle: const Text('Setting it to higher number may slow down the result loading'),
+            trailing: SizedBox(
+              width: 80,
+              child: TextField(
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.right,
+                decoration: const InputDecoration(border: InputBorder.none),
+                onChanged: (value) {
+                  final limit = int.tryParse(value);
+                  if (limit != null && limit > 0) {
+                    settings.setSearchResultLimit(limit);
+                  }
+                },
+                controller: TextEditingController(
+                  text: '${settings.searchResultLimit}',
+                ),
+              ),
+            ),
+          ),
           SwitchListTile(
             title: const Text('Search in Headwords'),
             value: settings.isSearchInHeadwordsEnabled,
@@ -130,9 +151,11 @@ class SettingsScreen extends StatelessWidget {
                 keyboardType: TextInputType.number,
                 textAlign: TextAlign.right,
                 decoration: const InputDecoration(border: InputBorder.none),
-                onSubmitted: (value) {
+                onChanged: (value) {
                   final days = int.tryParse(value);
-                  if (days != null) settings.setHistoryRetentionDays(days);
+                  if (days != null && days > 0) {
+                    settings.setHistoryRetentionDays(days);
+                  }
                 },
                 controller: TextEditingController(
                   text: '${settings.historyRetentionDays}',
