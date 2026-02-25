@@ -64,7 +64,7 @@ class HtmlLookupWrapper {
       } else {
         final highlighted = part.replaceAllMapped(queryRegExp, (m) {
           final matchedText = m.group(1)!;
-          return '<span style="background-color: $highlightColor; color: $textColor; border-radius: 2px; padding: 0 2px;">$matchedText</span>';
+          return '<mark>$matchedText</mark>';
         });
         buffer.write(highlighted);
       }
@@ -96,7 +96,7 @@ class HtmlLookupWrapper {
       } else {
         final underlined = part.replaceAllMapped(queryRegExp, (m) {
           final matchedText = m.group(0)!;
-          return '<span style="text-decoration: underline; text-decoration-color: $underlineColor; text-decoration-thickness: 2px;">$matchedText</span>';
+          return '<mark>$matchedText</mark>';
         });
         buffer.write(underlined);
       }

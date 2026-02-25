@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:hdict/core/database/database_helper.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
 import 'package:flutter_html/flutter_html.dart';
+import 'package:flutter/services.dart';
 import 'package:hdict/core/utils/html_lookup_wrapper.dart';
 import 'package:provider/provider.dart';
 import 'package:hdict/features/settings/settings_provider.dart';
@@ -22,28 +23,27 @@ class HomeScreen extends StatefulWidget {
   static List<Map<String, dynamic>> consolidateDefinitions(
       Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults) {
     final List<Map<String, dynamic>> consolidated = [];
-    groupedResults.forEach((dictId, wordMap) {
+    groupedResults.forEach((dictId, uniqueKeyMap) {
       String? dictName;
-      final buffer = StringBuffer();
-      bool firstEntry = true;
+      final List<String> definitionsList = [];
 
-      wordMap.forEach((headword, entries) {
-        for (final r in entries) {
-          dictName ??= r['dict_name'] as String;
-          if (!firstEntry) {
-            buffer.writeln('<hr style="border: 0; border-top: 2px solid #bbb; margin: 24px 0;">');
-          }
-          firstEntry = false;
-          buffer.writeln('<div class="headword" style="font-size:1.3em;font-weight:bold;margin-bottom:8px;">$headword</div>');
-          buffer.writeln(normalizeWhitespace(r['definition'] as String));
-        }
+      uniqueKeyMap.forEach((uniqueKey, entries) {
+        if (entries.isEmpty) return;
+        dictName ??= entries.first['dict_name'] as String;
+        
+        final headwords = entries.map((e) => e['word'] as String).toSet().toList();
+        final headwordStr = headwords.join(' | ');
+
+        final buffer = StringBuffer();
+        buffer.writeln('<div class="headword" style="font-size:1.3em;font-weight:bold;margin-bottom:8px;">$headwordStr</div>');
+        buffer.writeln(normalizeWhitespace(entries.first['definition'] as String));
+        definitionsList.add(buffer.toString());
       });
 
       consolidated.add({
-        'word': wordMap.keys.join(' | '),
         'dict_id': dictId,
         'dict_name': dictName ?? '',
-        'definition': buffer.toString(),
+        'definitions': definitionsList,
       });
     });
     return consolidated;
@@ -114,7 +114,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       final Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults = {};
       for (final result in results) {
         final dictId = result['dict_id'] as int;
-        final wordValue = result['word'] as String;
         final dict = await _dbHelper.getDictionaryById(dictId);
         if (dict != null && dict['is_enabled'] == 1) {
           String dictPath = await _dbHelper.resolvePath(dict['path']);
@@ -128,10 +127,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             result['length'],
           );
 
-          groupedResults.putIfAbsent(dictId, () => {});
-          groupedResults[dictId]!.putIfAbsent(wordValue, () => []);
+          final String uniqueKey = '${result['offset']}_${result['length']}';
 
-          groupedResults[dictId]![wordValue]!.add({
+          groupedResults.putIfAbsent(dictId, () => {});
+          groupedResults[dictId]!.putIfAbsent(uniqueKey, () => []);
+
+          groupedResults[dictId]![uniqueKey]!.add({
             ...result,
             'dict_name': dict['name'],
             'definition': content,
@@ -401,88 +402,134 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildDefinitionContent(ThemeData theme, Map<String, dynamic> def,
+  Widget _buildDefinitionContent(ThemeData theme, Map<String, dynamic> defMap,
       {String? highlightHeadword, String? highlightDefinition}) {
     final settings = context.watch<SettingsProvider>();
-    String definitionHtml = def['definition'];
-    definitionHtml = HomeScreen.normalizeWhitespace(definitionHtml);
-    if (settings.isTapOnMeaningEnabled) {
-      definitionHtml = HtmlLookupWrapper.wrapWords(definitionHtml);
-    }
-
+    final List<String> rawDefinitions = defMap['definitions'];
+    
     final isDark =
         ThemeData.estimateBrightnessForColor(settings.backgroundColor) ==
             Brightness.dark;
     final highlightCol = isDark ? '#ff9900' : '#ffeb3b';
 
-    if (highlightHeadword != null && highlightHeadword.isNotEmpty) {
-      definitionHtml = HtmlLookupWrapper.highlightText(
-        definitionHtml,
-        highlightHeadword,
-        highlightColor: highlightCol,
-        textColor: 'black',
-      );
-    }
-
-    if (highlightDefinition != null && highlightDefinition.isNotEmpty) {
-      definitionHtml = HtmlLookupWrapper.underlineText(
-        definitionHtml,
-        highlightDefinition,
-        underlineColor: highlightCol,
-      );
-    }
-
     return Container(
       color: settings.backgroundColor,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Html(
-              data: definitionHtml,
-              style: {
-                "body": Style(fontSize: FontSize(settings.fontSize), lineHeight: LineHeight.em(1.5), margin: Margins.zero, padding: HtmlPaddings.zero, color: settings.textColor, fontFamily: settings.fontFamily),
-                "a": Style(color: theme.colorScheme.primary, textDecoration: TextDecoration.underline),
-                ".dict-word": Style(color: settings.textColor, textDecoration: TextDecoration.none),
-                ".headword": Style(color: settings.headwordColor, fontWeight: FontWeight.bold),
-                ".headword a": Style(color: settings.headwordColor, textDecoration: TextDecoration.none),
-                ".headword .dict-word": Style(color: settings.headwordColor, textDecoration: TextDecoration.none),
-              },
-              onLinkTap: (url, attributes, element) async {
-                if (url != null) {
-                  if (url.startsWith('http://') || url.startsWith('https://')) {
-                    final uri = Uri.parse(url);
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri, mode: LaunchMode.externalApplication);
-                    }
-                  } else {
-                    String wordToLookup = url;
-                    if (wordToLookup.startsWith('look_up:')) {
-                      wordToLookup = wordToLookup.substring(8);
-                    } else if (wordToLookup.startsWith('bword://')) {
-                      wordToLookup = wordToLookup.substring(8);
-                    }
-                    try {
-                      final word = wordToLookup.contains('%') ? Uri.decodeComponent(wordToLookup) : wordToLookup;
-                      _showWordPopup(word);
-                    } catch (e) {
-                      _showWordPopup(wordToLookup);
-                    }
-                  }
-                }
+      child: Column(
+        children: [
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              icon: const Icon(Icons.copy_all, size: 18),
+              label: const Text('Copy All'),
+              onPressed: () {
+                final allText = rawDefinitions.map((d) => d.replaceAll(RegExp(r'<[^>]*>', multiLine: true, caseSensitive: true), '')).join('\n\n');
+                Clipboard.setData(ClipboardData(text: allText));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Copied all definitions to clipboard'), duration: Duration(seconds: 2)),
+                );
               },
             ),
-            if (settings.isTapOnMeaningEnabled)
-              const Padding(
-                padding: EdgeInsets.only(top: 24.0),
-                child: Text('Tap on words/links to look them up.', style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey, fontSize: 12)),
-              ),
-          ],
-        ),
+          ),
+          Expanded(
+            child: ListView.separated(
+              padding: const EdgeInsets.only(left: 20, right: 20, bottom: 20),
+              itemCount: rawDefinitions.length,
+              separatorBuilder: (context, index) => const Divider(height: 32, thickness: 2),
+              itemBuilder: (context, index) {
+                String definitionHtml = rawDefinitions[index];
+                definitionHtml = HomeScreen.normalizeWhitespace(definitionHtml);
+                if (settings.isTapOnMeaningEnabled) {
+                  definitionHtml = HtmlLookupWrapper.wrapWords(definitionHtml);
+                }
+
+                if (highlightHeadword != null && highlightHeadword.isNotEmpty) {
+                  definitionHtml = HtmlLookupWrapper.highlightText(
+                    definitionHtml,
+                    highlightHeadword,
+                    highlightColor: highlightCol,
+                    textColor: 'black',
+                  );
+                }
+
+                if (highlightDefinition != null && highlightDefinition.isNotEmpty) {
+                  definitionHtml = HtmlLookupWrapper.underlineText(
+                    definitionHtml,
+                    highlightDefinition,
+                    underlineColor: highlightCol,
+                  );
+                }
+
+                return Stack(
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Html(
+                          data: definitionHtml,
+                          style: {
+                            "body": Style(fontSize: FontSize(settings.fontSize), lineHeight: LineHeight.em(1.5), margin: Margins.zero, padding: HtmlPaddings.zero, color: settings.textColor, fontFamily: settings.fontFamily),
+                            "a": Style(color: theme.colorScheme.primary, textDecoration: TextDecoration.underline),
+                            "mark": Style(backgroundColor: Color(int.parse(highlightCol.replaceFirst('#', '0xFF'))), color: Colors.black),
+                            ".dict-word": Style(color: settings.textColor, textDecoration: TextDecoration.none),
+                            ".headword": Style(color: settings.headwordColor, fontWeight: FontWeight.bold),
+                            ".headword a": Style(color: settings.headwordColor, textDecoration: TextDecoration.none),
+                            ".headword .dict-word": Style(color: settings.headwordColor, textDecoration: TextDecoration.none),
+                          },
+                          onLinkTap: (url, attributes, element) async {
+                            if (url != null) {
+                              if (url.startsWith('http://') || url.startsWith('https://')) {
+                                final uri = Uri.parse(url);
+                                if (await canLaunchUrl(uri)) {
+                                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                }
+                              } else {
+                                String wordToLookup = url;
+                                if (wordToLookup.startsWith('look_up:')) {
+                                  wordToLookup = wordToLookup.substring(8);
+                                } else if (wordToLookup.startsWith('bword://')) {
+                                  wordToLookup = wordToLookup.substring(8);
+                                }
+                                try {
+                                  final word = wordToLookup.contains('%') ? Uri.decodeComponent(wordToLookup) : wordToLookup;
+                                  _showWordPopup(word);
+                                } catch (e) {
+                                  _showWordPopup(wordToLookup);
+                                }
+                              }
+                            }
+                          },
+                        ),
+                        if (index == rawDefinitions.length - 1 && settings.isTapOnMeaningEnabled)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 24.0),
+                            child: Text('Tap on words/links to look them up.', style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey, fontSize: 12)),
+                          ),
+                      ],
+                    ),
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: IconButton(
+                        icon: const Icon(Icons.copy, size: 20),
+                        color: Colors.grey,
+                        tooltip: 'Copy this definition',
+                        onPressed: () {
+                          final plainText = rawDefinitions[index].replaceAll(RegExp(r'<[^>]*>', multiLine: true, caseSensitive: true), '');
+                          Clipboard.setData(ClipboardData(text: plainText));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Copied definition to clipboard'), duration: Duration(seconds: 2)),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
-
   }
 
   void _showWordPopup(String word) async {

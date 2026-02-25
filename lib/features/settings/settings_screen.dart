@@ -29,7 +29,8 @@ class SettingsScreen extends StatelessWidget {
             subtitle: const Text('Setting it to higher number may slow down the result loading'),
             trailing: SizedBox(
               width: 80,
-              child: TextField(
+              child: TextFormField(
+                initialValue: '${settings.searchResultLimit}',
                 keyboardType: TextInputType.number,
                 textAlign: TextAlign.right,
                 decoration: const InputDecoration(border: InputBorder.none),
@@ -39,9 +40,6 @@ class SettingsScreen extends StatelessWidget {
                     settings.setSearchResultLimit(limit);
                   }
                 },
-                controller: TextEditingController(
-                  text: '${settings.searchResultLimit}',
-                ),
               ),
             ),
           ),
@@ -147,7 +145,8 @@ class SettingsScreen extends StatelessWidget {
             ),
             trailing: SizedBox(
               width: 80,
-              child: TextField(
+              child: TextFormField(
+                initialValue: '${settings.historyRetentionDays}',
                 keyboardType: TextInputType.number,
                 textAlign: TextAlign.right,
                 decoration: const InputDecoration(border: InputBorder.none),
@@ -157,9 +156,6 @@ class SettingsScreen extends StatelessWidget {
                     settings.setHistoryRetentionDays(days);
                   }
                 },
-                controller: TextEditingController(
-                  text: '${settings.historyRetentionDays}',
-                ),
               ),
             ),
           ),
