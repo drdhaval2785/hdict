@@ -73,6 +73,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   String _lastDefinitionQuery = '';
   TabController? _tabController;
 
+  int _searchSqliteMs = 0;
+  int _searchOtherMs = 0;
+  int _searchTotalMs = 0;
+  int _searchResultCount = 0;
+
   @override
   void dispose() {
     _headwordController.dispose();
@@ -98,10 +103,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _lastHeadwordQuery = headword;
       _lastDefinitionQuery = definition;
       _currentDefinitions = [];
+      _searchSqliteMs = 0;
+      _searchOtherMs = 0;
+      _searchTotalMs = 0;
+      _searchResultCount = 0;
     });
 
     try {
       final settings = context.read<SettingsProvider>();
+      final totalWatch = Stopwatch()..start();
+      final sqliteWatch = Stopwatch()..start();
       
       List<Map<String, dynamic>> results = await _dbHelper.searchWords(
         headwordQuery: headword.isNotEmpty ? headword : null,
@@ -111,11 +122,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         limit: settings.searchResultLimit,
       );
 
+      sqliteWatch.stop();
+      final sqliteMs = sqliteWatch.elapsedMilliseconds;
+
       final Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults = {};
+      int resultCount = 0;
       for (final result in results) {
         final dictId = result['dict_id'] as int;
         final dict = await _dbHelper.getDictionaryById(dictId);
         if (dict != null && dict['is_enabled'] == 1) {
+          resultCount++;
           String dictPath = await _dbHelper.resolvePath(dict['path']);
           if (dictPath.endsWith('.ifo')) {
             dictPath = dictPath.replaceAll('.ifo', '.dict');
@@ -141,9 +157,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       }
 
       final consolidatedDefs = HomeScreen.consolidateDefinitions(groupedResults);
+      
+      totalWatch.stop();
 
       setState(() {
         _currentDefinitions = consolidatedDefs;
+        _searchResultCount = resultCount;
+        _searchSqliteMs = sqliteMs;
+        _searchTotalMs = totalWatch.elapsedMilliseconds;
+        _searchOtherMs = _searchTotalMs - _searchSqliteMs;
         _tabController?.dispose();
         if (consolidatedDefs.isNotEmpty) {
           _tabController = TabController(
@@ -433,9 +455,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           Expanded(
             child: ListView.separated(
               padding: const EdgeInsets.only(left: 20, right: 20, bottom: 20),
-              itemCount: rawDefinitions.length,
-              separatorBuilder: (context, index) => const Divider(height: 32, thickness: 2),
+              itemCount: rawDefinitions.length + 1,
+              separatorBuilder: (context, index) {
+                if (index == rawDefinitions.length - 1) {
+                  return const Divider(height: 48, thickness: 1, color: Colors.transparent);
+                }
+                return const Divider(height: 32, thickness: 2);
+              },
               itemBuilder: (context, index) {
+                if (index == rawDefinitions.length) {
+                  return Text(
+                    'Showed $_searchResultCount results in $_searchTotalMs ms.\n'
+                    'Sqlite query took $_searchSqliteMs ms.\n'
+                    'Other work took $_searchOtherMs ms.',
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                    textAlign: TextAlign.center,
+                  );
+                }
                 String definitionHtml = rawDefinitions[index];
                 definitionHtml = HomeScreen.normalizeWhitespace(definitionHtml);
                 if (settings.isTapOnMeaningEnabled) {
