@@ -187,7 +187,6 @@ class _DictionaryManagementScreenState
         // New formats
         'mdx',
         'mdd',
-        'slob',
         'index',
       ],
       uniformTypeIdentifiers: [
@@ -301,7 +300,7 @@ class _DictionaryManagementScreenState
           final singleFile = files.single;
           final lowerName = singleFile.name.toLowerCase();
 
-          if (lowerName.endsWith('.mdx') || lowerName.endsWith('.slob')) {
+          if (lowerName.endsWith('.mdx')) {
             // These are self-contained — use multi-file stream which handles detection
             if (kIsWeb) {
               stream = _dictionaryManager.importMultipleFilesWebStream(

@@ -6,7 +6,6 @@ import 'package:hdict/core/parser/idx_parser.dart';
 import 'package:hdict/core/parser/syn_parser.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
 import 'package:hdict/core/parser/dictd_parser.dart';
-import 'package:hdict/core/parser/slob_reader.dart';
 import 'package:hdict/core/utils/html_lookup_wrapper.dart';
 import 'package:path/path.dart' as p;
 
@@ -202,28 +201,6 @@ author=Tester
     });
   });
 
-  // ── SlobReader Tests ────────────────────────────────────────────────────────
-
-  group('SlobReader Tests', () {
-    late Directory tempDir;
-
-    setUp(() async {
-      tempDir = await Directory.systemTemp.createTemp('hdict_slob_test_');
-    });
-
-    tearDown(() async {
-      await tempDir.delete(recursive: true);
-    });
-
-    test('SlobReader throws on invalid magic bytes', () async {
-      final slobPath = p.join(tempDir.path, 'invalid.slob');
-      // Write garbage bytes — not a valid slob file
-      await File(slobPath).writeAsBytes(List.filled(64, 0));
-
-      final reader = SlobReader(slobPath);
-      expect(() async => await reader.open(), throwsException);
-    });
-  });
 
   // ── HtmlLookupWrapper Tests ─────────────────────────────────────────────────
 

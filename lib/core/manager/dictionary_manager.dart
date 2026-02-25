@@ -15,7 +15,6 @@ import 'package:hdict/core/parser/syn_parser.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
 import 'package:hdict/core/parser/mdict_reader.dart';
 import 'package:hdict/core/parser/dictd_parser.dart';
-import 'package:hdict/core/parser/slob_reader.dart';
 
 // Top-level functions for compute
 List<int> _decompressGzip(List<int> bytes) {
@@ -289,8 +288,6 @@ Future<List<Map<String, String?>>> _discoverDictionariesInDir(String directoryPa
       discovered.add({'path': entity.path, 'format': 'stardict'});
     } else if (lowerPath.endsWith('.mdx')) {
       discovered.add({'path': entity.path, 'format': 'mdict'});
-    } else if (lowerPath.endsWith('.slob')) {
-      discovered.add({'path': entity.path, 'format': 'slob'});
     } else if (lowerPath.endsWith('.index')) {
       final base = p.withoutExtension(entity.path);
       final dictPath = ['$base.dict.dz', '$base.dict']
@@ -473,9 +470,6 @@ class DictionaryManager {
               indexDefinitions: indexDefinitions,
             );
             break;
-          case 'slob':
-            subStream = importSlobStream(primaryPath, indexDefinitions: indexDefinitions);
-            break;
           case 'dictd':
             if (companionPath == null) throw Exception('DICTD .dict file missing');
             subStream = importDictdStream(primaryPath, companionPath, indexDefinitions: indexDefinitions);
@@ -576,8 +570,6 @@ class DictionaryManager {
       } else if (lowerName.endsWith('.mdx')) {
         // TODO: implement importMdictWebStream if possible
         throw Exception('MDict (.mdx) import on Web is not yet implemented.');
-      } else if (lowerName.endsWith('.slob')) {
-        throw Exception('Slob (.slob) import is not supported on Web.');
       } else {
         throw Exception('Unsupported dictionary or archive format.');
       }
@@ -613,7 +605,7 @@ class DictionaryManager {
       final discoveredRaw = await _discoverDictionariesInDir(workspaceDir.path);
       if (discoveredRaw.isEmpty) {
         throw Exception(
-            'No valid dictionary files found. Supported formats: StarDict (.ifo), MDict (.mdx), Slob (.slob), DICTD (.index+.dict)');
+            'No valid dictionary files found. Supported formats: StarDict (.ifo), MDict (.mdx), DICTD (.index+.dict)');
       }
 
       int totalDicts = discoveredRaw.length;
@@ -641,9 +633,6 @@ class DictionaryManager {
               mddPath: File(mddPath).existsSync() ? mddPath : null,
               indexDefinitions: indexDefinitions,
             );
-            break;
-          case 'slob':
-            subStream = importSlobStream(primaryPath, indexDefinitions: indexDefinitions);
             break;
           case 'dictd':
             if (companionPath == null) throw Exception('DICTD .dict file missing');
@@ -1346,121 +1335,6 @@ class DictionaryManager {
     }
   }
 
-  // ── Slob Import ─────────────────────────────────────────────────────────────
-
-  /// Imports a Slob (.slob) dictionary file.
-  Stream<ImportProgress> importSlobStream(
-    String slobPath, {
-    bool indexDefinitions = false,
-  }) async* {
-    if (kIsWeb) {
-      yield ImportProgress(
-        message: 'Error: Slob import is not supported on Web.',
-        value: 0.0, error: 'Web unsupported', isCompleted: true,
-      );
-      return;
-    }
-
-    yield ImportProgress(message: 'Opening Slob file...', value: 0.05);
-
-    try {
-      final reader = SlobReader(slobPath);
-      await reader.open();
-
-      final bookName = p.basenameWithoutExtension(slobPath);
-
-      yield ImportProgress(message: 'Copying to permanent storage...', value: 0.15);
-
-      final appDocDir = await getApplicationDocumentsDirectory();
-      final dictsDir = Directory(p.join(appDocDir.path, 'dictionaries'));
-      if (!await dictsDir.exists()) await dictsDir.create(recursive: true);
-
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final permanentDir = Directory(p.join(dictsDir.path, 'slob_$timestamp'));
-      await permanentDir.create(recursive: true);
-
-      final finalSlobPath = p.join(permanentDir.path, p.basename(slobPath));
-      await File(slobPath).copy(finalSlobPath);
-
-      await reader.close();
-
-      yield ImportProgress(message: 'Registering dictionary...', value: 0.3);
-      final dictId = await _dbHelper.insertDictionary(
-        bookName,
-        finalSlobPath,
-        indexDefinitions: indexDefinitions,
-        format: 'slob',
-      );
-
-      yield ImportProgress(message: 'Indexing Slob entries...', value: 0.4);
-
-      // Re-open permanent copy for indexing
-      final permanentReader = SlobReader(finalSlobPath);
-      await permanentReader.open();
-
-      List<Map<String, dynamic>> batch = [];
-      int headwordCount = 0;
-      int defWordCount = 0;
-
-      await for (final ref in permanentReader.getAllRefs()) {
-        final word = ref['word'] as String;
-        final binIndex = ref['bin_index'] as int;
-        final itemIndex = ref['item_index'] as int;
-
-        // Encode bin_index and item_index into offset and length fields
-        // offset = binIndex, length = itemIndex (both are ints and fit fine)
-        String content = '';
-        if (indexDefinitions) {
-          content = await permanentReader.readItem(binIndex, itemIndex) ?? '';
-        }
-
-        batch.add({
-          'word': word,
-          'content': content,
-          'dict_id': dictId,
-          'offset': binIndex,   // repurposed: bin index within slob
-          'length': itemIndex,  // repurposed: item index within bin
-        });
-        headwordCount++;
-
-        if (content.isNotEmpty) {
-          defWordCount += content.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
-        }
-
-        if (batch.length >= 2000) {
-          await _dbHelper.batchInsertWords(dictId, batch);
-          batch.clear();
-          yield ImportProgress(
-            message: 'Indexing $headwordCount entries...',
-            value: 0.4 + (headwordCount / 100000).clamp(0.0, 0.5),
-            headwordCount: headwordCount,
-          );
-        }
-      }
-
-      if (batch.isNotEmpty) await _dbHelper.batchInsertWords(dictId, batch);
-      await permanentReader.close();
-      await _dbHelper.updateDictionaryWordCount(dictId, headwordCount);
-
-      final sampleWords = await _dbHelper.getSampleWords(dictId);
-
-      yield ImportProgress(
-        message: 'Slob import complete!',
-        value: 1.0,
-        isCompleted: true,
-        dictId: dictId,
-        sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
-        headwordCount: headwordCount,
-        definitionWordCount: defWordCount,
-      );
-    } catch (e, s) {
-      debugPrint('Slob import error: $e\n$s');
-      yield ImportProgress(
-        message: 'Slob import error: $e',
-        value: 0.0, error: e.toString(), isCompleted: true,
-      );
-    }
-  }
 
   // ── Definition Lookup Dispatch ──────────────────────────────────────────────
 
@@ -1493,15 +1367,6 @@ class DictionaryManager {
       case 'dictd':
         final reader = DictdReader(dictPath);
         return await reader.readEntry(offset, length);
-
-      case 'slob':
-        final reader = SlobReader(dictPath);
-        try {
-          await reader.open();
-          return await reader.readItem(offset, length); // offset=binIndex, length=itemIndex
-        } finally {
-          await reader.close();
-        }
 
       case 'stardict':
       default:
@@ -1613,7 +1478,7 @@ class DictionaryManager {
     final lower = name.toLowerCase();
     final recognized = [
       '.zip', '.tar.gz', '.tgz', '.tar.bz2', '.tbz2', '.tar.xz', '.tar', // Archives
-      '.slob', '.mdx', '.mdd',                                         // Dictionary formats
+      '.mdx', '.mdd',                                         // Dictionary formats
       '.ifo', '.ifo.gz', '.ifo.dz', '.ifo.bz2', '.ifo.xz',             // StarDict
       '.idx', '.idx.gz', '.idx.dz', '.idx.bz2', '.idx.xz',
       '.dict', '.dict.dz', '.dict.gz', '.dict.bz2', '.dict.xz',
