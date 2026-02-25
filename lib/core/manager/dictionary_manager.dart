@@ -274,23 +274,46 @@ Future<void> _importEntry(_ImportArgs args) async {
     await _extractToWorkspace(archivePath, tempDirPath);
 
     sendPort.send(
-      ImportProgress(message: 'Locating .ifo file...', value: 0.45),
+      ImportProgress(message: 'Locating dictionary files...', value: 0.45),
     );
-    File? ifoFile;
+    String? primaryPath;
+    String? format;
+
     await for (final entity in Directory(tempDirPath).list(recursive: true)) {
-      if (entity is File &&
-          (entity.path.endsWith('.ifo') ||
-              entity.path.endsWith('.ifo.gz') ||
-              entity.path.endsWith('.ifo.dz') ||
-              entity.path.endsWith('.ifo.bz2') ||
-              entity.path.endsWith('.ifo.xz'))) {
-        ifoFile = entity;
+      if (entity is! File) continue;
+
+      final lowerPath = entity.path.toLowerCase();
+      if (lowerPath.endsWith('.ifo') ||
+          lowerPath.endsWith('.ifo.gz') ||
+          lowerPath.endsWith('.ifo.dz') ||
+          lowerPath.endsWith('.ifo.bz2') ||
+          lowerPath.endsWith('.ifo.xz')) {
+        primaryPath = entity.path;
+        format = 'stardict';
         break;
+      } else if (lowerPath.endsWith('.mdx')) {
+        primaryPath = entity.path;
+        format = 'mdict';
+        break;
+      } else if (lowerPath.endsWith('.slob')) {
+        primaryPath = entity.path;
+        format = 'slob';
+        break;
+      } else if (lowerPath.endsWith('.index')) {
+        // DICTD index
+        final base = p.withoutExtension(entity.path);
+        final dictPath = ['${base}.dict.dz', '${base}.dict']
+            .firstWhere((dp) => File(dp).existsSync(), orElse: () => '');
+        if (dictPath.isNotEmpty) {
+          primaryPath = entity.path;
+          format = 'dictd';
+          break;
+        }
       }
     }
 
-    if (ifoFile == null) {
-      throw Exception('No .ifo file found in archive');
+    if (primaryPath == null) {
+      throw Exception('No valid dictionary files found in archive.');
     }
 
     sendPort.send(
@@ -298,7 +321,8 @@ Future<void> _importEntry(_ImportArgs args) async {
         message: 'Extraction complete.',
         value: 0.5,
         isCompleted: true,
-        ifoPath: ifoFile.path,
+        ifoPath: primaryPath, // using ifoPath as general primary path
+        error: format, // abusing error field to pass format back, or better, use a custom message
       ),
     );
   } catch (e, s) {
@@ -380,28 +404,57 @@ class DictionaryManager {
         ),
       );
 
-      String? ifoPathFromIsolate;
+      String? primaryPathFromIsolate;
+      String? formatFromIsolate;
 
       await for (final message in receivePort) {
         if (message is ImportProgress) {
           yield message;
 
           if (message.isCompleted) {
-            if (message.error != null) {
+            if (message.error != null && message.ifoPath == null) {
+              // This is a real error
               throw Exception(message.error);
             } else if (message.ifoPath != null) {
-              ifoPathFromIsolate = message.ifoPath;
+              primaryPathFromIsolate = message.ifoPath;
+              formatFromIsolate = message.error; // We passed format in error field
               break;
             }
           }
         }
       }
 
-      if (ifoPathFromIsolate == null) {
-        throw Exception('Extraction completed but no .ifo file path received.');
+      if (primaryPathFromIsolate == null) {
+        throw Exception('Extraction completed but no dictionary path received.');
       }
 
-      yield* _processDictionaryFiles(ifoPathFromIsolate, indexDefinitions: indexDefinitions);
+      final format = formatFromIsolate ?? 'stardict';
+      switch (format) {
+        case 'mdict':
+          final mddPath = p.join(p.dirname(primaryPathFromIsolate), '${p.basenameWithoutExtension(primaryPathFromIsolate)}.mdd');
+          yield* importMdictStream(
+            primaryPathFromIsolate,
+            mddPath: File(mddPath).existsSync() ? mddPath : null,
+            indexDefinitions: indexDefinitions,
+          );
+          break;
+        case 'slob':
+          yield* importSlobStream(primaryPathFromIsolate, indexDefinitions: indexDefinitions);
+          break;
+        case 'dictd':
+          // For DICTD, we need the companion .dict path. 
+          // Re-scanning briefly in the temp dir
+          final base = p.withoutExtension(primaryPathFromIsolate);
+          final dictPath = ['${base}.dict.dz', '${base}.dict']
+              .firstWhere((dp) => File(dp).existsSync(), orElse: () => '');
+          if (dictPath.isEmpty) throw Exception('DICTD .dict file missing after extraction');
+          yield* importDictdStream(primaryPathFromIsolate, dictPath, indexDefinitions: indexDefinitions);
+          break;
+        case 'stardict':
+        default:
+          yield* _processDictionaryFiles(primaryPathFromIsolate, indexDefinitions: indexDefinitions);
+          break;
+      }
     } catch (e, s) {
       debugPrint('Error in importDictionaryStream: $e\n$s');
       yield ImportProgress(
@@ -483,131 +536,86 @@ class DictionaryManager {
         processedFiles++;
       }
 
-      // ── Detect and dispatch new formats ────────────────────────────────────
-      // 1. MDict: any .mdx file in filePaths (may be alongside .mdd)
-      final mdxPaths = filePaths.where((p_) => p_.toLowerCase().endsWith('.mdx')).toList();
-      if (mdxPaths.isNotEmpty) {
-        int current = 0;
-        for (final mdxPath in mdxPaths) {
-          current++;
-          yield ImportProgress(
-            message: 'Importing MDict $current/${mdxPaths.length}: ${p.basenameWithoutExtension(mdxPath)}',
-            value: 0.45 + (current - 1) / mdxPaths.length * 0.5,
-          );
-          final stream = importMdictStream(mdxPath, indexDefinitions: indexDefinitions);
-          await for (final progress in stream) {
-            yield ImportProgress(
-              message: '[MDict $current/${mdxPaths.length}] ${progress.message}',
-              value: 0.45 + ((current - 1) + progress.value) / mdxPaths.length * 0.5,
-              headwordCount: progress.headwordCount,
-              isCompleted: progress.isCompleted && current == mdxPaths.length,
-              dictId: progress.dictId,
-              sampleWords: progress.sampleWords,
-              error: progress.error,
-            );
-            if (progress.isCompleted) break;
-          }
-        }
-        return;
-      }
-
-      // 2. Slob: any .slob file
-      final slobPaths = filePaths.where((p_) => p_.toLowerCase().endsWith('.slob')).toList();
-      if (slobPaths.isNotEmpty) {
-        int current = 0;
-        for (final slobPath in slobPaths) {
-          current++;
-          yield ImportProgress(
-            message: 'Importing Slob $current/${slobPaths.length}: ${p.basenameWithoutExtension(slobPath)}',
-            value: 0.45 + (current - 1) / slobPaths.length * 0.5,
-          );
-          final stream = importSlobStream(slobPath, indexDefinitions: indexDefinitions);
-          await for (final progress in stream) {
-            yield ImportProgress(
-              message: '[Slob $current/${slobPaths.length}] ${progress.message}',
-              value: 0.45 + ((current - 1) + progress.value) / slobPaths.length * 0.5,
-              headwordCount: progress.headwordCount,
-              isCompleted: progress.isCompleted && current == slobPaths.length,
-              dictId: progress.dictId,
-              sampleWords: progress.sampleWords,
-              error: progress.error,
-            );
-            if (progress.isCompleted) break;
-          }
-        }
-        return;
-      }
-
-      // 3. DICTD: .index file present alongside a .dict or .dict.dz
-      final indexFilePaths = filePaths.where((p_) => p_.toLowerCase().endsWith('.index')).toList();
-      if (indexFilePaths.isNotEmpty) {
-        int current = 0;
-        for (final indexPath in indexFilePaths) {
-          current++;
-          // Find the companion .dict or .dict.dz
-          final base = p.withoutExtension(indexPath); // strips .index
-          final dictPath = [base + '.dict.dz', base + '.dict']
-              .firstWhere((dp) => File(dp).existsSync(), orElse: () => '');
-          if (dictPath.isEmpty) {
-            yield ImportProgress(message: 'No .dict file found for $indexPath', value: 0.0, error: 'Missing .dict', isCompleted: true);
-            continue;
-          }
-          final stream = importDictdStream(indexPath, dictPath, indexDefinitions: indexDefinitions);
-          await for (final progress in stream) {
-            yield ImportProgress(
-              message: '[DICTD $current/${indexFilePaths.length}] ${progress.message}',
-              value: 0.45 + ((current - 1) + progress.value) / indexFilePaths.length * 0.5,
-              headwordCount: progress.headwordCount,
-              isCompleted: progress.isCompleted && current == indexFilePaths.length,
-              dictId: progress.dictId,
-              sampleWords: progress.sampleWords,
-              error: progress.error,
-            );
-            if (progress.isCompleted) break;
-          }
-        }
-        return;
-      }
-
-      // ── Fallback: StarDict format (.ifo) ───────────────────────────────────
+      // ── Scan workspace for all supported formats ───────────────────────────
       yield ImportProgress(message: 'Scanning for dictionaries...', value: 0.45);
-      final ifoFiles = <File>[];
+
+      final List<({String path, String format, String? companionPath})> discovered = [];
+
       await for (final entity in workspaceDir.list(recursive: true)) {
-        if (entity is File &&
-            (entity.path.endsWith('.ifo') ||
-                entity.path.endsWith('.ifo.gz') ||
-                entity.path.endsWith('.ifo.dz') ||
-                entity.path.endsWith('.ifo.bz2') ||
-                entity.path.endsWith('.ifo.xz'))) {
-          ifoFiles.add(entity);
+        if (entity is! File) continue;
+
+        final lowerPath = entity.path.toLowerCase();
+        if (lowerPath.endsWith('.ifo') ||
+            lowerPath.endsWith('.ifo.gz') ||
+            lowerPath.endsWith('.ifo.dz') ||
+            lowerPath.endsWith('.ifo.bz2') ||
+            lowerPath.endsWith('.ifo.xz')) {
+          discovered.add((path: entity.path, format: 'stardict', companionPath: null));
+        } else if (lowerPath.endsWith('.mdx')) {
+          discovered.add((path: entity.path, format: 'mdict', companionPath: null));
+        } else if (lowerPath.endsWith('.slob')) {
+          discovered.add((path: entity.path, format: 'slob', companionPath: null));
+        } else if (lowerPath.endsWith('.index')) {
+          // Find companion .dict or .dict.dz
+          final base = p.withoutExtension(entity.path);
+          final dictPath = ['${base}.dict.dz', '${base}.dict']
+              .firstWhere((dp) => File(dp).existsSync(), orElse: () => '');
+          if (dictPath.isNotEmpty) {
+            discovered.add((path: entity.path, format: 'dictd', companionPath: dictPath));
+          }
         }
       }
 
-      if (ifoFiles.isEmpty) {
-        throw Exception('No valid dictionary files found. Supported direct imports: .ifo (StarDict), .mdx (MDict), .slob (Slob), .index+.dict (DICTD)');
+      if (discovered.isEmpty) {
+        throw Exception(
+            'No valid dictionary files found. Supported formats: StarDict (.ifo), MDict (.mdx), Slob (.slob), DICTD (.index+.dict)');
       }
 
-      int totalDicts = ifoFiles.length;
+      int totalDicts = discovered.length;
       int currentDict = 0;
 
-      for (final ifoFile in ifoFiles) {
+      for (final item in discovered) {
         currentDict++;
+        final name = p.basenameWithoutExtension(item.path);
         yield ImportProgress(
-          message: 'Importing dictionary $currentDict of $totalDicts: ${p.basenameWithoutExtension(ifoFile.path)}',
-          value: 0.5 + (currentDict - 1) / totalDicts * 0.5,
+          message: 'Importing dictionary $currentDict of $totalDicts: $name',
+          value: 0.45 + (currentDict - 1) / totalDicts * 0.55,
         );
 
-        try {
-          final stream = _processDictionaryFiles(ifoFile.path, indexDefinitions: indexDefinitions);
-          await for (final progress in stream) {
-            yield ImportProgress(
-              message: '[$currentDict/$totalDicts] ${progress.message}',
-              value: 0.5 + ((currentDict - 1) + (progress.value)) / totalDicts * 0.5,
+        Stream<ImportProgress> subStream;
+        switch (item.format) {
+          case 'mdict':
+            // Look for companion .mdd in the same folder as .mdx
+            final mddPath = p.join(p.dirname(item.path), '${p.basenameWithoutExtension(item.path)}.mdd');
+            subStream = importMdictStream(
+              item.path,
+              mddPath: File(mddPath).existsSync() ? mddPath : null,
+              indexDefinitions: indexDefinitions,
             );
-            if (progress.isCompleted) break;
-          }
-        } catch (e) {
-          debugPrint('Error importing ${ifoFile.path}: $e');
+            break;
+          case 'slob':
+            subStream = importSlobStream(item.path, indexDefinitions: indexDefinitions);
+            break;
+          case 'dictd':
+            subStream = importDictdStream(item.path, item.companionPath!, indexDefinitions: indexDefinitions);
+            break;
+          case 'stardict':
+          default:
+            subStream = _processDictionaryFiles(item.path, indexDefinitions: indexDefinitions);
+            break;
+        }
+
+        await for (final progress in subStream) {
+          yield ImportProgress(
+            message: '[$currentDict/$totalDicts] ${progress.message}',
+            value: 0.45 + ((currentDict - 1) + progress.value) / totalDicts * 0.55,
+            headwordCount: progress.headwordCount,
+            isCompleted: progress.isCompleted && currentDict == totalDicts,
+            dictId: progress.dictId,
+            sampleWords: progress.sampleWords,
+            error: progress.error,
+          );
+          if (progress.isCompleted) break;
         }
       }
 
@@ -1054,6 +1062,7 @@ class DictionaryManager {
   /// Imports a MDict (.mdx) file on native platforms.
   Stream<ImportProgress> importMdictStream(
     String mdxPath, {
+    String? mddPath,
     bool indexDefinitions = false,
   }) async* {
     if (kIsWeb) {
@@ -1087,9 +1096,10 @@ class DictionaryManager {
       await File(mdxPath).copy(finalMdxPath);
 
       // Also copy the companion .mdd file if it exists
-      final mddPath = mdxPath.replaceAll(RegExp(r'\.mdx$', caseSensitive: false), '.mdd');
-      if (await File(mddPath).exists()) {
-        await File(mddPath).copy(p.join(permanentDir.path, p.basename(mddPath)));
+      final mddSourcePath = mddPath ?? mdxPath.replaceAll(RegExp(r'\.mdx$', caseSensitive: false), '.mdd');
+      if (await File(mddSourcePath).exists()) {
+        final finalMddPath = p.join(permanentDir.path, p.basename(mddSourcePath));
+        await File(mddSourcePath).copy(finalMddPath);
       }
 
       await reader.close();
