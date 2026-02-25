@@ -232,7 +232,20 @@ Future<void> _extractToWorkspaceSync(_ExtractArgs args) async {
     } else if (lowerPath.endsWith('.tar.bz2') || lowerPath.endsWith('.tbz2')) {
       archive = TarDecoder().decodeBytes(BZip2Decoder().decodeBytes(bytes));
     } else if (lowerPath.endsWith('.tar.xz')) {
-      archive = TarDecoder().decodeBytes(XZDecoder().decodeBytes(bytes));
+      try {
+        archive = TarDecoder().decodeBytes(XZDecoder().decodeBytes(bytes));
+      } catch (e) {
+        if (Platform.isMacOS || Platform.isLinux) {
+          debugPrint('Dart archive package failed to extract .tar.xz ($e). Falling back to system tar.');
+          final result = Process.runSync('tar', ['-xf', filePath, '-C', workspacePath]);
+          if (result.exitCode != 0) {
+            throw Exception('Native tar extraction failed: ${result.stderr}');
+          }
+          return;
+        } else {
+          rethrow;
+        }
+      }
     } else {
       // Not an archive, just copy it
       final fileName = p.basename(filePath);
@@ -258,7 +271,43 @@ Future<void> _extractToWorkspaceSync(_ExtractArgs args) async {
   }
 }
 
-// Updated _importEntry to support extracting to a specific workspace
+/// Discovers all supported dictionary files in a directory recursively.
+Future<List<Map<String, String?>>> _discoverDictionariesInDir(String directoryPath) async {
+  final List<Map<String, String?>> discovered = [];
+  final dir = Directory(directoryPath);
+  if (!await dir.exists()) return discovered;
+
+  await for (final entity in dir.list(recursive: true)) {
+    if (entity is! File) continue;
+
+    final lowerPath = entity.path.toLowerCase();
+    if (lowerPath.endsWith('.ifo') ||
+        lowerPath.endsWith('.ifo.gz') ||
+        lowerPath.endsWith('.ifo.dz') ||
+        lowerPath.endsWith('.ifo.bz2') ||
+        lowerPath.endsWith('.ifo.xz')) {
+      discovered.add({'path': entity.path, 'format': 'stardict'});
+    } else if (lowerPath.endsWith('.mdx')) {
+      discovered.add({'path': entity.path, 'format': 'mdict'});
+    } else if (lowerPath.endsWith('.slob')) {
+      discovered.add({'path': entity.path, 'format': 'slob'});
+    } else if (lowerPath.endsWith('.index')) {
+      final base = p.withoutExtension(entity.path);
+      final dictPath = ['$base.dict.dz', '$base.dict']
+          .firstWhere((dp) => File(dp).existsSync(), orElse: () => '');
+      if (dictPath.isNotEmpty) {
+        discovered.add({
+          'path': entity.path,
+          'format': 'dictd',
+          'companionPath': dictPath,
+        });
+      }
+    }
+  }
+  return discovered;
+}
+
+// Updated _importEntry to support extracting to a specific workspace and discovering multiple files
 Future<void> _extractToWorkspace(String filePath, String workspacePath) async {
   await compute(_extractToWorkspaceSync, _ExtractArgs(filePath, workspacePath));
 }
@@ -276,43 +325,10 @@ Future<void> _importEntry(_ImportArgs args) async {
     sendPort.send(
       ImportProgress(message: 'Locating dictionary files...', value: 0.45),
     );
-    String? primaryPath;
-    String? format;
+    
+    final discovered = await _discoverDictionariesInDir(tempDirPath);
 
-    await for (final entity in Directory(tempDirPath).list(recursive: true)) {
-      if (entity is! File) continue;
-
-      final lowerPath = entity.path.toLowerCase();
-      if (lowerPath.endsWith('.ifo') ||
-          lowerPath.endsWith('.ifo.gz') ||
-          lowerPath.endsWith('.ifo.dz') ||
-          lowerPath.endsWith('.ifo.bz2') ||
-          lowerPath.endsWith('.ifo.xz')) {
-        primaryPath = entity.path;
-        format = 'stardict';
-        break;
-      } else if (lowerPath.endsWith('.mdx')) {
-        primaryPath = entity.path;
-        format = 'mdict';
-        break;
-      } else if (lowerPath.endsWith('.slob')) {
-        primaryPath = entity.path;
-        format = 'slob';
-        break;
-      } else if (lowerPath.endsWith('.index')) {
-        // DICTD index
-        final base = p.withoutExtension(entity.path);
-        final dictPath = ['${base}.dict.dz', '${base}.dict']
-            .firstWhere((dp) => File(dp).existsSync(), orElse: () => '');
-        if (dictPath.isNotEmpty) {
-          primaryPath = entity.path;
-          format = 'dictd';
-          break;
-        }
-      }
-    }
-
-    if (primaryPath == null) {
+    if (discovered.isEmpty) {
       throw Exception('No valid dictionary files found in archive.');
     }
 
@@ -321,8 +337,7 @@ Future<void> _importEntry(_ImportArgs args) async {
         message: 'Extraction complete.',
         value: 0.5,
         isCompleted: true,
-        ifoPath: primaryPath, // using ifoPath as general primary path
-        error: format, // abusing error field to pass format back, or better, use a custom message
+        ifoPath: jsonEncode(discovered), // Use ifoPath to carry the JSON list
       ),
     );
   } catch (e, s) {
@@ -368,9 +383,22 @@ class DictionaryManager {
     if (path.endsWith('.xz')) {
       final target = path.substring(0, path.length - 3);
       if (await File(target).exists()) return target;
-      final bytes = await File(path).readAsBytes();
-      final decompressed = await compute(_decompressXZ, bytes);
-      await File(target).writeAsBytes(decompressed);
+      try {
+        final bytes = await File(path).readAsBytes();
+        final decompressed = await compute(_decompressXZ, bytes);
+        await File(target).writeAsBytes(decompressed);
+      } catch (e) {
+        if (Platform.isMacOS || Platform.isLinux) {
+          debugPrint('Dart archive package failed to decompress .xz ($e). Falling back to system xz.');
+          final result = Process.runSync('xz', ['-dc', path], stdoutEncoding: null);
+          if (result.exitCode != 0) {
+            throw Exception('Native xz decompression failed: ${result.stderr}');
+          }
+          await File(target).writeAsBytes(result.stdout as List<int>);
+        } else {
+          rethrow;
+        }
+      }
       return target;
     }
     return path;
@@ -404,56 +432,72 @@ class DictionaryManager {
         ),
       );
 
-      String? primaryPathFromIsolate;
-      String? formatFromIsolate;
+      List<Map<String, dynamic>> discovered = [];
 
       await for (final message in receivePort) {
         if (message is ImportProgress) {
           yield message;
 
           if (message.isCompleted) {
-            if (message.error != null && message.ifoPath == null) {
-              // This is a real error
+            if (message.error != null) {
               throw Exception(message.error);
             } else if (message.ifoPath != null) {
-              primaryPathFromIsolate = message.ifoPath;
-              formatFromIsolate = message.error; // We passed format in error field
+              final raw = jsonDecode(message.ifoPath!) as List;
+              discovered = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
               break;
             }
           }
         }
       }
 
-      if (primaryPathFromIsolate == null) {
-        throw Exception('Extraction completed but no dictionary path received.');
+      if (discovered.isEmpty) {
+        throw Exception('Extraction completed but no dictionaries were found.');
       }
 
-      final format = formatFromIsolate ?? 'stardict';
-      switch (format) {
-        case 'mdict':
-          final mddPath = p.join(p.dirname(primaryPathFromIsolate), '${p.basenameWithoutExtension(primaryPathFromIsolate)}.mdd');
-          yield* importMdictStream(
-            primaryPathFromIsolate,
-            mddPath: File(mddPath).existsSync() ? mddPath : null,
-            indexDefinitions: indexDefinitions,
+      int total = discovered.length;
+      int current = 0;
+
+      for (final dict in discovered) {
+        current++;
+        final primaryPath = dict['path'] as String;
+        final format = dict['format'] as String;
+        final companionPath = dict['companionPath'] as String?;
+
+        Stream<ImportProgress> subStream;
+        switch (format) {
+          case 'mdict':
+            final mddPath = p.join(p.dirname(primaryPath), '${p.basenameWithoutExtension(primaryPath)}.mdd');
+            subStream = importMdictStream(
+              primaryPath,
+              mddPath: File(mddPath).existsSync() ? mddPath : null,
+              indexDefinitions: indexDefinitions,
+            );
+            break;
+          case 'slob':
+            subStream = importSlobStream(primaryPath, indexDefinitions: indexDefinitions);
+            break;
+          case 'dictd':
+            if (companionPath == null) throw Exception('DICTD .dict file missing');
+            subStream = importDictdStream(primaryPath, companionPath, indexDefinitions: indexDefinitions);
+            break;
+          case 'stardict':
+          default:
+            subStream = _processDictionaryFiles(primaryPath, indexDefinitions: indexDefinitions);
+            break;
+        }
+
+        await for (final progress in subStream) {
+          yield ImportProgress(
+            message: total > 1 ? '[$current/$total] ${progress.message}' : progress.message,
+            value: 0.5 + ((current - 1) + progress.value) / total * 0.5,
+            headwordCount: progress.headwordCount,
+            isCompleted: progress.isCompleted && current == total,
+            dictId: progress.dictId,
+            sampleWords: progress.sampleWords,
+            error: progress.error,
           );
-          break;
-        case 'slob':
-          yield* importSlobStream(primaryPathFromIsolate, indexDefinitions: indexDefinitions);
-          break;
-        case 'dictd':
-          // For DICTD, we need the companion .dict path. 
-          // Re-scanning briefly in the temp dir
-          final base = p.withoutExtension(primaryPathFromIsolate);
-          final dictPath = ['${base}.dict.dz', '${base}.dict']
-              .firstWhere((dp) => File(dp).existsSync(), orElse: () => '');
-          if (dictPath.isEmpty) throw Exception('DICTD .dict file missing after extraction');
-          yield* importDictdStream(primaryPathFromIsolate, dictPath, indexDefinitions: indexDefinitions);
-          break;
-        case 'stardict':
-        default:
-          yield* _processDictionaryFiles(primaryPathFromIsolate, indexDefinitions: indexDefinitions);
-          break;
+          if (progress.isCompleted) break;
+        }
       }
     } catch (e, s) {
       debugPrint('Error in importDictionaryStream: $e\n$s');
@@ -539,69 +583,48 @@ class DictionaryManager {
       // ── Scan workspace for all supported formats ───────────────────────────
       yield ImportProgress(message: 'Scanning for dictionaries...', value: 0.45);
 
-      final List<({String path, String format, String? companionPath})> discovered = [];
-
-      await for (final entity in workspaceDir.list(recursive: true)) {
-        if (entity is! File) continue;
-
-        final lowerPath = entity.path.toLowerCase();
-        if (lowerPath.endsWith('.ifo') ||
-            lowerPath.endsWith('.ifo.gz') ||
-            lowerPath.endsWith('.ifo.dz') ||
-            lowerPath.endsWith('.ifo.bz2') ||
-            lowerPath.endsWith('.ifo.xz')) {
-          discovered.add((path: entity.path, format: 'stardict', companionPath: null));
-        } else if (lowerPath.endsWith('.mdx')) {
-          discovered.add((path: entity.path, format: 'mdict', companionPath: null));
-        } else if (lowerPath.endsWith('.slob')) {
-          discovered.add((path: entity.path, format: 'slob', companionPath: null));
-        } else if (lowerPath.endsWith('.index')) {
-          // Find companion .dict or .dict.dz
-          final base = p.withoutExtension(entity.path);
-          final dictPath = ['${base}.dict.dz', '${base}.dict']
-              .firstWhere((dp) => File(dp).existsSync(), orElse: () => '');
-          if (dictPath.isNotEmpty) {
-            discovered.add((path: entity.path, format: 'dictd', companionPath: dictPath));
-          }
-        }
-      }
-
-      if (discovered.isEmpty) {
+      final discoveredRaw = await _discoverDictionariesInDir(workspaceDir.path);
+      if (discoveredRaw.isEmpty) {
         throw Exception(
             'No valid dictionary files found. Supported formats: StarDict (.ifo), MDict (.mdx), Slob (.slob), DICTD (.index+.dict)');
       }
 
-      int totalDicts = discovered.length;
+      int totalDicts = discoveredRaw.length;
       int currentDict = 0;
 
-      for (final item in discovered) {
+      for (final item in discoveredRaw) {
         currentDict++;
-        final name = p.basenameWithoutExtension(item.path);
+        final primaryPath = item['path']!;
+        final format = item['format']!;
+        final companionPath = item['companionPath'];
+
+        final name = p.basenameWithoutExtension(primaryPath);
         yield ImportProgress(
           message: 'Importing dictionary $currentDict of $totalDicts: $name',
           value: 0.45 + (currentDict - 1) / totalDicts * 0.55,
         );
 
         Stream<ImportProgress> subStream;
-        switch (item.format) {
+        switch (format) {
           case 'mdict':
             // Look for companion .mdd in the same folder as .mdx
-            final mddPath = p.join(p.dirname(item.path), '${p.basenameWithoutExtension(item.path)}.mdd');
+            final mddPath = p.join(p.dirname(primaryPath), '${p.basenameWithoutExtension(primaryPath)}.mdd');
             subStream = importMdictStream(
-              item.path,
+              primaryPath,
               mddPath: File(mddPath).existsSync() ? mddPath : null,
               indexDefinitions: indexDefinitions,
             );
             break;
           case 'slob':
-            subStream = importSlobStream(item.path, indexDefinitions: indexDefinitions);
+            subStream = importSlobStream(primaryPath, indexDefinitions: indexDefinitions);
             break;
           case 'dictd':
-            subStream = importDictdStream(item.path, item.companionPath!, indexDefinitions: indexDefinitions);
+            if (companionPath == null) throw Exception('DICTD .dict file missing');
+            subStream = importDictdStream(primaryPath, companionPath, indexDefinitions: indexDefinitions);
             break;
           case 'stardict':
           default:
-            subStream = _processDictionaryFiles(item.path, indexDefinitions: indexDefinitions);
+            subStream = _processDictionaryFiles(primaryPath, indexDefinitions: indexDefinitions);
             break;
         }
 

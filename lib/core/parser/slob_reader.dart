@@ -25,12 +25,10 @@ class SlobReader {
   RandomAccessFile? _raf;
 
   // Parsed header fields
-  String _encoding = 'utf-8';
   String _compression = 'zlib';
   late int _refCount;
   late int _refOffset; // file position where refs start
   late int _storeOffset; // file position of store section header
-  late int _binCount;
   late List<int> _binAbsoluteOffsets; // absolute file offsets for each bin
   List<String> _contentTypes = [];
 
@@ -63,8 +61,8 @@ class SlobReader {
     // 2. UUID (16 bytes) — skip
     await raf.read(16);
 
-    // 3. Encoding (u8 length-prefixed UTF-8 string)
-    _encoding = await _readSmallString(raf);
+    // 3. Encoding (u8 length-prefixed UTF-8 string) — skip
+    await _readSmallString(raf);
 
     // 4. Compression (u8 length-prefixed UTF-8 string)
     _compression = await _readSmallString(raf);
@@ -83,8 +81,8 @@ class SlobReader {
       _contentTypes.add(await _readSmallString(raf));
     }
 
-    // 7. blob_count (u32 big-endian) — total number of bins in store
-    _binCount = await _readUint32BE(raf);
+    // 7. blob_count (u32 big-endian) — total number of bins in store — skip
+    await _readUint32BE(raf);
 
     // 8. store_offset (u64 big-endian) — absolute file position of store section
     _storeOffset = await _readUint64BE(raf);
