@@ -3,7 +3,6 @@ import 'package:hdict/features/settings/settings_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:hdict/features/home/widgets/app_drawer.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -237,20 +236,7 @@ class SettingsScreen extends StatelessWidget {
   }
 
   void _showFontPicker(BuildContext context, SettingsProvider settings) {
-    final fonts = [
-      'Roboto',
-      'Inter',
-      'Open Sans',
-      'Lato',
-      'Montserrat',
-      'Merriweather',
-      'Playfair Display',
-      'Ubuntu',
-      'Oswald',
-      'Quicksand',
-      'Poppins',
-      'Lora',
-    ];
+    final fonts = ['Roboto', 'Inter', 'Open Sans', 'Lato', 'Montserrat'];
     showDialog(
       context: context,
       builder: (context) {
@@ -262,14 +248,13 @@ class SettingsScreen extends StatelessWidget {
               shrinkWrap: true,
               itemCount: fonts.length,
               itemBuilder: (context, index) {
-                final font = fonts[index];
                 return ListTile(
                   title: Text(
-                    font,
-                    style: GoogleFonts.getFont(font),
+                    fonts[index],
+                    style: TextStyle(fontFamily: fonts[index]),
                   ),
                   onTap: () {
-                    settings.setFontFamily(font);
+                    settings.setFontFamily(fonts[index]);
                     Navigator.pop(context);
                   },
                 );

@@ -1,19 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   static ThemeData getTheme(Brightness brightness, String fontFamily) {
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFFFFAB40), // Orange Accent
-      brightness: brightness,
-      surface: brightness == Brightness.light
-          ? const Color(0xFFFFF8E1) // Beige (Amber 50)
-          : const Color(0xFF212121),
-    );
-
-    final baseTheme = ThemeData(
+    return ThemeData(
       useMaterial3: true,
-      colorScheme: colorScheme,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: const Color(0xFFFFAB40), // Orange Accent
+        brightness: brightness,
+        surface: brightness == Brightness.light
+            ? const Color(0xFFFFF8E1) // Beige (Amber 50)
+            : const Color(0xFF212121),
+      ),
+      fontFamily: fontFamily,
       appBarTheme: AppBarTheme(
         centerTitle: true,
         elevation: 0,
@@ -45,17 +43,6 @@ class AppTheme {
         ),
       ),
     );
-
-    try {
-      return baseTheme.copyWith(
-        textTheme: GoogleFonts.getTextTheme(fontFamily, baseTheme.textTheme),
-      );
-    } catch (e) {
-      // Fallback if font fails to load or is invalid
-      return baseTheme.copyWith(
-        textTheme: GoogleFonts.getTextTheme('Roboto', baseTheme.textTheme),
-      );
-    }
   }
 
   static ThemeData get lightTheme => getTheme(Brightness.light, 'Roboto');
