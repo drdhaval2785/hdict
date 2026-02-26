@@ -22,11 +22,13 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final settings = context.watch<SettingsProvider>();
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'hdict',
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
+      theme: AppTheme.getTheme(Brightness.light, settings.fontFamily),
+      darkTheme: AppTheme.getTheme(Brightness.dark, settings.fontFamily),
       themeMode: ThemeMode.system,
       home: const HomeScreen(),
     );
