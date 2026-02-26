@@ -60,20 +60,6 @@
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 	</array>
-	<key>LSApplicationQueriesSchemes</key>
-	<array>
-		<string>upi</string>
-		<string>bhim</string>
-		<string>BHIM</string>
-		<string>tez</string>
-		<string>gpay</string>
-		<string>phonepe</string>
-		<string>paytm</string>
-		<string>paytmmp</string>
-		<string>whatsapp</string>
-		<string>truecaller</string>
-		<string>cred</string>
-		<string>com.amazon.mobile.shopping</string>
-	</array>
+
 </dict>
 </plist>

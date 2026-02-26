@@ -127,7 +127,7 @@ class AppDrawer extends StatelessWidget {
               );
             },
           ),
-          ListTile(
+          /* ListTile(
             leading: const Icon(Icons.favorite_outline),
             title: const Text('Support Us'),
             onTap: () {
@@ -137,7 +137,7 @@ class AppDrawer extends StatelessWidget {
                 MaterialPageRoute(builder: (context) => const SupportScreen()),
               );
             },
-          ),
+          ), */
           const SizedBox(height: 16),
         ],
       ),

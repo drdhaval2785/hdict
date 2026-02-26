@@ -74,6 +74,33 @@ class AboutScreen extends StatelessWidget {
                   color: Color(0xFFFFAB40),
                 ),
               ),
+              const SizedBox(height: 24),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.0),
+                child: Text(
+                  'To report issues or request new features, please use:',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14),
+                ),
+              ),
+              const SizedBox(height: 4),
+              InkWell(
+                onTap: () async {
+                  final Uri githubUri = Uri.parse('https://github.com/drdhaval2785/hdict/');
+                  if (await canLaunchUrl(githubUri)) {
+                    await launchUrl(githubUri);
+                  }
+                },
+                child: const Text(
+                  'https://github.com/drdhaval2785/hdict/',
+                  style: TextStyle(
+                    color: Color(0xFFFFAB40),
+                    decoration: TextDecoration.underline,
+                    fontSize: 14,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
             ],
           ),
         ),

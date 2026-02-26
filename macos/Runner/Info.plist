@@ -28,15 +28,7 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
-	<key>LSApplicationQueriesSchemes</key>
-	<array>
-		<string>upi</string>
-		<string>bhim</string>
-		<string>tez</string>
-		<string>phonepe</string>
-		<string>paytmmp</string>
-		<string>whatsapp</string>
-	</array>
+
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.books</string>
 </dict>
