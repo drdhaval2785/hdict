@@ -44,7 +44,6 @@ class _DictionaryManagementScreenState
     final dynamic urlString = await showDialog<dynamic>(
       context: context,
       builder: (context) {
-        bool localIndex = false;
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
@@ -65,19 +64,6 @@ class _DictionaryManagementScreenState
                     ),
                     keyboardType: TextInputType.url,
                   ),
-                  const SizedBox(height: 8),
-                  CheckboxListTile(
-                    title: const Text('Index definitions'),
-                    subtitle: const Text('Enables search inside meanings (Slower import)'),
-                    value: localIndex,
-                    onChanged: (val) {
-                      setDialogState(() {
-                        localIndex = val ?? false;
-                      });
-                    },
-                    controlAffinity: ListTileControlAffinity.leading,
-                    contentPadding: EdgeInsets.zero,
-                  ),
                 ],
               ),
               actions: [
@@ -88,7 +74,7 @@ class _DictionaryManagementScreenState
                 ElevatedButton(
                   onPressed: () => Navigator.pop(context, {
                     'url': urlController.text,
-                    'index': localIndex,
+                    'index': true,
                   }),
                   child: const Text('Download'),
                 ),
@@ -210,7 +196,6 @@ class _DictionaryManagementScreenState
       final dynamic importConfig = await showDialog<dynamic>(
         context: context,
         builder: (context) {
-          bool localIndex = true;
           return StatefulBuilder(
             builder: (context, setDialogState) {
               return AlertDialog(
@@ -220,18 +205,7 @@ class _DictionaryManagementScreenState
                   children: [
                     Text('Importing ${files.length} file(s).'),
                     const SizedBox(height: 8),
-                    CheckboxListTile(
-                      title: const Text('Index definitions'),
-                      subtitle: const Text('Enables search inside meanings (Slower import)'),
-                      value: localIndex,
-                      onChanged: (val) {
-                        setDialogState(() {
-                          localIndex = val ?? false;
-                        });
-                      },
-                      controlAffinity: ListTileControlAffinity.leading,
-                      contentPadding: EdgeInsets.zero,
-                    ),
+                    const Text('Dictionaries will be automatically indexed for meaning search.'),
                   ],
                 ),
                 actions: [
@@ -240,7 +214,7 @@ class _DictionaryManagementScreenState
                     child: const Text('Cancel'),
                   ),
                   ElevatedButton(
-                    onPressed: () => Navigator.pop(context, localIndex),
+                    onPressed: () => Navigator.pop(context, true),
                     child: const Text('Proceed'),
                   ),
                 ],

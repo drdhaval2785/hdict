@@ -31,7 +31,7 @@ class AboutScreen extends StatelessWidget {
                 style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
-              const Text('Version 1.2.2', style: TextStyle(color: Colors.grey)),
+              const Text('Version 1.2.3', style: TextStyle(color: Colors.grey)),
               const SizedBox(height: 32),
               const Text(
                 'Vibe coded by Dr. Dhaval Patel',

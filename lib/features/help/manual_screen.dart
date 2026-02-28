@@ -22,7 +22,7 @@ class ManualScreen extends StatelessWidget {
           _buildSection(
             theme,
             '🔍 Searching',
-            'Type any word in the search bar on the home screen. Suggestions will appear as you type.',
+            'Type any word in the search bar. Suggestions appear as you type. By default, "Search in Definitions" is enabled, searching through meanings as well as headwords.',
           ),
           _buildSection(
             theme,
@@ -32,22 +32,22 @@ class ManualScreen extends StatelessWidget {
           _buildSection(
             theme,
             '📚 Managing Dictionaries',
-            'Go to "Manage Dictionaries" from the menu. You can import StarDict files (.zip, .tar.gz, .tar.xz, etc.) or download them directly from the web.',
+            'Import StarDict, MDict, or DICTD files. New dictionaries are automatically indexed for full-meaning search during import.',
           ),
           _buildSection(
             theme,
             '↕️ Reordering',
-            'In the management screen, use the handle on the left to drag dictionaries up or down. This sets their priority in search results.',
+            'Drag dictionaries to set priority. Results from higher-priority dictionaries appear first, even if lower ones have exact matches.',
           ),
           _buildSection(
             theme,
             '⚙️ Settings',
-            'Customize fonts and colors in the Settings menu. You can also adjust search history retention.',
+            'Customize fonts, colors, and search history retention. You can also adjust the number of words for your flash card sessions.',
           ),
           _buildSection(
             theme,
             '⚡ Flash Cards',
-            'Test your knowledge! Select dictionaries and guess meanings for 10 random words. Review meanings after the session.',
+            'Test your knowledge with 5-50 random words. Flash Card session details, including used dictionaries and scores, are saved in your Score History.',
           ),
           _buildSection(
             theme,
