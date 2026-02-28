@@ -57,6 +57,9 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
       _isLoading = true;
     });
 
+    final settings = context.read<SettingsProvider>();
+    final targetCount = settings.flashCardWordCount;
+
     final List<Map<String, dynamic>> allAvailableWordMetas = [];
     for (var dictId in _selectedDictIds) {
       final metas = await _dbHelper.getSampleWords(dictId, limit: 100);
@@ -70,14 +73,14 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
       }
     }
 
-    if (allAvailableWordMetas.length < 10) {
+    if (allAvailableWordMetas.length < targetCount) {
       setState(() {
         _isLoading = false;
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Not enough words in selected dictionaries.'),
+          SnackBar(
+            content: Text('Not enough words in selected dictionaries (need $targetCount).'),
           ),
         );
       }
@@ -88,7 +91,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
     final List<Map<String, dynamic>> selectedWordMetas = [];
     final Set<int> usedIndices = {};
 
-    while (selectedWordMetas.length < 10) {
+    while (selectedWordMetas.length < targetCount) {
       int index = random.nextInt(allAvailableWordMetas.length);
       if (!usedIndices.contains(index)) {
         usedIndices.add(index);
@@ -133,15 +136,15 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
       _score = 0;
       _showMeaning = false;
       _isLoading = false;
-      _results = [];
+      _results = List.filled(filteredWords.length, false);
     });
   }
 
   void _answer(bool correct) {
-    _results.add(correct);
+    _results[_currentIndex] = correct;
     if (correct) _score++;
 
-    if (_currentIndex < 9) {
+    if (_currentIndex < _quizWords.length - 1) {
       setState(() {
         _currentIndex++;
       });
@@ -168,7 +171,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Your score: $_score / 10',
+              'Your score: $_score / ${_quizWords.length}',
               style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
@@ -219,6 +222,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
   }
 
   Widget _buildSetupUI() {
+    final settings = context.watch<SettingsProvider>();
     return Scaffold(
       drawer: const AppDrawer(),
       appBar: AppBar(title: const Text('Flash Cards')),
@@ -281,7 +285,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 50),
               ),
-              child: const Text('Start Random Session (10 words)'),
+              child: Text('Start Random Session (${settings.flashCardWordCount} words)'),
             ),
           ),
         ],
@@ -293,7 +297,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
     final currentWord = _quizWords[_currentIndex];
     return Scaffold(
       drawer: const AppDrawer(),
-      appBar: AppBar(title: Text('Word ${_currentIndex + 1} of 10')),
+      appBar: AppBar(title: Text('Word ${_currentIndex + 1} of ${_quizWords.length}')),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -346,7 +350,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Text(
-                'Score: $_score/10',
+                'Score: $_score/${_quizWords.length}',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
@@ -463,15 +467,19 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () {
-                      if (_currentIndex < 9) {
+                      if (_currentIndex < _quizWords.length - 1) {
                         setState(() => _currentIndex++);
                       } else {
                         // Save score to database at the very end
-                        _dbHelper.addFlashCardScore(_score, 10);
+                        _dbHelper.addFlashCardScore(
+                          _score,
+                          _quizWords.length,
+                          _selectedDictIds.join(','),
+                        );
                         setState(() => _isQuizStarted = false);
                       }
                     },
-                    child: Text(_currentIndex < 9 ? 'Next' : 'Finish Review'),
+                    child: Text(_currentIndex < _quizWords.length - 1 ? 'Next' : 'Finish Review'),
                   ),
                 ),
               ],

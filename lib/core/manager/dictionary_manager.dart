@@ -139,7 +139,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
         batch.clear();
         sendPort.send(
           ImportProgress(
-            message: 'Indexing $headwordCount headwords...',
+            message: 'Indexed $headwordCount headwords and $defWordCount words in definition',
             value: 0.85 +
                 (headwordCount /
                         (args.ifoParser.wordCount == 0

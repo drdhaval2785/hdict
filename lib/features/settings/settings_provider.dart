@@ -34,6 +34,7 @@ class SettingsProvider with ChangeNotifier {
   static const String _keyDefinitionSearchMode = 'definition_search_mode';
   static const String _keyHeadwordColor = 'headword_color';
   static const String _keySearchResultLimit = 'search_result_limit';
+  static const String _keyFlashCardWordCount = 'flash_card_word_count';
 
   String _fontFamily = 'Roboto';
   double _fontSize = 16.0;
@@ -45,11 +46,12 @@ class SettingsProvider with ChangeNotifier {
   bool _isOpenPopupOnTap = true;
   int _historyRetentionDays = 30;
   bool _isSearchInHeadwordsEnabled = true;
-  bool _isSearchInDefinitionsEnabled = false;
+  bool _isSearchInDefinitionsEnabled = true;
   SearchMode _headwordSearchMode = SearchMode.prefix;
   SearchMode _definitionSearchMode = SearchMode.prefix;
   Color _headwordColor = Colors.black;
   int _searchResultLimit = 50;
+  int _flashCardWordCount = 10;
 
   String get fontFamily => _fontFamily;
   double get fontSize => _fontSize;
@@ -66,6 +68,7 @@ class SettingsProvider with ChangeNotifier {
   SearchMode get definitionSearchMode => _definitionSearchMode;
   Color get headwordColor => _headwordColor;
   int get searchResultLimit => _searchResultLimit;
+  int get flashCardWordCount => _flashCardWordCount;
 
   SettingsProvider() {
     _loadSettings();
@@ -84,7 +87,7 @@ class SettingsProvider with ChangeNotifier {
     _historyRetentionDays = prefs.getInt(_keyHistoryDays) ?? 30;
     _isSearchInHeadwordsEnabled = prefs.getBool(_keySearchInHeadwords) ?? true;
     _isSearchInDefinitionsEnabled =
-        prefs.getBool(_keySearchInDefinitions) ?? false;
+        prefs.getBool(_keySearchInDefinitions) ?? true;
     _headwordSearchMode = SearchMode.fromString(
         prefs.getString(_keyHeadwordSearchMode) ?? 'prefix');
     _definitionSearchMode = SearchMode.fromString(
@@ -92,6 +95,7 @@ class SettingsProvider with ChangeNotifier {
     _headwordColor =
         Color(prefs.getInt(_keyHeadwordColor) ?? Colors.black.toARGB32());
     _searchResultLimit = prefs.getInt(_keySearchResultLimit) ?? 50;
+    _flashCardWordCount = prefs.getInt(_keyFlashCardWordCount) ?? 10;
     notifyListeners();
   }
 
@@ -197,6 +201,13 @@ class SettingsProvider with ChangeNotifier {
     _searchResultLimit = limit;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_keySearchResultLimit, limit);
+    notifyListeners();
+  }
+
+  Future<void> setFlashCardWordCount(int count) async {
+    _flashCardWordCount = count;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyFlashCardWordCount, count);
     notifyListeners();
   }
 }

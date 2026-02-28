@@ -210,7 +210,7 @@ class _DictionaryManagementScreenState
       final dynamic importConfig = await showDialog<dynamic>(
         context: context,
         builder: (context) {
-          bool localIndex = false;
+          bool localIndex = true;
           return StatefulBuilder(
             builder: (context, setDialogState) {
               return AlertDialog(
@@ -504,26 +504,22 @@ class _DictionaryManagementScreenState
                                 activeThumbColor: Theme.of(
                                   context,
                                 ).colorScheme.primary,
-                                onChanged: (bool value) async {
+                                onChanged: (bool? value) async {
                                   await _dictionaryManager
                                       .toggleDictionaryEnabled(
                                         dict['id'],
-                                        value,
+                                        value ?? false,
                                       );
                                   _loadDictionaries();
                                 },
                               ),
                               IconButton(
-                                icon: Icon(
-                                  dict['index_definitions'] == 1
-                                      ? Icons.refresh
-                                      : Icons.search,
+                                icon: const Icon(
+                                  Icons.refresh,
                                   color: Colors.blueAccent,
                                 ),
-                                tooltip: dict['index_definitions'] == 1
-                                    ? 'Re-index'
-                                    : 'Enable meaning search',
                                 onPressed: () => _showReindexDialog(dict),
+                                tooltip: 'Re-index dictionary',
                               ),
                               IconButton(
                                 icon: const Icon(

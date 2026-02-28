@@ -82,7 +82,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 10, // Version 10: added 'format' column to dictionaries
+      version: 11, // Version 11: added 'dict_ids' to flash_card_scores
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -148,7 +148,8 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         score INTEGER NOT NULL,
         total INTEGER NOT NULL,
-        timestamp INTEGER NOT NULL
+        timestamp INTEGER NOT NULL,
+        dict_ids TEXT
       )
     ''');
 
@@ -224,6 +225,15 @@ class DatabaseHelper {
         }
       } catch (e) {
         debugPrint('Migration error (version 10): $e');
+      }
+    }
+    if (oldVersion < 11) {
+      try {
+        await db.execute(
+          'ALTER TABLE flash_card_scores ADD COLUMN dict_ids TEXT',
+        );
+      } catch (e) {
+        debugPrint('Migration error (version 11): $e');
       }
     }
   }
@@ -550,12 +560,13 @@ class DatabaseHelper {
 
   // --- Flash Card Scores ---
 
-  Future<void> addFlashCardScore(int score, int total) async {
+  Future<void> addFlashCardScore(int score, int total, String dictIds) async {
     final db = await database;
     await db.insert('flash_card_scores', {
       'score': score,
       'total': total,
       'timestamp': DateTime.now().millisecondsSinceEpoch,
+      'dict_ids': dictIds,
     });
   }
 
@@ -667,12 +678,14 @@ class DatabaseHelper {
       if (whereArgs.isEmpty) return [];
 
       final String sql = '''
-        SELECT word, dict_id, offset, length 
-        FROM word_index 
-        WHERE ${whereClauses.join(' AND ')}
+        SELECT wi.word, wi.dict_id, wi.offset, wi.length 
+        FROM word_index wi
+        JOIN dictionaries d ON wi.dict_id = d.id
+        WHERE ${whereClauses.map((c) => c.replaceAll('word', 'wi.word').replaceAll('content', 'wi.content').replaceAll('dict_id', 'wi.dict_id')).join(' AND ')}
         ORDER BY 
-          ${headwordQuery != null ? "(LOWER(word) = LOWER(?)) DESC," : ""}
-          word ASC
+          d.display_order ASC,
+          ${headwordQuery != null ? "(LOWER(wi.word) = LOWER(?)) DESC," : ""}
+          wi.word ASC
         LIMIT ?
       ''';
 

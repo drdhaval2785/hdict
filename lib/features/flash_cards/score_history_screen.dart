@@ -13,6 +13,7 @@ class ScoreHistoryScreen extends StatefulWidget {
 class _ScoreHistoryScreenState extends State<ScoreHistoryScreen> {
   final DatabaseHelper _dbHelper = DatabaseHelper();
   List<Map<String, dynamic>> _scores = [];
+  List<Map<String, dynamic>> _allDictionaries = [];
   bool _isLoading = true;
 
   @override
@@ -23,8 +24,10 @@ class _ScoreHistoryScreenState extends State<ScoreHistoryScreen> {
 
   Future<void> _loadScores() async {
     final scores = await _dbHelper.getFlashCardScores();
+    final dicts = await _dbHelper.getDictionaries();
     setState(() {
       _scores = scores;
+      _allDictionaries = dicts;
       _isLoading = false;
     });
   }
@@ -49,6 +52,20 @@ class _ScoreHistoryScreenState extends State<ScoreHistoryScreen> {
                 final percentage = (session['score'] / session['total'] * 100)
                     .toInt();
 
+                final String? dictIds = session['dict_ids'];
+                String dictNames = 'All dictionaries';
+                if (dictIds != null && dictIds.isNotEmpty) {
+                  final ids = dictIds.split(',');
+                  final names = ids.map((id) {
+                    final dict = _allDictionaries.firstWhere(
+                      (d) => d['id'].toString() == id,
+                      orElse: () => {'name': 'Unknown'},
+                    );
+                    return dict['name'];
+                  }).join(', ');
+                  dictNames = names;
+                }
+
                 return ListTile(
                   leading: CircleAvatar(
                     backgroundColor: _getScoreColor(percentage),
@@ -63,8 +80,17 @@ class _ScoreHistoryScreenState extends State<ScoreHistoryScreen> {
                   title: Text(
                     'Score: ${session['score']} / ${session['total']}',
                   ),
-                  subtitle: Text(
-                    DateFormat('MMM dd, yyyy - hh:mm a').format(date),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(DateFormat('MMM dd, yyyy - hh:mm a').format(date)),
+                      Text(
+                        'Dictionaries: $dictNames',
+                        style: const TextStyle(fontSize: 12),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
                   trailing: Text(
                     '$percentage%',

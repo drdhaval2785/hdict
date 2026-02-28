@@ -145,6 +145,25 @@ class SettingsScreen extends StatelessWidget {
             onChanged: (value) => settings.setOpenPopup(value),
           ),
           const Divider(),
+          _buildSectionHeader(theme, 'Flash Cards'),
+          ListTile(
+            title: const Text('Number of words in flash cards'),
+            subtitle: Text('${settings.flashCardWordCount} words'),
+            trailing: SizedBox(
+              width: 150,
+              child: Slider(
+                value: settings.flashCardWordCount.toDouble(),
+                min: 5,
+                max: 50,
+                divisions: 9,
+                label: settings.flashCardWordCount.toString(),
+                onChanged: (value) {
+                  settings.setFlashCardWordCount(value.toInt());
+                },
+              ),
+            ),
+          ),
+          const Divider(),
           _buildSectionHeader(theme, 'History'),
           ListTile(
             title: const Text('Retain Search History for how many days'),
