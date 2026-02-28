@@ -261,26 +261,118 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _buildEmptyState(ThemeData theme) {
     return Center(
       child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.library_books_outlined,
+                  size: 80, color: theme.colorScheme.primary.withValues(alpha: 0.3)),
+              const SizedBox(height: 24),
+              Text('No dictionaries found',
+                  style: theme.textTheme.headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              const Text(
+                'To start searching, you need to install at least one dictionary.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey),
+              ),
+              const SizedBox(height: 32),
+              _buildGuidanceCard(theme),
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGuidanceCard(ThemeData theme) {
+    return Card(
+      elevation: 0,
+      color: theme.colorScheme.primaryContainer.withValues(alpha: 0.2),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: theme.colorScheme.primary.withValues(alpha: 0.1)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.library_books_outlined, size: 80, color: theme.colorScheme.primary.withValues(alpha: 0.3)),
+            Text(
+              'Recommended Starter Dictionary',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Copy the URL below and paste it into "Download Web" in Manage Dictionaries:',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14),
+            ),
             const SizedBox(height: 16),
-            Text('No dictionaries found', style: theme.textTheme.headlineSmall?.copyWith(color: Colors.grey)),
-            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SelectableText(
+                      'http://tovotu.de/data/stardict/gcide.zip',
+                      style: TextStyle(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'monospace',
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.copy, size: 18),
+                    onPressed: () {
+                      Clipboard.setData(const ClipboardData(
+                          text: 'http://tovotu.de/data/stardict/gcide.zip'));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('URL copied to clipboard'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    tooltip: 'Copy URL',
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
             ElevatedButton.icon(
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const DictionaryManagementScreen()),
+                  MaterialPageRoute(
+                    builder: (context) => const DictionaryManagementScreen(),
+                  ),
                 ).then((_) => _checkDictionaries());
               },
-              icon: const Icon(Icons.download),
-              label: const Text('Manage Dictionaries'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
+              icon: const Icon(Icons.arrow_forward),
+              label: const Text('Go to Manage Dictionaries'),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'After downloading, use "Import File" in Manage Dictionaries.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+              textAlign: TextAlign.center,
             ),
           ],
         ),

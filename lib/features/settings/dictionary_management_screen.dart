@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:file_selector/file_selector.dart';
 
@@ -544,22 +545,110 @@ class _DictionaryManagementScreenState
   }
 
   Widget _buildEmptyState() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.library_books_outlined, size: 64, color: Colors.grey),
-          SizedBox(height: 16),
-          Text(
-            'No dictionaries installed.',
-            style: TextStyle(fontSize: 16, color: Colors.grey),
+    final theme = Theme.of(context);
+    return Center(
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.library_books_outlined,
+                  size: 64, color: Colors.grey.withValues(alpha: 0.5)),
+              const SizedBox(height: 16),
+              const Text(
+                'No dictionaries installed.',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Add dictionaries to start using hdict.',
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+              const SizedBox(height: 32),
+              _buildGuidanceCard(theme),
+              const SizedBox(height: 32),
+              const Text(
+                'Use the buttons below to add your own dictionary files.',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
-          SizedBox(height: 8),
-          Text(
-            'Use the buttons below to add one.',
-            style: TextStyle(fontSize: 14, color: Colors.grey),
-          ),
-        ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGuidanceCard(ThemeData theme) {
+    return Card(
+      elevation: 0,
+      color: theme.colorScheme.primaryContainer.withValues(alpha: 0.2),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: theme.colorScheme.primary.withValues(alpha: 0.1)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          children: [
+            Text(
+              'Looking for a dictionary?',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Copy the URL below and paste it into "Download Web" below:',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SelectableText(
+                      'http://tovotu.de/data/stardict/gcide.zip',
+                      style: TextStyle(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'monospace',
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.copy, size: 18),
+                    onPressed: () {
+                      Clipboard.setData(const ClipboardData(
+                          text: 'http://tovotu.de/data/stardict/gcide.zip'));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('URL copied to clipboard'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    tooltip: 'Copy URL',
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

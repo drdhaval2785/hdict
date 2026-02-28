@@ -7,7 +7,6 @@ import 'package:hdict/features/home/home_screen.dart';
 import 'package:hdict/features/settings/dictionary_management_screen.dart';
 import 'package:hdict/features/settings/search_history_screen.dart';
 import 'package:hdict/features/settings/settings_screen.dart';
-import 'package:hdict/features/support/support_screen.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
