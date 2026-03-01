@@ -516,7 +516,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildDefinitionContent(ThemeData theme, Map<String, dynamic> defMap,
-      {String? highlightHeadword, String? highlightDefinition}) {
+      {String? highlightHeadword,
+      String? highlightDefinition,
+      int? searchSqliteMs,
+      int? searchOtherMs,
+      int? searchTotalMs,
+      int? searchResultCount}) {
     final settings = context.watch<SettingsProvider>();
     final List<String> rawDefinitions = defMap['definitions'];
     
@@ -555,10 +560,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               },
               itemBuilder: (context, index) {
                 if (index == rawDefinitions.length) {
+                  final sqliteMs = searchSqliteMs ?? _searchSqliteMs;
+                  final totalMs = searchTotalMs ?? _searchTotalMs;
+                  final otherMs = searchOtherMs ?? _searchOtherMs;
+                  final resultCount = searchResultCount ?? _searchResultCount;
+
                   return Text(
-                    'Showed $_searchResultCount results in $_searchTotalMs ms.\n'
-                    'Sqlite query took $_searchSqliteMs ms.\n'
-                    'Other work took $_searchOtherMs ms.',
+                    'Showed $resultCount results in $totalMs ms.\n'
+                    'Sqlite query took $sqliteMs ms.\n'
+                    'Other work took $otherMs ms.',
                     style: const TextStyle(fontSize: 11, color: Colors.grey),
                     textAlign: TextAlign.center,
                   );
@@ -693,8 +703,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 ),
               ),
               Expanded(
-                child: FutureBuilder<List<Map<String, dynamic>>>(
+                child: FutureBuilder<Map<String, dynamic>>(
                   future: () async {
+                    final totalWatch = Stopwatch()..start();
+                    final sqliteWatch = Stopwatch()..start();
+
                     List<Map<String, dynamic>> candidates =
                         await _dbHelper.searchWords(
                       headwordQuery: word,
@@ -712,19 +725,26 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         if (candidates.isNotEmpty) break;
                       }
                     }
+
+                    sqliteWatch.stop();
+
                     // Group by dictionary, consolidate headwords
-                    final Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults = {};
+                    final Map<int, Map<String, List<Map<String, dynamic>>>>
+                        groupedResults = {};
+                    int resultCount = 0;
                     for (final res in candidates) {
                       final dictId = res['dict_id'] as int;
                       final wordValue = res['word'] as String;
                       final dict = await _dbHelper.getDictionaryById(dictId);
                       if (dict == null || dict['is_enabled'] != 1) continue;
+                      resultCount++;
                       final content = await _dictManager.fetchDefinition(
-                        dict,
-                        wordValue,
-                        res['offset'] as int,
-                        res['length'] as int,
-                      ) ?? '';
+                            dict,
+                            wordValue,
+                            res['offset'] as int,
+                            res['length'] as int,
+                          ) ??
+                          '';
                       groupedResults.putIfAbsent(dictId, () => {});
                       groupedResults[dictId]!.putIfAbsent(wordValue, () => []);
                       groupedResults[dictId]![wordValue]!.add({
@@ -733,38 +753,80 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         'definition': content,
                       });
                     }
-                    return HomeScreen.consolidateDefinitions(groupedResults);
+                    totalWatch.stop();
+
+                    final consolidated =
+                        HomeScreen.consolidateDefinitions(groupedResults);
+
+                    final timing = {
+                      'sqliteMs': sqliteWatch.elapsedMilliseconds,
+                      'totalMs': totalWatch.elapsedMilliseconds,
+                      'otherMs': totalWatch.elapsedMilliseconds -
+                          sqliteWatch.elapsedMilliseconds,
+                      'resultCount': resultCount,
+                    };
+
+                    return {
+                      'definitions': consolidated,
+                      'timing': timing,
+                    };
                   }(),
                   builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-                    if (!snapshot.hasData || snapshot.data!.isEmpty) return const Center(child: Text('No definition found.'));
-                    final defs = snapshot.data!;
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (!snapshot.hasData ||
+                        (snapshot.data!['definitions'] as List).isEmpty) {
+                      return const Center(child: Text('No definition found.'));
+                    }
+                    final Map<String, dynamic> data = snapshot.data!;
+                    final List<Map<String, dynamic>> defs = data['definitions'];
+                    final Map<String, int> timing = data['timing'];
 
                     return DefaultTabController(
                       length: defs.length,
                       child: Column(
                         children: [
-                          TabBar(isScrollable: true, labelColor: theme.colorScheme.primary, unselectedLabelColor: Colors.grey, tabs: defs.map((def) {
-                            String name = def['dict_name'];
-                            if (name.length > 13) name = '${name.substring(0, 10)}...';
-                            return Tab(
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(name),
-                                  const SizedBox(width: 4),
-                                  GestureDetector(
-                                    onTap: () {
-                                      defs.remove(def);
-                                      (context as Element).markNeedsBuild();
-                                    },
-                                    child: const Icon(Icons.close, size: 14),
+                          TabBar(
+                              isScrollable: true,
+                              labelColor: theme.colorScheme.primary,
+                              unselectedLabelColor: Colors.grey,
+                              tabs: defs.map((def) {
+                                String name = def['dict_name'];
+                                if (name.length > 13) {
+                                  name = '${name.substring(0, 10)}...';
+                                }
+                                return Tab(
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(name),
+                                      const SizedBox(width: 4),
+                                      GestureDetector(
+                                        onTap: () {
+                                          defs.remove(def);
+                                          (context as Element)
+                                              .markNeedsBuild();
+                                        },
+                                        child: const Icon(Icons.close, size: 14),
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
-                            );
-                          }).toList()),
-                          Expanded(child: TabBarView(children: defs.map((def) => _buildDefinitionContent(theme, def)).toList())),
+                                );
+                              }).toList()),
+                          Expanded(
+                              child: TabBarView(
+                                  children: defs
+                                      .map((def) => _buildDefinitionContent(
+                                            theme,
+                                            def,
+                                            searchSqliteMs: timing['sqliteMs'],
+                                            searchOtherMs: timing['otherMs'],
+                                            searchTotalMs: timing['totalMs'],
+                                            searchResultCount:
+                                                timing['resultCount'],
+                                          ))
+                                      .toList())),
                         ],
                       ),
                     );
