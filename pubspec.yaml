@@ -107,6 +107,7 @@ flutter:
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
+  remove_alpha_ios: true
   image_path: "assets/hdict_logo.png"
   web:
     generate: true
