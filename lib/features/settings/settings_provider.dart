@@ -49,7 +49,7 @@ class SettingsProvider with ChangeNotifier {
   bool _isSearchInDefinitionsEnabled = true;
   SearchMode _headwordSearchMode = SearchMode.prefix;
   SearchMode _definitionSearchMode = SearchMode.prefix;
-  Color _headwordColor = Colors.black;
+  Color _headwordColor = Colors.brown;
   int _searchResultLimit = 50;
   int _flashCardWordCount = 10;
 
@@ -93,7 +93,7 @@ class SettingsProvider with ChangeNotifier {
     _definitionSearchMode = SearchMode.fromString(
         prefs.getString(_keyDefinitionSearchMode) ?? 'prefix');
     _headwordColor =
-        Color(prefs.getInt(_keyHeadwordColor) ?? Colors.black.toARGB32());
+        Color(prefs.getInt(_keyHeadwordColor) ?? Colors.brown.toARGB32());
     _searchResultLimit = prefs.getInt(_keySearchResultLimit) ?? 50;
     _flashCardWordCount = prefs.getInt(_keyFlashCardWordCount) ?? 10;
     notifyListeners();

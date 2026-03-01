@@ -36,7 +36,7 @@ class HomeScreen extends StatefulWidget {
         allHeadwords.add(headwordStr);
 
         final buffer = StringBuffer();
-        buffer.writeln('<div class="headword" style="font-size:1.3em;font-weight:bold;margin-bottom:8px;">$headwordStr</div>');
+        buffer.writeln('<div class="headword" style="font-weight:bold;margin-bottom:8px;">$headwordStr</div>');
         buffer.writeln(normalizeWhitespace(entries.first['definition'] as String));
         definitionsList.add(buffer.toString());
       });
