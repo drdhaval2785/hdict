@@ -639,10 +639,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   );
                 }
                 String rawHtml = rawDefinitions[index];
-                debugPrint('--- RAW DEFINITION (Index $index) [$format / ${typeSequence ?? ""}] ---\n$rawHtml\n-------------------');
+                // debugPrint('--- RAW DEFINITION (Index $index) [$format / ${typeSequence ?? ""}] ---\n$rawHtml\n-------------------');
                 
                 String strippedHtml = HomeScreen.normalizeWhitespace(rawHtml, format: format, typeSequence: typeSequence);
-                debugPrint('--- STRIPPED HTML (Index $index) ---\n$strippedHtml\n-------------------');
+                // debugPrint('--- STRIPPED HTML (Index $index) ---\n$strippedHtml\n-------------------');
 
                 String definitionHtml = strippedHtml;
                 if (settings.isTapOnMeaningEnabled) {
@@ -666,7 +666,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   );
                 }
                 
-                debugPrint('--- RENDERED HTML (Index $index) ---\n$definitionHtml\n-------------------');
+                // debugPrint('--- RENDERED HTML (Index $index) ---\n$definitionHtml\n-------------------');
 
                 return Stack(
                   children: [
