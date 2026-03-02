@@ -3,7 +3,8 @@ class HtmlLookupWrapper {
   /// Wraps every alphanumeric word in the [html] string with `<a href="look_up:word">word</a>`.
   /// Preserves existing HTML tags.
   static String wrapWords(String html) {
-    final tagRegExp = RegExp(r'<[^>]*>|[^<]+');
+    // tagRegExp matches tags <...>, HTML entities &...;, or non-tag/non-entity text
+    final tagRegExp = RegExp(r'<[^>]*>|&[a-z0-9#]{2,10};|[^<&]+', caseSensitive: false);
     final wordRegExp = RegExp(r'([\p{L}\p{N}\p{M}]+)', unicode: true);
 
     final StringBuffer buffer = StringBuffer();
@@ -13,7 +14,7 @@ class HtmlLookupWrapper {
 
     for (final match in matches) {
       final part = match.group(0)!;
-      if (part.startsWith('<')) {
+      if (part.startsWith('<') || (part.startsWith('&') && part.endsWith(';'))) {
         buffer.write(part);
         final lowerPart = part.toLowerCase();
         if (lowerPart.startsWith('<a ') || lowerPart == '<a>') {
@@ -45,7 +46,7 @@ class HtmlLookupWrapper {
   }) {
     if (query.isEmpty) return html;
 
-    final tagRegExp = RegExp(r'<[^>]*>|[^<]+');
+    final tagRegExp = RegExp(r'<[^>]*>|&[a-z0-9#]{2,10};|[^<&]+', caseSensitive: false);
     // Match words starting with the query. 
     // Uses \b to match at word start, then query, then any following alphanumeric chars.
     final queryRegExp = RegExp(
@@ -59,7 +60,7 @@ class HtmlLookupWrapper {
 
     for (final match in matches) {
       final part = match.group(0)!;
-      if (part.startsWith('<')) {
+      if (part.startsWith('<') || (part.startsWith('&') && part.endsWith(';'))) {
         buffer.write(part);
       } else {
         final highlighted = part.replaceAllMapped(queryRegExp, (m) {
@@ -80,7 +81,7 @@ class HtmlLookupWrapper {
   }) {
     if (query.isEmpty) return html;
 
-    final tagRegExp = RegExp(r'<[^>]*>|[^<]+');
+    final tagRegExp = RegExp(r'<[^>]*>|&[a-z0-9#]{2,10};|[^<&]+', caseSensitive: false);
     final queryRegExp = RegExp(
       RegExp.escape(query),
       caseSensitive: false,
@@ -91,7 +92,7 @@ class HtmlLookupWrapper {
 
     for (final match in matches) {
       final part = match.group(0)!;
-      if (part.startsWith('<')) {
+      if (part.startsWith('<') || (part.startsWith('&') && part.endsWith(';'))) {
         buffer.write(part);
       } else {
         final underlined = part.replaceAllMapped(queryRegExp, (m) {

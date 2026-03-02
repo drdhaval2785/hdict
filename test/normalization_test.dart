@@ -34,5 +34,12 @@ void main() {
       // <b> should stay, others should be converted
       expect(output, '<span class="hdict-k">head</span> <span class="hdict-custom">text</span> <b>bold</b>');
     });
+
+    test('HTML entity handling', () {
+      const input = 'AT&T &apos;s &quot;test&quot; &amp; more';
+      final output = HomeScreen.normalizeWhitespace(input, format: 'stardict', typeSequence: 'h');
+      // Should preserve entities
+      expect(output, 'AT&T &apos;s &quot;test&quot; &amp; more');
+    });
   });
 }
