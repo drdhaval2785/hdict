@@ -12,6 +12,10 @@ class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
   static Database? _database;
 
+  /// Cached result of whether FTS5 is available on this device's SQLite.
+  /// Set during [_onOpen]; null means not yet determined.
+  static bool? _fts5Available;
+
   factory DatabaseHelper() {
     return _instance;
   }
@@ -38,13 +42,14 @@ class DatabaseHelper {
   static Future<void> initializeDatabaseFactory() async {
     if (kIsWeb) {
       databaseFactory = createDatabaseFactoryFfiWeb();
-    } else if (Platform.isWindows || Platform.isLinux) {
+    } else if (Platform.isWindows || Platform.isLinux || Platform.isAndroid) {
+      // On Android, sqflite_common_ffi + sqlite3_flutter_libs provides a bundled
+      // SQLite compiled with FTS5 support, bypassing the device's system SQLite
+      // which may lack FTS5 on older Android versions.
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
     }
-    // On macOS, iOS, and Android, we use the default sqflite implementation
-    // which is more stable and prevents "bad parameter" or API misuse errors
-    // that happen when forcefully overriding with FFI.
+    // On macOS and iOS, the system SQLite includes FTS5; use default sqflite.
   }
 
   Future<Database> get database async {
@@ -53,9 +58,14 @@ class DatabaseHelper {
     return _database!;
   }
 
-  // For testing only
+  // For testing only — also probes FTS5 availability on the injected DB.
   static void setDatabase(Database db) {
     _database = db;
+    // Run the probe synchronously-ish: fire-and-forget is fine for tests
+    // since the database open is already complete before the first query.
+    _checkFts5Available(db).then((available) {
+      _fts5Available = available;
+    });
   }
 
   Future<Database> _initDatabase() async {
@@ -85,13 +95,103 @@ class DatabaseHelper {
       version: 12, // Version 12: added 'type_sequence' to dictionaries
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
+      onOpen: _onOpen,
     );
+  }
+
+  /// Tests whether the FTS5 module is available in the current SQLite build.
+  /// Creates a temporary test table, then drops it.
+  static Future<bool> _checkFts5Available(Database db) async {
+    try {
+      await db.execute(
+        'CREATE VIRTUAL TABLE _fts5_probe USING fts5(x)',
+      );
+      await db.execute('DROP TABLE IF EXISTS _fts5_probe');
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Ensures the word_index table exists and matches FTS5 availability.
+  /// - If word_index doesn't exist: creates FTS5 virtual table (or regular fallback).
+  /// - If word_index exists as FTS5 but FTS5 is unavailable: drops & recreates as regular.
+  /// - If word_index exists and is correct: does nothing.
+  static Future<void> _ensureWordIndexTable(Database db) async {
+    final bool fts5Available = await _checkFts5Available(db);
+
+    // Check if word_index already exists and what type it is.
+    final existing = await db.rawQuery(
+      "SELECT type FROM sqlite_master WHERE name = 'word_index'",
+    );
+    final bool tableExists = existing.isNotEmpty;
+    // FTS5 virtual tables contain 'fts5' in their DDL sql stored in sqlite_master.
+    final bool tableIsFts5 = tableExists &&
+        (await db.rawQuery(
+          "SELECT sql FROM sqlite_master WHERE name = 'word_index'",
+        )).firstOrNull?['sql']?.toString().contains('fts5') == true;
+
+    if (tableExists && tableIsFts5 && !fts5Available) {
+      // The stored table is FTS5 but the runtime doesn't support it.
+      // Drop and recreate as a regular table to restore functionality.
+      debugPrint(
+        'word_index is FTS5 but FTS5 module is unavailable — migrating to regular table.',
+      );
+      await db.execute('DROP TABLE word_index');
+    }
+
+    // Re-check existence after potential drop.
+    final existsNow = (await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE name = 'word_index'",
+    )).isNotEmpty;
+
+    if (!existsNow) {
+      if (fts5Available) {
+        await db.execute('''
+          CREATE VIRTUAL TABLE word_index USING fts5(
+            word,
+            content,
+            dict_id UNINDEXED,
+            offset UNINDEXED,
+            length UNINDEXED,
+            tokenize = 'unicode61'
+          )
+        ''');
+        debugPrint('word_index created as FTS5 virtual table.');
+      } else {
+        debugPrint(
+          'FTS5 unavailable — creating word_index as regular indexed table.',
+        );
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS word_index (
+            word TEXT,
+            content TEXT,
+            dict_id INTEGER,
+            offset INTEGER,
+            length INTEGER
+          )
+        ''');
+        try {
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_word_index_word ON word_index(word)',
+          );
+        } catch (_) {}
+      }
+    }
+  }
+
+  /// Called every time the database is opened (after onCreate/onUpgrade).
+  /// Ensures word_index is usable on this device's SQLite build.
+  Future<void> _onOpen(Database db) async {
+    await _ensureWordIndexTable(db);
+    // Cache FTS5 availability for the lifetime of this DB session.
+    _fts5Available = await _checkFts5Available(db);
   }
 
   Future<void> _onCreate(Database db, int version) async {
     // 1. Create dictionaries table
     await db.execute('''
-      CREATE TABLE dictionaries (
+      CREATE TABLE IF NOT EXISTS dictionaries (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         path TEXT NOT NULL,
@@ -106,37 +206,12 @@ class DatabaseHelper {
       )
     ''');
 
-    // 2. Create word_index FTS5 virtual table
-    try {
-      await db.execute('''
-        CREATE VIRTUAL TABLE word_index USING fts5(
-          word,
-          content,
-          dict_id UNINDEXED,
-          offset UNINDEXED,
-          length UNINDEXED,
-          tokenize = 'unicode61'
-        )
-      ''');
-    } catch (e) {
-      debugPrint(
-        'FTS5 table creation failed, falling back to normal table: $e',
-      );
-      await db.execute('''
-        CREATE TABLE word_index (
-          word TEXT,
-          content TEXT,
-          dict_id INTEGER,
-          offset INTEGER,
-          length INTEGER
-        )
-      ''');
-      await db.execute('CREATE INDEX idx_word_index_word ON word_index(word)');
-    }
+    // 2. Create word_index table (FTS5 if available, regular indexed otherwise).
+    await DatabaseHelper._ensureWordIndexTable(db);
 
     // 3. Create search_history table
     await db.execute('''
-      CREATE TABLE search_history (
+      CREATE TABLE IF NOT EXISTS search_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         word TEXT NOT NULL,
         timestamp INTEGER NOT NULL
@@ -145,7 +220,7 @@ class DatabaseHelper {
 
     // 4. Create flash_card_scores table
     await db.execute('''
-      CREATE TABLE flash_card_scores (
+      CREATE TABLE IF NOT EXISTS flash_card_scores (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         score INTEGER NOT NULL,
         total INTEGER NOT NULL,
@@ -638,6 +713,7 @@ class DatabaseHelper {
       if (headwordQuery != null && headwordQuery.trim().isNotEmpty) {
         final String hQuery = headwordQuery.trim();
         final String safeHQuery = hQuery.replaceAll('"', '""');
+        final bool useFts5 = _fts5Available ?? true;
 
         if (hQuery.contains('*') || hQuery.contains('?')) {
           whereClauses.add('word GLOB ?');
@@ -645,8 +721,13 @@ class DatabaseHelper {
         } else {
           switch (headwordMode) {
             case SearchMode.prefix:
-              whereClauses.add('word MATCH ?');
-              whereArgs.add('$safeHQuery*');
+              if (useFts5) {
+                whereClauses.add('word MATCH ?');
+                whereArgs.add('$safeHQuery*');
+              } else {
+                whereClauses.add('word LIKE ?');
+                whereArgs.add('$hQuery%');
+              }
               break;
             case SearchMode.suffix:
               whereClauses.add('word LIKE ?');
@@ -657,8 +738,13 @@ class DatabaseHelper {
               whereArgs.add('%$hQuery%');
               break;
             case SearchMode.exact:
-              whereClauses.add('word MATCH ?');
-              whereArgs.add('"$safeHQuery"');
+              if (useFts5) {
+                whereClauses.add('word MATCH ?');
+                whereArgs.add('"$safeHQuery"');
+              } else {
+                whereClauses.add('word = ?');
+                whereArgs.add(hQuery);
+              }
               break;
           }
         }
@@ -668,6 +754,7 @@ class DatabaseHelper {
       if (definitionQuery != null && definitionQuery.trim().isNotEmpty) {
         final String dQuery = definitionQuery.trim();
         final String safeDQuery = dQuery.replaceAll('"', '""');
+        final bool useFts5 = _fts5Available ?? true;
 
         if ((dQuery.contains('*') || dQuery.contains('?')) && definitionMode == SearchMode.suffix) {
           whereClauses.add('content GLOB ?');
@@ -675,22 +762,32 @@ class DatabaseHelper {
         } else {
           switch (definitionMode) {
             case SearchMode.prefix:
-              whereClauses.add('content MATCH ?');
-              whereArgs.add('"$safeDQuery" *');
+              if (useFts5) {
+                whereClauses.add('content MATCH ?');
+                whereArgs.add('"$safeDQuery" *');
+              } else {
+                whereClauses.add('content LIKE ?');
+                whereArgs.add('$dQuery%');
+              }
               break;
             case SearchMode.suffix:
-              // FTS5 doesn't fully support suffix match natively. Use LIKE.
               whereClauses.add('content LIKE ?');
               whereArgs.add('%$dQuery');
               break;
             case SearchMode.substring:
-              // FTS5 doesn't easily support infix match via MATCH without trigrams. Use LIKE.
               whereClauses.add('content LIKE ?');
               whereArgs.add('%$dQuery%');
               break;
             case SearchMode.exact:
-              whereClauses.add('content MATCH ?');
-              whereArgs.add('"$safeDQuery"');
+              if (useFts5) {
+                whereClauses.add('content MATCH ?');
+                whereArgs.add('"$safeDQuery"');
+              } else {
+                // Fallback: treat exact as substring match since LIKE on full
+                // content field won't do token equality the way FTS5 MATCH does.
+                whereClauses.add('content LIKE ?');
+                whereArgs.add('%$dQuery%');
+              }
               break;
           }
         }
@@ -734,7 +831,8 @@ class DatabaseHelper {
       final db = await database;
       final String safePrefix = prefix.replaceAll('"', '""');
 
-      if (fuzzy) {
+      if (fuzzy || !(_fts5Available ?? true)) {
+        // Use LIKE for fuzzy mode or when FTS5 is unavailable.
         final String sql = '''
           SELECT DISTINCT word 
           FROM word_index 
@@ -744,7 +842,7 @@ class DatabaseHelper {
           LIMIT ?
         ''';
         final results = await db.rawQuery(sql, ['%$prefix%', limit]);
-        _log('RAW_QUERY (Suggest Fuzzy)', sql, ['%$prefix%', limit], results);
+        _log('RAW_QUERY (Suggest Fuzzy/NoFTS5)', sql, ['%$prefix%', limit], results);
         return results.map((r) => r['word'] as String).toList();
       } else {
         final String prefixMatchQuery = '$safePrefix*';
