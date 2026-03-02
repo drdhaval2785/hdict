@@ -14,7 +14,7 @@ void main() {
     // constructor loads settings asynchronously; give it a moment
     await Future.delayed(Duration(milliseconds: 100));
 
-    expect(provider.headwordColor.toARGB32(), equals(Colors.black.toARGB32()));
+    expect(provider.headwordColor.toARGB32(), equals(Colors.brown.toARGB32()));
 
     await provider.setHeadwordColor(Colors.red);
     expect(provider.headwordColor.toARGB32(), equals(Colors.red.toARGB32()));

@@ -28,7 +28,8 @@ void main() {
           display_order INTEGER DEFAULT 0,
           start_rowid INTEGER,
           end_rowid INTEGER,
-          format TEXT DEFAULT 'stardict'
+          format TEXT DEFAULT 'stardict',
+          type_sequence TEXT
         )
       ''');
 

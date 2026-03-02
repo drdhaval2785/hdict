@@ -30,9 +30,9 @@ void main() {
       final defHtml = dict1['definition'] as String;
       
       // Each headword should have its own heading now, not merged
-      expect(defHtml, contains('<div class="headword" style="font-size:1.3em;font-weight:bold;margin-bottom:8px;">alpha</div>'));
-      expect(defHtml, contains('<div class="headword" style="font-size:1.3em;font-weight:bold;margin-bottom:8px;">beta</div>'));
-      expect(defHtml, contains('<div class="headword" style="font-size:1.3em;font-weight:bold;margin-bottom:8px;">gamma</div>'));
+      expect(defHtml, contains('<div class="headword" style="font-weight:bold;margin-bottom:8px;">alpha</div>'));
+      expect(defHtml, contains('<div class="headword" style="font-weight:bold;margin-bottom:8px;">beta</div>'));
+      expect(defHtml, contains('<div class="headword" style="font-weight:bold;margin-bottom:8px;">gamma</div>'));
       
       // Definitions should be present
       expect(defHtml, contains('def1'));
