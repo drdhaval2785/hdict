@@ -816,6 +816,7 @@ class DictionaryManager {
         bookName,
         finalDictPath,
         indexDefinitions: indexDefinitions,
+        typeSequence: ifoParser.sameTypeSequence,
       );
 
       yield ImportProgress(message: 'Indexing words...', value: 0.85);
@@ -962,7 +963,7 @@ class DictionaryManager {
       final finalDictName = _getDecompressedName(p.basename(dictName));
       final finalSynName = synName != null ? _getDecompressedName(p.basename(synName)) : null;
 
-      final dictId = await _dbHelper.insertDictionary(bookName, finalDictName, indexDefinitions: indexDefinitions);
+      final dictId = await _dbHelper.insertDictionary(bookName, finalDictName, indexDefinitions: indexDefinitions, typeSequence: ifoParser.sameTypeSequence);
 
       // Save files to virtual filesystem (SQLite 'files' table)
       yield ImportProgress(message: 'Saving files to database...', value: 0.6);
@@ -1149,6 +1150,7 @@ class DictionaryManager {
         finalMdxPath,
         indexDefinitions: indexDefinitions,
         format: 'mdict',
+        typeSequence: null,
       );
 
       yield ImportProgress(message: 'Enumerating headwords...', value: 0.4);
@@ -1265,6 +1267,7 @@ class DictionaryManager {
         finalDictPath,
         indexDefinitions: indexDefinitions,
         format: 'dictd',
+        typeSequence: null,
       );
 
       yield ImportProgress(message: 'Indexing DICTD words...', value: 0.45);

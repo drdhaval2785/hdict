@@ -25,11 +25,15 @@ class HomeScreen extends StatefulWidget {
     final List<Map<String, dynamic>> consolidated = [];
     groupedResults.forEach((dictId, uniqueKeyMap) {
       String? dictName;
+      String? format;
+      String? typeSequence;
       final List<String> allHeadwords = [];
       final List<String> definitionsList = [];
       uniqueKeyMap.forEach((uniqueKey, entries) {
         if (entries.isEmpty) return;
         dictName ??= entries.first['dict_name'] as String;
+        format ??= entries.first['format'] as String?;
+        typeSequence ??= entries.first['type_sequence'] as String?;
         
         final headwords = entries.map((e) => e['word'] as String).toSet().toList();
         final headwordStr = headwords.join(' | ');
@@ -37,13 +41,15 @@ class HomeScreen extends StatefulWidget {
 
         final buffer = StringBuffer();
         buffer.writeln('<div class="headword" style="font-weight:bold;margin-bottom:8px;">$headwordStr</div>');
-        buffer.writeln(normalizeWhitespace(entries.first['definition'] as String));
+        buffer.writeln(normalizeWhitespace(entries.first['definition'] as String, format: format, typeSequence: typeSequence));
         definitionsList.add(buffer.toString());
       });
 
       consolidated.add({
         'dict_id': dictId,
         'dict_name': dictName ?? '',
+        'format': format,
+        'type_sequence': typeSequence,
         'word': allHeadwords.join(' | '),
         'definition': definitionsList.join('<hr>'),
         'definitions': definitionsList,
@@ -52,12 +58,50 @@ class HomeScreen extends StatefulWidget {
     return consolidated;
   }
 
-  /// Normalizes whitespace in HTML by replacing multiple spaces/newlines with single space.
-  static String normalizeWhitespace(String html) {
-    return html
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .replaceAll(RegExp(r'>\s+<'), '><')
-        .trim();
+  /// Normalizes whitespace. If content is HTML, it's more aggressive.
+  /// If it's plain text, it preserves newlines as <br>.
+  static String normalizeWhitespace(String text, {String? format, String? typeSequence}) {
+    bool isHtml = false;
+    if (format == 'mdict') {
+      isHtml = true; // MDict is almost always HTML
+    } else if (format == 'stardict') {
+      if (typeSequence != null && (typeSequence.contains('h') || typeSequence.contains('x') || typeSequence.contains('g'))) {
+        isHtml = true;
+      } else if (text.contains('<') && text.contains('>')) {
+        // Heuristic: if it looks like it has tags, treat as HTML
+        isHtml = true;
+      }
+    }
+
+    if (isHtml) {
+      // List of common HTML tags to KEEP. Strip everything else.
+      const allowedTags = 'div|span|p|br|hr|b|i|u|blockquote|a|ul|ol|li|h[1-6]|table|tr|td|th|thead|tbody|tfoot|img|font|big|small|em|strong|sub|sup';
+      
+      // Regex explanation: Match any tag <tag ...> or </tag> where tag is NOT in our whitelist.
+      // Negative lookahead (?!) ensures we don't match allowed tags.
+      final tagRegex = RegExp('<(/?)(?!(?:$allowedTags)\\b)[a-z0-9]+([^>]*)>', caseSensitive: false);
+      
+      String processed = text.replaceAll(tagRegex, '');
+
+      return processed
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .replaceAll(RegExp(r'>\s+<'), '><')
+          .trim();
+    } else {
+      // Plain text dictionary: Preserve newlines by converting them to <br>
+      // then collapsing other multiple spaces.
+      return text
+          .replaceAll('\r\n', '\n')
+          .trim()
+          .replaceAllMapped(RegExp(r'\s+'), (match) {
+            if (match.group(0)!.contains('\n')) {
+              // Count newlines and return appropriate number of <br>
+              int n = match.group(0)!.split('\n').length - 1;
+              return '<br>' * n;
+            }
+            return ' ';
+          });
+    }
   }
 
   @override
@@ -151,6 +195,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ...result,
             'dict_name': dict['name'],
             'definition': content,
+            'format': dict['format'],
+            'type_sequence': dict['type_sequence'],
           });
         }
       }
@@ -524,6 +570,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       int? searchResultCount}) {
     final settings = context.watch<SettingsProvider>();
     final List<String> rawDefinitions = defMap['definitions'];
+    final String? format = defMap['format'];
+    final String? typeSequence = defMap['type_sequence'];
     
     final isDark =
         ThemeData.estimateBrightnessForColor(settings.backgroundColor) ==
@@ -573,8 +621,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     textAlign: TextAlign.center,
                   );
                 }
-                String definitionHtml = rawDefinitions[index];
-                definitionHtml = HomeScreen.normalizeWhitespace(definitionHtml);
+                String rawHtml = rawDefinitions[index];
+                debugPrint('--- RAW DEFINITION (Index $index) [$format / ${typeSequence ?? ""}] ---\n$rawHtml\n-------------------');
+                
+                String strippedHtml = HomeScreen.normalizeWhitespace(rawHtml, format: format, typeSequence: typeSequence);
+                debugPrint('--- STRIPPED HTML (Index $index) ---\n$strippedHtml\n-------------------');
+
+                String definitionHtml = strippedHtml;
                 if (settings.isTapOnMeaningEnabled) {
                   definitionHtml = HtmlLookupWrapper.wrapWords(definitionHtml);
                 }
@@ -595,6 +648,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     underlineColor: highlightCol,
                   );
                 }
+                
+                debugPrint('--- RENDERED HTML (Index $index) ---\n$definitionHtml\n-------------------');
 
                 return Stack(
                   children: [
@@ -611,7 +666,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             ".headword": Style(color: settings.headwordColor, fontWeight: FontWeight.bold),
                             ".headword a": Style(color: settings.headwordColor, textDecoration: TextDecoration.none),
                             ".headword .dict-word": Style(color: settings.headwordColor, textDecoration: TextDecoration.none),
-                          },
+                           },
                           onLinkTap: (url, attributes, element) async {
                             if (url != null) {
                               if (url.startsWith('http://') || url.startsWith('https://')) {
@@ -751,6 +806,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         ...res,
                         'dict_name': dict['name'],
                         'definition': content,
+                        'format': dict['format'],
+                        'type_sequence': dict['type_sequence'],
                       });
                     }
                     totalWatch.stop();

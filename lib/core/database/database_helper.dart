@@ -82,7 +82,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 11, // Version 11: added 'dict_ids' to flash_card_scores
+      version: 12, // Version 12: added 'type_sequence' to dictionaries
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -101,7 +101,8 @@ class DatabaseHelper {
         display_order INTEGER DEFAULT 0,
         start_rowid INTEGER,
         end_rowid INTEGER,
-        format TEXT DEFAULT 'stardict'
+        format TEXT DEFAULT 'stardict',
+        type_sequence TEXT
       )
     ''');
 
@@ -236,6 +237,25 @@ class DatabaseHelper {
         debugPrint('Migration error (version 11): $e');
       }
     }
+    if (oldVersion < 12) {
+      try {
+        final tableInfo = await db.rawQuery("PRAGMA table_info('dictionaries')");
+        bool hasTypeSequence = false;
+        for (final row in tableInfo) {
+          if (row['name'] == 'type_sequence') {
+            hasTypeSequence = true;
+            break;
+          }
+        }
+        if (!hasTypeSequence) {
+          await db.execute(
+            'ALTER TABLE dictionaries ADD COLUMN type_sequence TEXT',
+          );
+        }
+      } catch (e) {
+        debugPrint('Migration error (version 12): $e');
+      }
+    }
   }
 
   // --- Path Resolution Helper (iOS/macOS Absolute Path Volatility) ---
@@ -318,6 +338,7 @@ class DatabaseHelper {
     String path, {
     bool indexDefinitions = false,
     String format = 'stardict',
+    String? typeSequence,
   }) async {
     final db = await database;
 
@@ -333,6 +354,7 @@ class DatabaseHelper {
       'is_enabled': 1,
       'index_definitions': indexDefinitions ? 1 : 0,
       'format': format,
+      'type_sequence': typeSequence,
     });
   }
 
