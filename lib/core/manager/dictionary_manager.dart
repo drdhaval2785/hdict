@@ -119,6 +119,10 @@ Future<void> _indexEntry(_IndexArgs args) async {
       final content =
           args.indexDefinitions ? await dictReader.readAtIndex(offset, length) : '';
 
+      // Track offset+length for every headword so .syn synonyms can
+      // resolve back to the correct definition position.
+      wordOffsets.add((offset: offset, length: length, content: content));
+
       batch.add({
         'word': word,
         'content': content,
