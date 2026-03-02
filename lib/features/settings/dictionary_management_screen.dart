@@ -722,6 +722,14 @@ class _DictionaryManagementScreenState
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (progress.dictionaryName != null) ...[
+          Text(
+            progress.dictionaryName!,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+        ],
         LinearProgressIndicator(value: progress.value),
         const SizedBox(height: 16),
         Text(progress.message, textAlign: TextAlign.center),

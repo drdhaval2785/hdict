@@ -40,6 +40,7 @@ class ImportProgress {
   final List<String>? sampleWords;
   final int headwordCount;
   final int definitionWordCount;
+  final String? dictionaryName;
 
   ImportProgress({
     required this.message,
@@ -51,6 +52,7 @@ class ImportProgress {
     this.sampleWords,
     this.headwordCount = 0,
     this.definitionWordCount = 0,
+    this.dictionaryName,
   });
 }
 
@@ -133,7 +135,6 @@ Future<void> _indexEntry(_IndexArgs args) async {
             .length;
       }
 
-      wordOffsets.add((offset: offset, length: length, content: content));
       if (batch.length >= 2000) {
         await dbHelper.batchInsertWords(args.dictId, batch);
         batch.clear();
@@ -148,6 +149,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
                         0.05),
             headwordCount: headwordCount,
             definitionWordCount: defWordCount,
+            dictionaryName: args.ifoParser.bookName,
           ),
         );
       }
@@ -191,6 +193,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
         isCompleted: true,
         headwordCount: headwordCount,
         definitionWordCount: defWordCount,
+        dictionaryName: args.ifoParser.bookName,
       ),
     );
   } catch (e, s) {
@@ -621,6 +624,7 @@ class DictionaryManager {
         yield ImportProgress(
           message: 'Importing dictionary $currentDict of $totalDicts: $name',
           value: 0.45 + (currentDict - 1) / totalDicts * 0.55,
+          dictionaryName: name,
         );
 
         Stream<ImportProgress> subStream;
@@ -653,6 +657,7 @@ class DictionaryManager {
             dictId: progress.dictId,
             sampleWords: progress.sampleWords,
             error: progress.error,
+            dictionaryName: progress.dictionaryName ?? name,
           );
           if (progress.isCompleted) break;
         }
@@ -728,6 +733,7 @@ class DictionaryManager {
         yield ImportProgress(
           message: 'Importing dictionary $currentDict of $totalDicts: ${p.basenameWithoutExtension(ifoName)}',
           value: 0.5 + (currentDict - 1) / totalDicts * 0.5,
+          dictionaryName: p.basenameWithoutExtension(ifoName),
         );
 
         try {
@@ -736,6 +742,7 @@ class DictionaryManager {
             yield ImportProgress(
               message: '[$currentDict/$totalDicts] ${progress.message}',
               value: 0.5 + ((currentDict - 1) + (progress.value)) / totalDicts * 0.5,
+              dictionaryName: progress.dictionaryName ?? p.basenameWithoutExtension(ifoName),
             );
             if (progress.isCompleted) break;
           }
@@ -788,7 +795,7 @@ class DictionaryManager {
       await ifoParser.parse(actualIfoPath);
       final bookName = ifoParser.bookName ?? 'Unknown Dictionary';
 
-      yield ImportProgress(message: 'Saving dictionary files...', value: 0.75);
+      yield ImportProgress(message: 'Saving dictionary files...', value: 0.75, dictionaryName: bookName);
 
       // Native: Move to permanent location
       final appDocDir = await getApplicationDocumentsDirectory();
@@ -819,7 +826,7 @@ class DictionaryManager {
         typeSequence: ifoParser.sameTypeSequence,
       );
 
-      yield ImportProgress(message: 'Indexing words...', value: 0.85);
+      yield ImportProgress(message: 'Indexing words...', value: 0.85, dictionaryName: bookName);
 
       final receivePort = ReceivePort();
       final rootIsolateToken = RootIsolateToken.instance!;
@@ -868,6 +875,7 @@ class DictionaryManager {
         sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
         headwordCount: finalHeadwordCount,
         definitionWordCount: finalDefWordCount,
+        dictionaryName: bookName,
       );
     } catch (e, s) {
       debugPrint('Error in _processDictionaryFiles: $e\n$s');
@@ -953,7 +961,7 @@ class DictionaryManager {
       }
 
       // Decompress components
-      yield ImportProgress(message: 'Decompressing components...', value: 0.55);
+      yield ImportProgress(message: 'Decompressing components...', value: 0.55, dictionaryName: bookName);
       final decompressedIdxBytes = await _maybeDecompressWeb(idxName, files[idxName]!);
       final decompressedDictBytes = await _maybeDecompressWeb(dictName, files[dictName]!);
       final decompressedSynBytes = synName != null ? await _maybeDecompressWeb(synName, files[synName]!) : null;
@@ -966,7 +974,7 @@ class DictionaryManager {
       final dictId = await _dbHelper.insertDictionary(bookName, finalDictName, indexDefinitions: indexDefinitions, typeSequence: ifoParser.sameTypeSequence);
 
       // Save files to virtual filesystem (SQLite 'files' table)
-      yield ImportProgress(message: 'Saving files to database...', value: 0.6);
+      yield ImportProgress(message: 'Saving files to database...', value: 0.6, dictionaryName: bookName);
       await _dbHelper.saveFile(dictId, finalIfoName, decompressedIfoBytes);
       await _dbHelper.saveFile(dictId, finalIdxName, decompressedIdxBytes);
       await _dbHelper.saveFile(dictId, finalDictName, decompressedDictBytes);
@@ -975,7 +983,7 @@ class DictionaryManager {
       }
 
       // Indexing on Web (sequential for simplicity/stability)
-      yield ImportProgress(message: 'Indexing words (Web)...', value: 0.7);
+      yield ImportProgress(message: 'Indexing words (Web)...', value: 0.7, dictionaryName: bookName);
       
       final idxParser = IdxParser(ifoParser);
       final dictReader = DictReader(finalDictName, dictId: dictId);
@@ -1022,6 +1030,7 @@ class DictionaryManager {
             message: 'Indexing $headwordCount words...',
             value: 0.7 + (headwordCount / (ifoParser.wordCount == 0 ? 100000 : ifoParser.wordCount) * 0.2),
             headwordCount: headwordCount,
+            dictionaryName: bookName,
           );
         }
       }
@@ -1067,6 +1076,7 @@ class DictionaryManager {
         sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
         headwordCount: headwordCount,
         definitionWordCount: defWordCount,
+        dictionaryName: bookName,
       );
     } catch (e, s) {
       debugPrint('Web import error: $e\n$s');
@@ -1190,6 +1200,7 @@ class DictionaryManager {
             message: 'Indexing $indexed / $totalKeys headwords...',
             value: 0.5 + (indexed / (totalKeys == 0 ? 1 : totalKeys)) * 0.4,
             headwordCount: indexed,
+            dictionaryName: bookName,
           );
         }
       }
@@ -1207,6 +1218,7 @@ class DictionaryManager {
         dictId: dictId,
         sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
         headwordCount: indexed,
+        dictionaryName: bookName,
       );
     } catch (e, s) {
       debugPrint('MDict import error: $e\n$s');
@@ -1310,6 +1322,7 @@ class DictionaryManager {
             message: 'Indexing $headwordCount words...',
             value: 0.45 + (headwordCount / 100000) * 0.45,
             headwordCount: headwordCount,
+            dictionaryName: bookName,
           );
         }
       }
@@ -1328,6 +1341,7 @@ class DictionaryManager {
         sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
         headwordCount: headwordCount,
         definitionWordCount: defWordCount,
+        dictionaryName: bookName,
       );
     } catch (e, s) {
       debugPrint('DICTD import error: $e\n$s');
@@ -1409,11 +1423,12 @@ class DictionaryManager {
       await ifoParser.parse(ifoPath);
 
       // Wipe existing index
-      yield ImportProgress(message: 'Wiping existing index...', value: 0.2);
+      final bookName = dict['name'] as String? ?? 'Unknown Dictionary';
+      yield ImportProgress(message: 'Wiping existing index...', value: 0.2, dictionaryName: bookName);
       await _dbHelper.deleteWordsByDictionaryId(dictId);
       await _dbHelper.updateDictionaryIndexDefinitions(dictId, true);
 
-      yield ImportProgress(message: 'Starting re-indexing...', value: 0.3);
+      yield ImportProgress(message: 'Starting re-indexing...', value: 0.3, dictionaryName: bookName);
 
       final receivePort = ReceivePort();
       final rootIsolateToken = RootIsolateToken.instance!;
@@ -1449,6 +1464,7 @@ class DictionaryManager {
         message: 'Re-indexing complete!',
         value: 1.0,
         isCompleted: true,
+        dictionaryName: bookName,
       );
     } catch (e) {
       yield ImportProgress(
