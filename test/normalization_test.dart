@@ -28,11 +28,11 @@ void main() {
       expect(output, 'A<br>B<br><br>C');
     });
 
-    test('StarDict tag stripping (generic)', () {
-      const input = '<k>head</k> <nonstandard>text</nonstandard> <abr>adj</abr> <b>bold</b>';
+    test('StarDict tag conversion to spans', () {
+      const input = '<k>head</k> <custom>text</custom> <b>bold</b>';
       final output = HomeScreen.normalizeWhitespace(input, format: 'stardict', typeSequence: 'h');
-      // <b> should stay, others should be stripped
-      expect(output, 'head text adj <b>bold</b>');
+      // <b> should stay, others should be converted
+      expect(output, '<span class="hdict-k">head</span> <span class="hdict-custom">text</span> <b>bold</b>');
     });
   });
 }

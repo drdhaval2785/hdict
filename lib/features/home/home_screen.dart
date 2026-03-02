@@ -74,18 +74,35 @@ class HomeScreen extends StatefulWidget {
     }
 
     if (isHtml) {
-      // List of common HTML tags to KEEP. Strip everything else.
+      // List of common HTML tags to KEEP. 
+      // Convert everything else to <span class="hdict-[tag]">
       const allowedTags = 'div|span|p|br|hr|b|i|u|blockquote|a|ul|ol|li|h[1-6]|table|tr|td|th|thead|tbody|tfoot|img|font|big|small|em|strong|sub|sup';
       
-      // Regex explanation: Match any tag <tag ...> or </tag> where tag is NOT in our whitelist.
-      // Negative lookahead (?!) ensures we don't match allowed tags.
-      final tagRegex = RegExp('<(/?)(?!(?:$allowedTags)\\b)[a-z0-9]+([^>]*)>', caseSensitive: false);
+      // regex to match any tag <tag ...> or </tag>
+      final genericTagRegex = RegExp(r'<(/?[a-z0-9]+)([^>]*)>', caseSensitive: false);
       
-      String processed = text.replaceAll(tagRegex, '');
+      String processed = text.replaceAllMapped(genericTagRegex, (match) {
+        String fullTag = match.group(1)!;
+        bool isClosing = fullTag.startsWith('/');
+        String tagName = isClosing ? fullTag.substring(1).toLowerCase() : fullTag.toLowerCase();
+        
+        // If it's in the whitelist, keep it as is
+        if (RegExp('^(?:$allowedTags)\$').hasMatch(tagName)) {
+          return match.group(0)!;
+        }
+        
+        // Otherwise, convert to span with class
+        if (isClosing) {
+          return '</span>';
+        } else {
+          // Preserve attributes if any, but clean them up for valid HTML if needed
+          // For now, just include them or discard them. User asked for class="tagName"
+          return '<span class="hdict-$tagName">';
+        }
+      });
 
       return processed
           .replaceAll(RegExp(r'\s+'), ' ')
-          .replaceAll(RegExp(r'>\s+<'), '><')
           .trim();
     } else {
       // Plain text dictionary: Preserve newlines by converting them to <br>
