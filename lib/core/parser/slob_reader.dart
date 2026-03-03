@@ -61,8 +61,8 @@ class SlobReader {
     return null;
   }
 
-  /// Returns the content of the blob at the given [index].
-  /// This is O(1) once the file is open.
+  /// Returns the content of the blob at the given [index] (global ref index).
+  /// This is O(1) once the file is open but involves a reference lookup.
   Future<String?> getBlobContent(int index) async {
     if (kIsWeb) throw UnsupportedError('Slob is not supported on Web.');
     if (!_isInitialized) await open();
@@ -71,6 +71,19 @@ class SlobReader {
 
     final blob = await _reader!.getBlob(index);
     return utf8.decode(blob.content, allowMalformed: true);
+  }
+
+  /// Returns the content of the blob for a specific [id] (packed binIndex/itemIndex).
+  /// This is the fastest O(1) lookup method.
+  Future<String?> getBlobContentById(int id) async {
+    if (kIsWeb) throw UnsupportedError('Slob is not supported on Web.');
+    if (!_isInitialized) await open();
+    if (_reader == null) return null;
+
+    final binIndex = id >> 16;
+    final itemIndex = id & 0xFFFF;
+    final content = await _reader!.getBlobContent(binIndex, itemIndex);
+    return utf8.decode(content, allowMalformed: true);
   }
 
   /// Closes the Slob file.

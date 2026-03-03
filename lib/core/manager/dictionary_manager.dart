@@ -369,6 +369,54 @@ class DictionaryManager {
     : _dbHelper = dbHelper ?? DatabaseHelper(),
       _client = client ?? http.Client();
 
+  /// Cache of open dictionary readers to avoid re-opening files.
+  static final Map<int, dynamic> _readerCache = {};
+
+  /// Gets a cached reader or creates a new one.
+  Future<dynamic> _getReader(Map<String, dynamic> dict) async {
+    final int? dictId = dict['id'] as int?;
+    if (dictId == null) return null;
+
+    if (_readerCache.containsKey(dictId)) {
+      return _readerCache[dictId];
+    }
+
+    final String format = dict['format'];
+    final String dictPath = dict['path'];
+
+    dynamic reader;
+    if (format == 'mdict') {
+      reader = MdictReader(dictPath);
+      await reader.open();
+    } else if (format == 'slob') {
+      reader = SlobReader(dictPath);
+      await reader.open();
+    }
+
+    if (reader != null) {
+      _readerCache[dictId] = reader;
+    }
+    return reader;
+  }
+
+  /// Closes and removes a reader from the cache.
+  static Future<void> closeReader(int dictId) async {
+    final reader = _readerCache.remove(dictId);
+    if (reader != null) {
+      if (reader is SlobReader || reader is MdictReader) {
+        await reader.close();
+      }
+    }
+  }
+
+  /// Closes all cached readers.
+  static Future<void> clearReaderCache() async {
+    final keys = _readerCache.keys.toList();
+    for (final id in keys) {
+      await closeReader(id);
+    }
+  }
+
   /// Helper to handle decompression of individual dictionary components.
   Future<String> _maybeDecompress(String path) async {
     if (path.endsWith('.gz') || path.endsWith('.dz')) {
@@ -1457,7 +1505,7 @@ class DictionaryManager {
           'word': blob.key,
           'content': indexDefinitions ? content : '',
           'dict_id': dictId,
-          'offset': headwordCount, // Store blob index for O(1) lookup
+          'offset': blob.id, // Store direct bin/item ID for O(1) lookup
           'length': blob.content.length, // Store content length
         });
 
@@ -1528,12 +1576,15 @@ class DictionaryManager {
 
     switch (format) {
       case 'mdict':
-        final reader = MdictReader(dictPath);
         try {
-          await reader.open();
-          return await reader.lookup(word);
-        } finally {
-          await reader.close();
+          final reader = await _getReader(dictRecord);
+          if (reader is MdictReader) {
+            return await reader.lookup(word);
+          }
+          return null;
+        } catch (e) {
+          debugPrint('Error fetching MDict definition: $e');
+          return null;
         }
 
       case 'dictd':
@@ -1541,13 +1592,16 @@ class DictionaryManager {
         return await reader.readEntry(offset, length);
 
       case 'slob':
-        // SlobReader uses the stored offset as the blob index for O(1) lookup.
-        final reader = SlobReader(dictPath);
+        // SlobReader uses the stored offset as the direct packed ID for O(1) lookup.
         try {
-          await reader.open();
-          return await reader.getBlobContent(offset);
-        } finally {
-          await reader.close();
+          final reader = await _getReader(dictRecord);
+          if (reader is SlobReader) {
+            return await reader.getBlobContentById(offset);
+          }
+          return null;
+        } catch (e) {
+          debugPrint('Error fetching Slob definition: $e');
+          return null;
         }
 
       case 'stardict':

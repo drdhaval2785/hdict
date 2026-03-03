@@ -77,28 +77,35 @@ class HomeScreen extends StatefulWidget {
 
     if (isHtml) {
       // List of common HTML tags to KEEP.
-      const allowedTags = 'div|span|p|br|hr|b|i|u|blockquote|a|ul|ol|li|h[1-6]|table|tr|td|th|thead|tbody|tfoot|img|font|big|small|em|strong|sub|sup|mark';
+      const allowedTags = 'html|head|body|div|span|p|br|hr|b|i|u|blockquote|a|ul|ol|li|h[1-6]|table|tr|td|th|thead|tbody|tfoot|img|font|big|small|em|strong|sub|sup|mark';
       
       // regex to match any tag <tag ...> or </tag>
       final genericTagRegex = RegExp(r'<(/?[a-z0-9]+)([^>]*)>', caseSensitive: false);
       
-      String processed = text.replaceAllMapped(genericTagRegex, (match) {
-        String fullTag = match.group(1)!;
-        bool isClosing = fullTag.startsWith('/');
-        String tagName = isClosing ? fullTag.substring(1).toLowerCase() : fullTag.toLowerCase();
-        
-        // If it's in the whitelist, keep it as is
-        if (RegExp('^(?:$allowedTags)\$').hasMatch(tagName)) {
-          return match.group(0)!;
-        }
-        
-        // Convert non-standard tags to semantic span with class
-        if (isClosing) {
-          return '</span>';
-        } else {
-          return '<span class="hdict-$tagName">';
-        }
-      });
+      String processed;
+      if (format == 'mdict' || format == 'slob' || format == 'dictd') {
+        // These formats usually contain standard HTML. 
+        // We skip the aggressive tag-to-span conversion to preserve structure and performance.
+        processed = text;
+      } else {
+        processed = text.replaceAllMapped(genericTagRegex, (match) {
+          String fullTag = match.group(1)!;
+          bool isClosing = fullTag.startsWith('/');
+          String tagName = isClosing ? fullTag.substring(1).toLowerCase() : fullTag.toLowerCase();
+          
+          // If it's in the whitelist, keep it as is
+          if (RegExp('^(?:$allowedTags)\$').hasMatch(tagName)) {
+            return match.group(0)!;
+          }
+          
+          // Convert non-standard tags to semantic span with class
+          if (isClosing) {
+            return '</span>';
+          } else {
+            return '<span class="hdict-$tagName">';
+          }
+        });
+      }
 
       return processed
           .replaceAll(RegExp(r'\s+'), ' ')
@@ -640,10 +647,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 String rawHtml = rawDefinitions[index];
                 debugPrint('--- RAW DEFINITION (Index $index) [$format / ${typeSequence ?? ""}] ---\n$rawHtml\n-------------------');
                 
-                String strippedHtml = HomeScreen.normalizeWhitespace(rawHtml, format: format, typeSequence: typeSequence);
-                debugPrint('--- STRIPPED HTML (Index $index) ---\n$strippedHtml\n-------------------');
-
-                String definitionHtml = strippedHtml;
+                String definitionHtml = rawHtml;
 
                 if (settings.isTapOnMeaningEnabled) {
                   definitionHtml = HtmlLookupWrapper.wrapWords(definitionHtml);
