@@ -62,21 +62,22 @@ class HomeScreen extends StatefulWidget {
   /// If it's plain text, it preserves newlines as <br>.
   static String normalizeWhitespace(String text, {String? format, String? typeSequence}) {
     bool isHtml = false;
-    if (format == 'mdict') {
-      isHtml = true; // MDict is almost always HTML
+    if (format == 'mdict' || format == 'dictd') {
+      isHtml = true; 
     } else if (format == 'stardict') {
       if (typeSequence != null && (typeSequence.contains('h') || typeSequence.contains('x') || typeSequence.contains('g'))) {
         isHtml = true;
-      } else if (text.contains('<') && text.contains('>')) {
-        // Heuristic: if it looks like it has tags, treat as HTML
-        isHtml = true;
       }
+    }
+    
+    // Heuristic: if it looks like it has tags, treat as HTML regardless of format
+    if (!isHtml && text.contains('<') && text.contains('>')) {
+      isHtml = true;
     }
 
     if (isHtml) {
-      // List of common HTML tags to KEEP. 
-      // Convert everything else to <span class="hdict-[tag]">
-      const allowedTags = 'div|span|p|br|hr|b|i|u|blockquote|a|ul|ol|li|h[1-6]|table|tr|td|th|thead|tbody|tfoot|img|font|big|small|em|strong|sub|sup';
+      // List of common HTML tags to KEEP.
+      const allowedTags = 'div|span|p|br|hr|b|i|u|blockquote|a|ul|ol|li|h[1-6]|table|tr|td|th|thead|tbody|tfoot|img|font|big|small|em|strong|sub|sup|mark';
       
       // regex to match any tag <tag ...> or </tag>
       final genericTagRegex = RegExp(r'<(/?[a-z0-9]+)([^>]*)>', caseSensitive: false);
@@ -91,17 +92,12 @@ class HomeScreen extends StatefulWidget {
           return match.group(0)!;
         }
         
-        // Otherwise, convert to span with class
-        if (isClosing) {
-          return '</span>';
-        } else {
-          // Preserve attributes if any, but clean them up for valid HTML if needed
-          // For now, just include them or discard them. User asked for class="tagName"
-          return '<span class="hdict-$tagName">';
-        }
+        // Otherwise, strip it to avoid issues with unclosed non-standard tags
+        return '';
       });
 
       return processed
+          .replaceAll(RegExp(r'\r\n?|\n'), '<br>')
           .replaceAll(RegExp(r'\s+'), ' ')
           .trim();
     } else {
@@ -639,10 +635,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   );
                 }
                 String rawHtml = rawDefinitions[index];
-                // debugPrint('--- RAW DEFINITION (Index $index) [$format / ${typeSequence ?? ""}] ---\n$rawHtml\n-------------------');
+                debugPrint('--- RAW DEFINITION (Index $index) [$format / ${typeSequence ?? ""}] ---\n$rawHtml\n-------------------');
                 
                 String strippedHtml = HomeScreen.normalizeWhitespace(rawHtml, format: format, typeSequence: typeSequence);
-                // debugPrint('--- STRIPPED HTML (Index $index) ---\n$strippedHtml\n-------------------');
+                debugPrint('--- STRIPPED HTML (Index $index) ---\n$strippedHtml\n-------------------');
 
                 String definitionHtml = strippedHtml;
                 if (settings.isTapOnMeaningEnabled) {
@@ -666,7 +662,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   );
                 }
                 
-                // debugPrint('--- RENDERED HTML (Index $index) ---\n$definitionHtml\n-------------------');
+                debugPrint('--- RENDERED HTML (Index $index) ---\n$definitionHtml\n-------------------');
 
                 return Stack(
                   children: [
