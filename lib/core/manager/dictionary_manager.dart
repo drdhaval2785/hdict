@@ -1104,6 +1104,30 @@ class DictionaryManager {
   }
 
   Future<void> deleteDictionary(int id) async {
+    if (!kIsWeb) {
+      final dict = await _dbHelper.getDictionaryById(id);
+      if (dict != null && dict['path'] != null) {
+        final String rawPath = dict['path'] as String;
+        try {
+          final String resolvedPath = await _dbHelper.resolvePath(rawPath);
+          final file = File(resolvedPath);
+          final dir = file.parent;
+
+          if (await dir.exists()) {
+            final dirName = p.basename(dir.path);
+            // Only delete managed directories to be safe against accidental wiping
+            if (dirName.startsWith('dict_') ||
+                dirName.startsWith('mdict_') ||
+                dirName.startsWith('dictd_')) {
+              await dir.delete(recursive: true);
+              debugPrint('Deleted physical dictionary directory: ${dir.path}');
+            }
+          }
+        } catch (e) {
+          debugPrint('Failed to delete physical dictionary directory: $e');
+        }
+      }
+    }
     await _dbHelper.deleteDictionary(id);
   }
 
