@@ -1,0 +1,71 @@
+import 'package:slob_reader/slob_reader.dart' as lib;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:convert';
+
+/// Wrapper around the `slob_reader` package.
+///
+/// Provides a unified interface for reading Slob (.slob) dictionaries.
+/// Only supported on native platforms.
+class SlobReader {
+  final String path;
+  lib.SlobReader? _reader;
+  bool _isInitialized = false;
+
+  SlobReader(this.path);
+
+  /// Opens the Slob file.
+  Future<void> open() async {
+    if (kIsWeb) throw UnsupportedError('Slob is not supported on Web.');
+    if (_isInitialized) return;
+    _reader = await lib.SlobReader.open(path);
+    _isInitialized = true;
+  }
+
+  /// Returns the dictionary label from tags, or filename if unavailable.
+  String get bookName {
+    if (!_isInitialized || _reader == null) return '';
+    return _reader!.header.tags['label'] ?? '';
+  }
+
+  /// Returns total number of blobs.
+  int get blobCount {
+    if (!_isInitialized || _reader == null) return 0;
+    return _reader!.header.blobCount;
+  }
+
+  /// Stream of all blobs in the slob file.
+  Stream<dynamic> get blobs async* {
+    if (kIsWeb) throw UnsupportedError('Slob is not supported on Web.');
+    if (!_isInitialized) await open();
+    if (_reader == null) return;
+
+    for (int i = 0; i < blobCount; i++) {
+      yield await _reader!.getBlob(i);
+    }
+  }
+
+  /// Looks up the HTML definition for a word.
+  /// Returns null if the word is not found.
+  Future<String?> lookup(String word) async {
+    if (kIsWeb) throw UnsupportedError('Slob is not supported on Web.');
+    if (!_isInitialized) await open();
+    if (_reader == null) return null;
+
+    for (int i = 0; i < blobCount; i++) {
+        final blob = await _reader!.getBlob(i);
+        if (blob.key == word) {
+            return utf8.decode(blob.content, allowMalformed: true);
+        }
+    }
+    return null;
+  }
+
+  /// Closes the Slob file.
+
+  Future<void> close() async {
+    if (kIsWeb) return;
+    await _reader?.close();
+    _reader = null;
+    _isInitialized = false;
+  }
+}

@@ -50,6 +50,8 @@ dependencies:
   intl: ^0.20.2
   dictzip_reader: ^0.1.0
   dictd_reader: ^0.1.0
+  slob_reader: ^0.1.1
+
 
 dev_dependencies:
   flutter_test:
@@ -64,6 +66,8 @@ dev_dependencies:
   path_provider_platform_interface: ^2.1.0
   plugin_platform_interface: ^2.1.0
   flutter_launcher_icons: ^0.13.1
+
+
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

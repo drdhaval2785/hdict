@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:dict_reader/dict_reader.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 
