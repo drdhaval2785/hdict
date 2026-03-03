@@ -6,7 +6,8 @@ import 'package:hdict/core/parser/ifo_parser.dart';
 import 'package:hdict/core/parser/idx_parser.dart';
 import 'package:hdict/core/parser/syn_parser.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
-import 'package:hdict/core/parser/dictd_parser.dart';
+import 'package:hdict/core/parser/dict_reader.dart';
+import 'package:dictd_reader/dictd_reader.dart';
 import 'package:hdict/core/utils/html_lookup_wrapper.dart';
 import 'package:dictzip_reader/dictzip_reader.dart';
 import 'package:archive/archive.dart';
@@ -194,14 +195,6 @@ author=Tester
       expect(def2, 'definition of test');
     });
 
-    test('DictdParser maybeDecompressDictZ is a no-op for plain .dict', () async {
-      final dictFilePath = p.join(tempDir.path, 'test.dict');
-      await File(dictFilePath).writeAsString('content');
-
-      final parser = DictdParser();
-      final result = await parser.maybeDecompressDictZ(dictFilePath);
-      expect(result, dictFilePath);
-    });
   });
 
 

@@ -14,7 +14,8 @@ import 'package:hdict/core/parser/idx_parser.dart';
 import 'package:hdict/core/parser/syn_parser.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
 import 'package:hdict/core/parser/mdict_reader.dart';
-import 'package:hdict/core/parser/dictd_parser.dart';
+import 'package:hdict/core/parser/mdict_reader.dart';
+import 'package:dictd_reader/dictd_reader.dart';
 
 // Top-level functions for compute
 List<int> _decompressGzip(List<int> bytes) {
@@ -1281,10 +1282,6 @@ class DictionaryManager {
     try {
       final dictdParser = DictdParser();
 
-      // Decompress .dict.dz if needed
-      yield ImportProgress(message: 'Decompressing dictionary data...', value: 0.1);
-      final decompressedDictPath = await dictdParser.maybeDecompressDictZ(dictPath);
-
       final bookName = p.basenameWithoutExtension(indexPath)
           .replaceAll(RegExp(r'\.dict$'), '');
 
@@ -1298,9 +1295,9 @@ class DictionaryManager {
       final permanentDir = Directory(p.join(dictsDir.path, 'dictd_$timestamp'));
       await permanentDir.create(recursive: true);
 
-      final finalDictPath = p.join(permanentDir.path, p.basename(decompressedDictPath));
+      final finalDictPath = p.join(permanentDir.path, p.basename(dictPath));
       final finalIndexPath = p.join(permanentDir.path, p.basename(indexPath));
-      await File(decompressedDictPath).copy(finalDictPath);
+      await File(dictPath).copy(finalDictPath);
       await File(indexPath).copy(finalIndexPath);
 
       yield ImportProgress(message: 'Registering dictionary...', value: 0.35);
