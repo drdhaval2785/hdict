@@ -572,6 +572,17 @@ class DatabaseHelper {
       await txn.delete('word_index', where: 'dict_id = ?', whereArgs: [id]);
       await txn.delete('files', where: 'dict_id = ?', whereArgs: [id]);
     });
+    
+    // Physically reclaim storage space by rewriting the database file
+    try {
+      // Force FTS5 to merge its internal b-trees and drop orphaned shadow table rows
+      await db.execute("INSERT INTO word_index(word_index) VALUES('optimize')");
+      // Re-write the database to shrink the native file size
+      await db.execute('VACUUM');
+      debugPrint('Database optimized and vacuumed successfully');
+    } catch (e) {
+      debugPrint('Error vacuuming database: $e');
+    }
   }
 
   Future<List<Map<String, dynamic>>> getDictionaries() async {
