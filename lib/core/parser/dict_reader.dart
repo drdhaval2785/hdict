@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io';
 import 'dart:convert';
 import 'package:hdict/core/database/database_helper.dart';
-import 'package:hdict/core/parser/dictzip_reader.dart';
+import 'package:dictzip_reader/dictzip_reader.dart';
 import 'package:path/path.dart' as p;
 
 /// Reads definitions from a StarDict .dict or .dict.dz file at specified offsets and lengths.

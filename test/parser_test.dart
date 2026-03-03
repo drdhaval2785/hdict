@@ -8,7 +8,7 @@ import 'package:hdict/core/parser/syn_parser.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
 import 'package:hdict/core/parser/dictd_parser.dart';
 import 'package:hdict/core/utils/html_lookup_wrapper.dart';
-import 'package:hdict/core/parser/dictzip_reader.dart';
+import 'package:dictzip_reader/dictzip_reader.dart';
 import 'package:archive/archive.dart';
 import 'package:path/path.dart' as p;
 
