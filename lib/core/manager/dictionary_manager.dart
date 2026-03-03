@@ -1457,8 +1457,8 @@ class DictionaryManager {
           'word': blob.key,
           'content': indexDefinitions ? content : '',
           'dict_id': dictId,
-          'offset': 0, // Not used for Slob (reader uses index)
-          'length': 0,
+          'offset': headwordCount, // Store blob index for O(1) lookup
+          'length': blob.content.length, // Store content length
         });
 
         headwordCount++;
@@ -1541,16 +1541,11 @@ class DictionaryManager {
         return await reader.readEntry(offset, length);
 
       case 'slob':
-        // SlobReader doesn't use offset/length for lookup, it uses the word.
+        // SlobReader uses the stored offset as the blob index for O(1) lookup.
         final reader = SlobReader(dictPath);
         try {
           await reader.open();
-          // We need a lookup by key method in SlobReader. 
-          // For now, during import we store definitions if indexDefinitions is true.
-          // If not indexed, we'd need to find the blob by key.
-          // Since slob_reader doesn't have a direct lookup by key efficiently yet,
-          // we'll implement a simple search in our wrapper.
-          return await reader.lookup(word);
+          return await reader.getBlobContent(offset);
         } finally {
           await reader.close();
         }

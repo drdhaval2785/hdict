@@ -46,6 +46,7 @@ class SlobReader {
 
   /// Looks up the HTML definition for a word.
   /// Returns null if the word is not found.
+  /// Note: This is O(N). Use [getBlobContent] with an index for O(1) lookup.
   Future<String?> lookup(String word) async {
     if (kIsWeb) throw UnsupportedError('Slob is not supported on Web.');
     if (!_isInitialized) await open();
@@ -58,6 +59,18 @@ class SlobReader {
         }
     }
     return null;
+  }
+
+  /// Returns the content of the blob at the given [index].
+  /// This is O(1) once the file is open.
+  Future<String?> getBlobContent(int index) async {
+    if (kIsWeb) throw UnsupportedError('Slob is not supported on Web.');
+    if (!_isInitialized) await open();
+    if (_reader == null) return null;
+    if (index < 0 || index >= blobCount) return null;
+
+    final blob = await _reader!.getBlob(index);
+    return utf8.decode(blob.content, allowMalformed: true);
   }
 
   /// Closes the Slob file.
