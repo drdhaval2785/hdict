@@ -31,7 +31,7 @@ dependencies:
   flutter:
     sdk: flutter
   sqflite: ^2.3.0
-  mdict_flutter: ^0.1.1
+  dict_reader: ^1.6.0
   path_provider: ^2.1.1
   path: ^1.8.3
   archive: ^4.0.9

@@ -14,7 +14,6 @@ import 'package:hdict/core/parser/idx_parser.dart';
 import 'package:hdict/core/parser/syn_parser.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
 import 'package:hdict/core/parser/mdict_reader.dart';
-import 'package:hdict/core/parser/mdict_reader.dart';
 import 'package:dictd_reader/dictd_reader.dart';
 
 // Top-level functions for compute

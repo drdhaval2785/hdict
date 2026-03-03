@@ -29,7 +29,8 @@ void main() {
           start_rowid INTEGER,
           end_rowid INTEGER,
           format TEXT DEFAULT 'stardict',
-          type_sequence TEXT
+          type_sequence TEXT,
+          css TEXT
         )
       ''');
 

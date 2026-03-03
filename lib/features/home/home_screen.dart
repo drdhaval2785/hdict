@@ -92,12 +92,15 @@ class HomeScreen extends StatefulWidget {
           return match.group(0)!;
         }
         
-        // Otherwise, strip it to avoid issues with unclosed non-standard tags
-        return '';
+        // Convert non-standard tags to semantic span with class
+        if (isClosing) {
+          return '</span>';
+        } else {
+          return '<span class="hdict-$tagName">';
+        }
       });
 
       return processed
-          .replaceAll(RegExp(r'\r\n?|\n'), '<br>')
           .replaceAll(RegExp(r'\s+'), ' ')
           .trim();
     } else {
@@ -641,6 +644,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 debugPrint('--- STRIPPED HTML (Index $index) ---\n$strippedHtml\n-------------------');
 
                 String definitionHtml = strippedHtml;
+
                 if (settings.isTapOnMeaningEnabled) {
                   definitionHtml = HtmlLookupWrapper.wrapWords(definitionHtml);
                 }

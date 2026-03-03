@@ -92,7 +92,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 12, // Version 12: added 'type_sequence' to dictionaries
+      version: 13, // Version 13: added 'css' to dictionaries
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onOpen: _onOpen,
@@ -202,7 +202,8 @@ class DatabaseHelper {
         start_rowid INTEGER,
         end_rowid INTEGER,
         format TEXT DEFAULT 'stardict',
-        type_sequence TEXT
+        type_sequence TEXT,
+        css TEXT
       )
     ''');
 
@@ -312,23 +313,23 @@ class DatabaseHelper {
         debugPrint('Migration error (version 11): $e');
       }
     }
-    if (oldVersion < 12) {
+    if (oldVersion < 13) {
       try {
         final tableInfo = await db.rawQuery("PRAGMA table_info('dictionaries')");
-        bool hasTypeSequence = false;
+        bool hasCss = false;
         for (final row in tableInfo) {
-          if (row['name'] == 'type_sequence') {
-            hasTypeSequence = true;
+          if (row['name'] == 'css') {
+            hasCss = true;
             break;
           }
         }
-        if (!hasTypeSequence) {
+        if (!hasCss) {
           await db.execute(
-            'ALTER TABLE dictionaries ADD COLUMN type_sequence TEXT',
+            'ALTER TABLE dictionaries ADD COLUMN css TEXT',
           );
         }
       } catch (e) {
-        debugPrint('Migration error (version 12): $e');
+        debugPrint('Migration error (version 13): $e');
       }
     }
   }
@@ -430,6 +431,7 @@ class DatabaseHelper {
       'index_definitions': indexDefinitions ? 1 : 0,
       'format': format,
       'type_sequence': typeSequence,
+      'css': null, // Can be updated later or passed if known
     });
   }
 
