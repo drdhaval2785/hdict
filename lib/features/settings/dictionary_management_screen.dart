@@ -41,6 +41,7 @@ class _DictionaryManagementScreenState
 
   Future<void> _downloadDictionary() async {
     final TextEditingController urlController = TextEditingController();
+    bool indexDefinitions = false;
     final dynamic urlString = await showDialog<dynamic>(
       context: context,
       builder: (context) {
@@ -64,6 +65,19 @@ class _DictionaryManagementScreenState
                     ),
                     keyboardType: TextInputType.url,
                   ),
+                  const SizedBox(height: 16),
+                  CheckboxListTile(
+                    title: const Text('Index words in definitions'),
+                    subtitle: const Text('Enables searching inside meanings (takes more time/space)'),
+                    value: indexDefinitions,
+                    onChanged: (val) {
+                      setDialogState(() {
+                        indexDefinitions = val ?? false;
+                      });
+                    },
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                  ),
                 ],
               ),
               actions: [
@@ -74,7 +88,7 @@ class _DictionaryManagementScreenState
                 ElevatedButton(
                   onPressed: () => Navigator.pop(context, {
                     'url': urlController.text,
-                    'index': true,
+                    'index': indexDefinitions,
                   }),
                   child: const Text('Download'),
                 ),
@@ -193,6 +207,7 @@ class _DictionaryManagementScreenState
     if (files.isNotEmpty) {
       if (!mounted) return;
 
+      bool indexDefinitions = false;
       final dynamic importConfig = await showDialog<dynamic>(
         context: context,
         builder: (context) {
@@ -204,8 +219,19 @@ class _DictionaryManagementScreenState
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text('Importing ${files.length} file(s).'),
-                    const SizedBox(height: 8),
-                    const Text('Dictionaries will be automatically indexed for meaning search.'),
+                    const SizedBox(height: 16),
+                    CheckboxListTile(
+                      title: const Text('Index words in definitions'),
+                      subtitle: const Text('Enables searching inside meanings (takes more time/space)'),
+                      value: indexDefinitions,
+                      onChanged: (val) {
+                        setDialogState(() {
+                          indexDefinitions = val ?? false;
+                        });
+                      },
+                      controlAffinity: ListTileControlAffinity.leading,
+                      contentPadding: EdgeInsets.zero,
+                    ),
                   ],
                 ),
                 actions: [
@@ -214,7 +240,7 @@ class _DictionaryManagementScreenState
                     child: const Text('Cancel'),
                   ),
                   ElevatedButton(
-                    onPressed: () => Navigator.pop(context, true),
+                    onPressed: () => Navigator.pop(context, indexDefinitions),
                     child: const Text('Proceed'),
                   ),
                 ],
@@ -225,7 +251,7 @@ class _DictionaryManagementScreenState
       );
 
       if (importConfig == null) return;
-      final bool indexDefinitions = importConfig as bool;
+      indexDefinitions = importConfig as bool;
 
       if (!mounted) return;
 
