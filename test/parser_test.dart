@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hdict/core/parser/ifo_parser.dart';
 import 'package:hdict/core/parser/idx_parser.dart';
@@ -7,6 +8,8 @@ import 'package:hdict/core/parser/syn_parser.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
 import 'package:hdict/core/parser/dictd_parser.dart';
 import 'package:hdict/core/utils/html_lookup_wrapper.dart';
+import 'package:hdict/core/parser/dictzip_reader.dart';
+import 'package:archive/archive.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
@@ -239,6 +242,115 @@ author=Tester
         output,
         contains('<a href="look_up:word" class="dict-word">word</a>#<a href="look_up:1" class="dict-word">1</a>'),
       );
+    });
+  });
+
+  // ── DictzipReader Tests ───────────────────────────────────────────────────
+
+  group('DictzipReader Tests', () {
+    late Directory tempDir;
+    late String dzPath;
+
+    setUp(() async {
+      tempDir = await Directory.systemTemp.createTemp('hdict_dz_test_');
+      dzPath = p.join(tempDir.path, 'test.dict.dz');
+    });
+
+    tearDown(() async {
+      await tempDir.delete(recursive: true);
+    });
+
+    Future<void> createDictZip(String path, String data, int chunkLen) async {
+      final content = utf8.encode(data);
+      final List<Uint8List> chunks = [];
+      final List<int> compressedSizes = [];
+
+      for (int i = 0; i < content.length; i += chunkLen) {
+        int end = (i + chunkLen < content.length) ? i + chunkLen : content.length;
+        final chunkData = content.sublist(i, end);
+        // Create raw deflate data by stripping ZLib header (2 bytes) and trailer (4 bytes)
+        final zlib = ZLibEncoder().encode(chunkData);
+        final rawCompressed = zlib.sublist(2, zlib.length - 4);
+        chunks.add(Uint8List.fromList(rawCompressed));
+        compressedSizes.add(rawCompressed.length);
+      }
+
+      final builder = BytesBuilder(copy: false);
+      // GZIP Header: ID1, ID2, CM (8), FLG (FEXTRA=4), MTIME(4), XFL, OS
+      builder.add([0x1f, 0x8b, 0x08, 0x04, 0, 0, 0, 0, 0, 0]);
+
+      // Extra Field
+      final raSubfield = BytesBuilder(copy: false);
+      raSubfield.add([0x52, 0x41]); // 'R', 'A'
+      final raLen = 6 + compressedSizes.length * 2;
+      final bdRaLen = ByteData(2)..setUint16(0, raLen, Endian.little);
+      raSubfield.add(Uint8List.view(bdRaLen.buffer));
+      raSubfield.add([0x01, 0x00]); // version 1
+      final bdChLen = ByteData(2)..setUint16(0, chunkLen, Endian.little);
+      raSubfield.add(Uint8List.view(bdChLen.buffer));
+      final bdChCnt = ByteData(2)..setUint16(0, compressedSizes.length, Endian.little);
+      raSubfield.add(Uint8List.view(bdChCnt.buffer));
+      for (final size in compressedSizes) {
+        final bdSize = ByteData(2)..setUint16(0, size, Endian.little);
+        raSubfield.add(Uint8List.view(bdSize.buffer));
+      }
+
+      final raBytes = raSubfield.toBytes();
+      final bdExtraLen = ByteData(2)..setUint16(0, raBytes.length, Endian.little);
+      builder.add(Uint8List.view(bdExtraLen.buffer));
+      builder.add(raBytes);
+
+      // Compressed Data
+      for (final chunk in chunks) {
+        builder.add(chunk);
+      }
+
+      await File(path).writeAsBytes(builder.toBytes());
+    }
+
+    test('DictzipReader reads single chunk correctly', () async {
+      const data = 'hello world';
+      await createDictZip(dzPath, data, 100);
+
+      final reader = DictzipReader(dzPath);
+      await reader.open();
+      final result = await reader.read(0, 5);
+      expect(result, 'hello');
+      final result2 = await reader.read(6, 5);
+      expect(result2, 'world');
+      await reader.close();
+    });
+
+    test('DictzipReader reads across multiple chunks correctly', () async {
+      // Create data that spans 3 chunks (chunk size 5)
+      // "01234" "56789" "abcde"
+      const data = '0123456789abcde';
+      await createDictZip(dzPath, data, 5);
+
+      final reader = DictzipReader(dzPath);
+      await reader.open();
+
+      // Read middle of chunk 1 to middle of chunk 2
+      // skip 2 bytes ("01"), read 8 bytes -> "23456789"
+      final result = await reader.read(2, 8);
+      expect(result, '23456789');
+
+      // Read from chunk 1 to end
+      final result2 = await reader.read(7, 8);
+      expect(result2, '789abcde');
+
+      await reader.close();
+    });
+
+    test('DictReader delegates to DictzipReader for .dz files', () async {
+      const data = 'delegation test';
+      await createDictZip(dzPath, data, 100);
+
+      final reader = DictReader(dzPath);
+      await reader.open();
+      final result = await reader.readAtIndex(0, 10);
+      expect(result, 'delegation');
+      await reader.close();
     });
   });
 }

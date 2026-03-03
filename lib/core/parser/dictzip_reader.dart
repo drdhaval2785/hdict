@@ -204,7 +204,6 @@ class DictzipReader {
 
     final firstChunk = offset ~/ _chunkLen;
     final lastChunk  = (offset + length - 1) ~/ _chunkLen;
-    final totalChunks = lastChunk - firstChunk + 1;
 
     // Decompress all needed chunks into a contiguous buffer.
     final buffer = <int>[];
