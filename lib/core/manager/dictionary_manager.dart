@@ -810,13 +810,15 @@ class DictionaryManager {
       final permanentDir = Directory(p.join(dictsDir.path, 'dict_$timestamp'));
       await permanentDir.create(recursive: true);
 
-      // Ensure we use the decompressed versions if they were created by _maybeDecompress or _findAndPrepareFile
+      // For the .idx and .syn files (small), decompress if needed so IdxParser / SynParser
+      // can read them as plain bytes. For .dict/.dict.dz we keep the file as-is since
+      // DictReader now handles .dict.dz directly via DictzipReader (no disk decompression).
       final preparedIdxPath = await _maybeDecompress(idxPath);
-      final preparedDictPath = await _maybeDecompress(dictPath);
       final preparedSynPath = synPath != null ? await _maybeDecompress(synPath) : null;
 
-      final finalDictPath = p.join(permanentDir.path, p.basename(preparedDictPath));
-      await File(preparedDictPath).copy(finalDictPath);
+      // Copy the .dict or .dict.dz file without decompressing it.
+      final finalDictPath = p.join(permanentDir.path, p.basename(dictPath));
+      await File(dictPath).copy(finalDictPath);
       await File(preparedIdxPath).copy(p.join(permanentDir.path, p.basename(preparedIdxPath)));
       await File(actualIfoPath).copy(p.join(permanentDir.path, p.basename(actualIfoPath)));
       if (preparedSynPath != null) {
@@ -1441,9 +1443,13 @@ class DictionaryManager {
       if (dict == null) throw Exception('Dictionary not found');
 
       final String dictPath = await _dbHelper.resolvePath(dict['path']);
-      final String ifoPath = dictPath.replaceAll('.dict', '.ifo');
-      final String idxPath = dictPath.replaceAll('.dict', '.idx');
-      final String synPathCandidate = dictPath.replaceAll('.dict', '.syn');
+      // If the stored path is .dict.dz, strip the .dz before deriving sibling paths.
+      final String dictBasePath = dictPath.endsWith('.dz')
+          ? dictPath.substring(0, dictPath.length - 3) // 'something.dict.dz' → 'something.dict'
+          : dictPath;
+      final String ifoPath = dictBasePath.replaceAll('.dict', '.ifo');
+      final String idxPath = dictBasePath.replaceAll('.dict', '.idx');
+      final String synPathCandidate = dictBasePath.replaceAll('.dict', '.syn');
       final String? synPath =
           File(synPathCandidate).existsSync() ? synPathCandidate : null;
 
