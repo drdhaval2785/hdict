@@ -382,7 +382,9 @@ class DictionaryManager {
     }
 
     final String format = dict['format'];
-    final String dictPath = dict['path'];
+    final String rawPath = dict['path'];
+    
+    final String dictPath = await _dbHelper.resolvePath(rawPath);
 
     dynamic reader;
     if (format == 'mdict') {
@@ -1571,44 +1573,48 @@ class DictionaryManager {
   ) async {
     if (kIsWeb) return null;
     final format = (dictRecord['format'] as String?) ?? 'stardict';
-    final rawPath = dictRecord['path'] as String;
-    final dictPath = await _dbHelper.resolvePath(rawPath);
 
+    String? result;
     switch (format) {
       case 'mdict':
         try {
           final reader = await _getReader(dictRecord);
           if (reader is MdictReader) {
-            return await reader.lookup(word);
+            result = await reader.lookup(word);
           }
-          return null;
         } catch (e) {
           debugPrint('Error fetching MDict definition: $e');
-          return null;
         }
+        break;
 
       case 'dictd':
+        final rawPath = dictRecord['path'] as String;
+        final dictPath = await _dbHelper.resolvePath(rawPath);
         final reader = DictdReader(dictPath);
-        return await reader.readEntry(offset, length);
+        result = await reader.readEntry(offset, length);
+        break;
 
       case 'slob':
         // SlobReader uses the stored offset as the direct packed ID for O(1) lookup.
         try {
           final reader = await _getReader(dictRecord);
           if (reader is SlobReader) {
-            return await reader.getBlobContentById(offset);
+            result = await reader.getBlobContentById(offset);
           }
-          return null;
         } catch (e) {
           debugPrint('Error fetching Slob definition: $e');
-          return null;
         }
+        break;
 
       case 'stardict':
       default:
+        final rawPath = dictRecord['path'] as String;
+        final dictPath = await _dbHelper.resolvePath(rawPath);
         final reader = DictReader(dictPath);
-        return await reader.readEntry(offset, length);
+        result = await reader.readEntry(offset, length);
+        break;
     }
+    return result;
   }
 
   Stream<ImportProgress> reIndexDictionariesStream() async* {

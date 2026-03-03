@@ -641,10 +641,10 @@ packages:
     dependency: "direct main"
     description:
       name: slob_reader
-      sha256: "853f2119c9f3261da7e63ce74dfa2b909a6cf2b1b642b7f2ff0f3e8213949a68"
+      sha256: cc99ffa530cee3b93a2da033fe8f7d541634317d0361145c71874e725e8a3c12
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.1"
+    version: "0.1.2"
   source_span:
     dependency: transitive
     description:

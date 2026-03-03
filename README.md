@@ -57,7 +57,11 @@ A high-performance, feature-rich dictionary application built with Flutter. Opti
    ```
 
 ### Importing Dictionaries
-`hdict` supports StarDict dictionary files (provided as `.zip`, `.tar.gz`, `.tar.xz`, etc.). 
+`hdict` supports multiple dictionary formats:
+- **StarDict**: Provided as `.zip`, `.tar.gz`, `.tar.xz`, etc.
+- **MDict**: High-compatibility format support (`.mdx`).
+- **Slob**: Optimized Sorted List of Blobs support (`.slob`).
+
 1. Open the **Manage Dictionaries** menu in the sidebar.
 2. Tap the **Import File** or **Download Web** button.
 3. Select your dictionary file or enter a URL to import it into the local database.
