@@ -13,8 +13,8 @@ All notable changes to this project will be documented in this file.
   - Added headword and definition word counts to the Manage Dictionary screen.
 - **Definition Indexing for slob, dictd and mdict**:
   - Added definition indexing for slob, dictd and mdict dictionaries.
-- **Deleting stored files if deleted**:
-  - Added deletion of stored files and clean up of database space, if a dictionary is deleted from Manage Dictionary screen.
+- **Cleaning Database Space if a dictionary is deleted**:
+  - Added clean up of database space, if a dictionary is deleted from Manage Dictionary screen.
 - **Tests for dictd, mdict, slob files**:
   - Added tests for dictd, mdict, slob files.
 
