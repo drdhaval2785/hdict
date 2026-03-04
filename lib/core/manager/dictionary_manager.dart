@@ -1598,7 +1598,6 @@ class DictionaryManager {
     yield ImportProgress(message: 'Setting up DICTD import...', value: 0.05);
 
     try {
-      final dictdParser = DictdParser();
 
       final bookName = p.basenameWithoutExtension(indexPath)
           .replaceAll(RegExp(r'\.dict$'), '');

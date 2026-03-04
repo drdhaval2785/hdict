@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:hdict/core/database/database_helper.dart';
-import 'package:hdict/core/manager/dictionary_manager.dart';
 import 'package:dictd_reader/dictd_reader.dart';
 import 'package:hdict/core/parser/ifo_parser.dart';
 import 'package:hdict/core/parser/idx_parser.dart';
@@ -17,8 +16,10 @@ void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
 
-  const MethodChannel('plugins.flutter.io/path_provider')
-      .setMockMethodCallHandler((MethodCall methodCall) async {
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          (MethodCall methodCall) async {
     if (methodCall.method == 'getApplicationDocumentsDirectory') {
       return '.';
     }
@@ -28,7 +29,6 @@ void main() {
   group('Definition Indexing Tests', () {
     late Directory tempDir;
     late DatabaseHelper dbHelper;
-    late DictionaryManager manager;
 
     setUp(() async {
       tempDir = await Directory.systemTemp.createTemp('hdict_indexing_test_');
@@ -63,7 +63,6 @@ void main() {
         ''');
       });
       DatabaseHelper.setDatabase(db);
-      manager = DictionaryManager(dbHelper: dbHelper);
     });
 
     tearDown(() async {
