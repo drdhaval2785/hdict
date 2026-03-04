@@ -95,6 +95,62 @@ class _IndexArgs {
   );
 }
 
+class _IndexMdictArgs {
+  final int dictId;
+  final String mdxPath;
+  final bool indexDefinitions;
+  final String bookName;
+  final SendPort sendPort;
+  final RootIsolateToken rootIsolateToken;
+
+  _IndexMdictArgs({
+    required this.dictId,
+    required this.mdxPath,
+    required this.indexDefinitions,
+    required this.bookName,
+    required this.sendPort,
+    required this.rootIsolateToken,
+  });
+}
+
+class _IndexSlobArgs {
+  final int dictId;
+  final String slobPath;
+  final bool indexDefinitions;
+  final String bookName;
+  final SendPort sendPort;
+  final RootIsolateToken rootIsolateToken;
+
+  _IndexSlobArgs({
+    required this.dictId,
+    required this.slobPath,
+    required this.indexDefinitions,
+    required this.bookName,
+    required this.sendPort,
+    required this.rootIsolateToken,
+  });
+}
+
+class _IndexDictdArgs {
+  final int dictId;
+  final String indexPath;
+  final String dictPath;
+  final bool indexDefinitions;
+  final String bookName;
+  final SendPort sendPort;
+  final RootIsolateToken rootIsolateToken;
+
+  _IndexDictdArgs({
+    required this.dictId,
+    required this.indexPath,
+    required this.dictPath,
+    required this.indexDefinitions,
+    required this.bookName,
+    required this.sendPort,
+    required this.rootIsolateToken,
+  });
+}
+
 // Top-level function for indexing isolate
 Future<void> _indexEntry(_IndexArgs args) async {
   BackgroundIsolateBinaryMessenger.ensureInitialized(args.rootIsolateToken);
@@ -211,6 +267,215 @@ Future<void> _indexEntry(_IndexArgs args) async {
         isCompleted: true,
       ),
     );
+  }
+}
+
+// Top-level function for MDict indexing isolate
+Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
+  BackgroundIsolateBinaryMessenger.ensureInitialized(args.rootIsolateToken);
+  await DatabaseHelper.initializeDatabaseFactory();
+  final dbHelper = DatabaseHelper();
+  final sendPort = args.sendPort;
+
+  try {
+    final reader = MdictReader(args.mdxPath);
+    await reader.open();
+
+    // Fetch all keys via prefix search with empty prefix
+    final allKeys = await reader.prefixSearch('', limit: 500000);
+    final totalKeys = allKeys.length;
+
+    List<Map<String, dynamic>> batch = [];
+    int indexed = 0;
+
+    for (final word in allKeys) {
+      String content = '';
+      if (args.indexDefinitions) {
+        content = await reader.lookup(word) ?? '';
+      }
+
+      batch.add({
+        'word': word,
+        'content': content,
+        'dict_id': args.dictId,
+        'offset': 0,
+        'length': 0,
+      });
+      indexed++;
+
+      if (batch.length >= 2000) {
+        await dbHelper.batchInsertWords(args.dictId, batch);
+        batch.clear();
+        sendPort.send(ImportProgress(
+          message: 'Indexing $indexed / $totalKeys headwords...',
+          value: 0.5 + (indexed / (totalKeys == 0 ? 1 : totalKeys)) * 0.4,
+          headwordCount: indexed,
+          dictionaryName: args.bookName,
+        ));
+      }
+    }
+
+    if (batch.isNotEmpty) await dbHelper.batchInsertWords(args.dictId, batch);
+    await reader.close();
+    await dbHelper.updateDictionaryWordCount(args.dictId, indexed);
+
+    sendPort.send(ImportProgress(
+      message: 'MDict indexing complete!',
+      value: 1.0,
+      isCompleted: true,
+      headwordCount: indexed,
+      dictionaryName: args.bookName,
+    ));
+  } catch (e, s) {
+    debugPrint('MDict indexing error: $e\n$s');
+    sendPort.send(ImportProgress(
+      message: 'MDict indexing error: $e',
+      value: 0.0,
+      error: e.toString(),
+      isCompleted: true,
+    ));
+  }
+}
+
+// Top-level function for Slob indexing isolate
+Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
+  BackgroundIsolateBinaryMessenger.ensureInitialized(args.rootIsolateToken);
+  await DatabaseHelper.initializeDatabaseFactory();
+  final dbHelper = DatabaseHelper();
+  final sendPort = args.sendPort;
+
+  try {
+    final reader = SlobReader(args.slobPath);
+    await reader.open();
+
+    List<Map<String, dynamic>> batch = [];
+    int headwordCount = 0;
+    int defWordCount = 0;
+    final totalBlobs = reader.blobCount;
+
+    await for (final blob in reader.blobs) {
+      final content = utf8.decode(blob.content, allowMalformed: true);
+      
+      batch.add({
+        'word': blob.key,
+        'content': args.indexDefinitions ? content : '',
+        'dict_id': args.dictId,
+        'offset': blob.id,
+        'length': blob.content.length,
+      });
+
+      headwordCount++;
+      if (content.isNotEmpty) {
+        defWordCount += content.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
+      }
+
+      if (batch.length >= 2000) {
+        await dbHelper.batchInsertWords(args.dictId, batch);
+        batch.clear();
+        sendPort.send(ImportProgress(
+          message: 'Indexing $headwordCount / $totalBlobs blobs...',
+          value: 0.45 + (headwordCount / (totalBlobs == 0 ? 1 : totalBlobs)) * 0.45,
+          headwordCount: headwordCount,
+          dictionaryName: args.bookName,
+        ));
+      }
+    }
+
+    if (batch.isNotEmpty) await dbHelper.batchInsertWords(args.dictId, batch);
+    await reader.close();
+    await dbHelper.updateDictionaryWordCount(args.dictId, headwordCount);
+
+    sendPort.send(ImportProgress(
+      message: 'Slob indexing complete!',
+      value: 1.0,
+      isCompleted: true,
+      headwordCount: headwordCount,
+      definitionWordCount: defWordCount,
+      dictionaryName: args.bookName,
+    ));
+  } catch (e, s) {
+    debugPrint('Slob indexing error: $e\n$s');
+    sendPort.send(ImportProgress(
+      message: 'Slob indexing error: $e',
+      value: 0.0,
+      error: e.toString(),
+      isCompleted: true,
+    ));
+  }
+}
+
+// Top-level function for DICTD indexing isolate
+Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
+  BackgroundIsolateBinaryMessenger.ensureInitialized(args.rootIsolateToken);
+  await DatabaseHelper.initializeDatabaseFactory();
+  final dbHelper = DatabaseHelper();
+  final sendPort = args.sendPort;
+
+  try {
+    final dictdParser = DictdParser();
+    final dictdReader = DictdReader(args.dictPath);
+    await dictdReader.open();
+    final indexStream = dictdParser.parseIndex(args.indexPath);
+
+    List<Map<String, dynamic>> batch = [];
+    int headwordCount = 0;
+    int defWordCount = 0;
+
+    await for (final entry in indexStream) {
+      final word = entry['word'] as String;
+      final offset = entry['offset'] as int;
+      final length = entry['length'] as int;
+
+      String content = '';
+      if (args.indexDefinitions) {
+        content = await dictdReader.readAtOffset(offset, length);
+      }
+
+      batch.add({
+        'word': word,
+        'content': content,
+        'dict_id': args.dictId,
+        'offset': offset,
+        'length': length,
+      });
+      headwordCount++;
+
+      if (content.isNotEmpty) {
+        defWordCount += content.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
+      }
+
+      if (batch.length >= 2000) {
+        await dbHelper.batchInsertWords(args.dictId, batch);
+        batch.clear();
+        sendPort.send(ImportProgress(
+          message: 'Indexing $headwordCount words...',
+          value: 0.45 + (headwordCount / 100000) * 0.45,
+          headwordCount: headwordCount,
+          dictionaryName: args.bookName,
+        ));
+      }
+    }
+
+    if (batch.isNotEmpty) await dbHelper.batchInsertWords(args.dictId, batch);
+    await dictdReader.close();
+    await dbHelper.updateDictionaryWordCount(args.dictId, headwordCount);
+
+    sendPort.send(ImportProgress(
+      message: 'DICTD indexing complete!',
+      value: 1.0,
+      isCompleted: true,
+      headwordCount: headwordCount,
+      definitionWordCount: defWordCount,
+      dictionaryName: args.bookName,
+    ));
+  } catch (e, s) {
+    debugPrint('DICTD indexing error: $e\n$s');
+    sendPort.send(ImportProgress(
+      message: 'DICTD indexing error: $e',
+      value: 0.0,
+      error: e.toString(),
+      isCompleted: true,
+    ));
   }
 }
 
@@ -1252,51 +1517,38 @@ class DictionaryManager {
         typeSequence: null,
       );
 
-      yield ImportProgress(message: 'Enumerating headwords...', value: 0.4);
+      yield ImportProgress(message: 'Indexing headwords...', value: 0.5);
 
-      // Re-open the permanent copy for indexing
-      final permanentReader = MdictReader(finalMdxPath);
-      await permanentReader.open();
+      final receivePort = ReceivePort();
+      final rootIsolateToken = RootIsolateToken.instance!;
 
-      // Fetch all keys via prefix search with empty prefix
-      final allKeys = await permanentReader.prefixSearch('', limit: 500000);
-      final totalKeys = allKeys.length;
-      yield ImportProgress(message: 'Indexing $totalKeys headwords...', value: 0.5);
+      await Isolate.spawn(
+        _indexMdictEntry,
+        _IndexMdictArgs(
+          dictId: dictId,
+          mdxPath: finalMdxPath,
+          indexDefinitions: indexDefinitions,
+          bookName: bookName,
+          sendPort: receivePort.sendPort,
+          rootIsolateToken: rootIsolateToken,
+        ),
+      );
 
-      List<Map<String, dynamic>> batch = [];
-      int indexed = 0;
-
-      for (final word in allKeys) {
-        // For MDict, we store offset=0,length=0 (lookup uses the word key directly)
-        String content = '';
-        if (indexDefinitions) {
-          content = await permanentReader.lookup(word) ?? '';
-        }
-
-        batch.add({
-          'word': word,
-          'content': content,
-          'dict_id': dictId,
-          'offset': 0,
-          'length': 0,
-        });
-        indexed++;
-
-        if (batch.length >= 2000) {
-          await _dbHelper.batchInsertWords(dictId, batch);
-          batch.clear();
-          yield ImportProgress(
-            message: 'Indexing $indexed / $totalKeys headwords...',
-            value: 0.5 + (indexed / (totalKeys == 0 ? 1 : totalKeys)) * 0.4,
-            headwordCount: indexed,
-            dictionaryName: bookName,
-          );
+      int finalHeadwordCount = 0;
+      await for (final message in receivePort) {
+        if (message is ImportProgress) {
+          if (message.error != null) {
+            receivePort.close();
+            throw Exception(message.error);
+          }
+          if (message.isCompleted) {
+            finalHeadwordCount = message.headwordCount;
+            receivePort.close();
+            break;
+          }
+          yield message;
         }
       }
-
-      if (batch.isNotEmpty) await _dbHelper.batchInsertWords(dictId, batch);
-      await permanentReader.close();
-      await _dbHelper.updateDictionaryWordCount(dictId, indexed);
 
       final sampleWords = await _dbHelper.getSampleWords(dictId);
 
@@ -1306,7 +1558,7 @@ class DictionaryManager {
         isCompleted: true,
         dictId: dictId,
         sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
-        headwordCount: indexed,
+        headwordCount: finalHeadwordCount,
         dictionaryName: bookName,
       );
     } catch (e, s) {
@@ -1369,52 +1621,39 @@ class DictionaryManager {
 
       yield ImportProgress(message: 'Indexing DICTD words...', value: 0.45);
 
-      final dictdReader = DictdReader(finalDictPath);
-      await dictdReader.open();
-      final indexStream = dictdParser.parseIndex(finalIndexPath);
+      final receivePort = ReceivePort();
+      final rootIsolateToken = RootIsolateToken.instance!;
 
-      List<Map<String, dynamic>> batch = [];
-      int headwordCount = 0;
-      int defWordCount = 0;
+      await Isolate.spawn(
+        _indexDictdEntry,
+        _IndexDictdArgs(
+          dictId: dictId,
+          indexPath: finalIndexPath,
+          dictPath: finalDictPath,
+          indexDefinitions: indexDefinitions,
+          bookName: bookName,
+          sendPort: receivePort.sendPort,
+          rootIsolateToken: rootIsolateToken,
+        ),
+      );
 
-      await for (final entry in indexStream) {
-        final word = entry['word'] as String;
-        final offset = entry['offset'] as int;
-        final length = entry['length'] as int;
-
-        String content = '';
-        if (indexDefinitions) {
-          content = await dictdReader.readAtOffset(offset, length);
-        }
-
-        batch.add({
-          'word': word,
-          'content': content,
-          'dict_id': dictId,
-          'offset': offset,
-          'length': length,
-        });
-        headwordCount++;
-
-        if (content.isNotEmpty) {
-          defWordCount += content.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
-        }
-
-        if (batch.length >= 2000) {
-          await _dbHelper.batchInsertWords(dictId, batch);
-          batch.clear();
-          yield ImportProgress(
-            message: 'Indexing $headwordCount words...',
-            value: 0.45 + (headwordCount / 100000) * 0.45,
-            headwordCount: headwordCount,
-            dictionaryName: bookName,
-          );
+      int finalHeadwordCount = 0;
+      int finalDefWordCount = 0;
+      await for (final message in receivePort) {
+        if (message is ImportProgress) {
+          if (message.error != null) {
+            receivePort.close();
+            throw Exception(message.error);
+          }
+          if (message.isCompleted) {
+            finalHeadwordCount = message.headwordCount;
+            finalDefWordCount = message.definitionWordCount;
+            receivePort.close();
+            break;
+          }
+          yield message;
         }
       }
-
-      if (batch.isNotEmpty) await _dbHelper.batchInsertWords(dictId, batch);
-      await dictdReader.close();
-      await _dbHelper.updateDictionaryWordCount(dictId, headwordCount);
 
       final sampleWords = await _dbHelper.getSampleWords(dictId);
 
@@ -1424,8 +1663,8 @@ class DictionaryManager {
         isCompleted: true,
         dictId: dictId,
         sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
-        headwordCount: headwordCount,
-        definitionWordCount: defWordCount,
+        headwordCount: finalHeadwordCount,
+        definitionWordCount: finalDefWordCount,
         dictionaryName: bookName,
       );
     } catch (e, s) {
@@ -1492,45 +1731,38 @@ class DictionaryManager {
 
       yield ImportProgress(message: 'Indexing Slob blobs...', value: 0.45);
 
-      final permanentReader = SlobReader(finalSlobPath);
-      await permanentReader.open();
+      final receivePort = ReceivePort();
+      final rootIsolateToken = RootIsolateToken.instance!;
 
-      List<Map<String, dynamic>> batch = [];
-      int headwordCount = 0;
-      int defWordCount = 0;
-      final totalBlobs = permanentReader.blobCount;
+      await Isolate.spawn(
+        _indexSlobEntry,
+        _IndexSlobArgs(
+          dictId: dictId,
+          slobPath: finalSlobPath,
+          indexDefinitions: indexDefinitions,
+          bookName: bookName,
+          sendPort: receivePort.sendPort,
+          rootIsolateToken: rootIsolateToken,
+        ),
+      );
 
-      await for (final blob in permanentReader.blobs) {
-        final content = utf8.decode(blob.content, allowMalformed: true);
-        
-        batch.add({
-          'word': blob.key,
-          'content': indexDefinitions ? content : '',
-          'dict_id': dictId,
-          'offset': blob.id, // Store direct bin/item ID for O(1) lookup
-          'length': blob.content.length, // Store content length
-        });
-
-        headwordCount++;
-        if (content.isNotEmpty) {
-          defWordCount += content.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
-        }
-
-        if (batch.length >= 2000) {
-          await _dbHelper.batchInsertWords(dictId, batch);
-          batch.clear();
-          yield ImportProgress(
-            message: 'Indexing $headwordCount / $totalBlobs blobs...',
-            value: 0.45 + (headwordCount / (totalBlobs == 0 ? 1 : totalBlobs)) * 0.45,
-            headwordCount: headwordCount,
-            dictionaryName: bookName,
-          );
+      int finalHeadwordCount = 0;
+      int finalDefWordCount = 0;
+      await for (final message in receivePort) {
+        if (message is ImportProgress) {
+          if (message.error != null) {
+            receivePort.close();
+            throw Exception(message.error);
+          }
+          if (message.isCompleted) {
+            finalHeadwordCount = message.headwordCount;
+            finalDefWordCount = message.definitionWordCount;
+            receivePort.close();
+            break;
+          }
+          yield message;
         }
       }
-
-      if (batch.isNotEmpty) await _dbHelper.batchInsertWords(dictId, batch);
-      await permanentReader.close();
-      await _dbHelper.updateDictionaryWordCount(dictId, headwordCount);
 
       final sampleWords = await _dbHelper.getSampleWords(dictId);
 
@@ -1540,8 +1772,8 @@ class DictionaryManager {
         isCompleted: true,
         dictId: dictId,
         sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
-        headwordCount: headwordCount,
-        definitionWordCount: defWordCount,
+        headwordCount: finalHeadwordCount,
+        definitionWordCount: finalDefWordCount,
         dictionaryName: bookName,
       );
     } catch (e, s) {
@@ -1638,21 +1870,10 @@ class DictionaryManager {
       if (dict == null) throw Exception('Dictionary not found');
 
       final String dictPath = await _dbHelper.resolvePath(dict['path']);
-      // If the stored path is .dict.dz, strip the .dz before deriving sibling paths.
-      final String dictBasePath = dictPath.endsWith('.dz')
-          ? dictPath.substring(0, dictPath.length - 3) // 'something.dict.dz' → 'something.dict'
-          : dictPath;
-      final String ifoPath = dictBasePath.replaceAll('.dict', '.ifo');
-      final String idxPath = dictBasePath.replaceAll('.dict', '.idx');
-      final String synPathCandidate = dictBasePath.replaceAll('.dict', '.syn');
-      final String? synPath =
-          File(synPathCandidate).existsSync() ? synPathCandidate : null;
-
-      final ifoParser = IfoParser();
-      await ifoParser.parse(ifoPath);
+      final String format = dict['format'] as String? ?? 'stardict';
+      final String bookName = dict['name'] as String? ?? 'Unknown Dictionary';
 
       // Wipe existing index
-      final bookName = dict['name'] as String? ?? 'Unknown Dictionary';
       yield ImportProgress(message: 'Wiping existing index...', value: 0.2, dictionaryName: bookName);
       await _dbHelper.deleteWordsByDictionaryId(dictId);
       await _dbHelper.updateDictionaryIndexDefinitions(dictId, true);
@@ -1662,19 +1883,85 @@ class DictionaryManager {
       final receivePort = ReceivePort();
       final rootIsolateToken = RootIsolateToken.instance!;
 
-      await Isolate.spawn(
-        _indexEntry,
-        _IndexArgs(
-          dictId,
-          idxPath,
-          dictPath,
-          synPath,
-          true, // indexDefinitions
-          ifoParser,
-          receivePort.sendPort,
-          rootIsolateToken,
-        ),
-      );
+      switch (format) {
+        case 'mdict':
+          await Isolate.spawn(
+            _indexMdictEntry,
+            _IndexMdictArgs(
+              dictId: dictId,
+              mdxPath: dictPath,
+              indexDefinitions: true,
+              bookName: bookName,
+              sendPort: receivePort.sendPort,
+              rootIsolateToken: rootIsolateToken,
+            ),
+          );
+          break;
+
+        case 'slob':
+          await Isolate.spawn(
+            _indexSlobEntry,
+            _IndexSlobArgs(
+              dictId: dictId,
+              slobPath: dictPath,
+              indexDefinitions: true,
+              bookName: bookName,
+              sendPort: receivePort.sendPort,
+              rootIsolateToken: rootIsolateToken,
+            ),
+          );
+          break;
+
+        case 'dictd':
+          // For DICTD, we need the .index file. It should be in the same folder.
+          final indexPath = dictPath.replaceFirst(RegExp(r'\.dict(\.dz)?$'), '.index');
+          if (!File(indexPath).existsSync()) {
+            throw Exception('DICTD .index file not found at $indexPath');
+          }
+          await Isolate.spawn(
+            _indexDictdEntry,
+            _IndexDictdArgs(
+              dictId: dictId,
+              indexPath: indexPath,
+              dictPath: dictPath,
+              indexDefinitions: true,
+              bookName: bookName,
+              sendPort: receivePort.sendPort,
+              rootIsolateToken: rootIsolateToken,
+            ),
+          );
+          break;
+
+        case 'stardict':
+        default:
+          // If the stored path is .dict.dz, strip the .dz before deriving sibling paths.
+          final String dictBasePath = dictPath.endsWith('.dz')
+              ? dictPath.substring(0, dictPath.length - 3) // 'something.dict.dz' → 'something.dict'
+              : dictPath;
+          final String ifoPath = dictBasePath.replaceAll('.dict', '.ifo');
+          final String idxPath = dictBasePath.replaceAll('.dict', '.idx');
+          final String synPathCandidate = dictBasePath.replaceAll('.dict', '.syn');
+          final String? synPath =
+              File(synPathCandidate).existsSync() ? synPathCandidate : null;
+
+          final ifoParser = IfoParser();
+          await ifoParser.parse(ifoPath);
+
+          await Isolate.spawn(
+            _indexEntry,
+            _IndexArgs(
+              dictId,
+              idxPath,
+              dictPath,
+              synPath,
+              true, // indexDefinitions
+              ifoParser,
+              receivePort.sendPort,
+              rootIsolateToken,
+            ),
+          );
+          break;
+      }
 
       await for (final message in receivePort) {
         if (message is ImportProgress) {
