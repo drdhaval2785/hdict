@@ -704,24 +704,40 @@ class DictionaryManager {
       final Set<String> activeFolderNames = {};
 
       for (final dict in activeDicts) {
-        final String path = dict['path'];
-        // Path is like 'dictionaries/dict_123/file.ifo' or 'dict_123/file.ifo'
+        final String path = dict['path'] ?? '';
+        if (path.isEmpty) continue;
+        
         final parts = p.split(path);
-        final dictsIdx = parts.indexOf('dictionaries');
+        // Look for 'dictionaries' in the path, the folder name should follow it
+        final dictsIdx = parts.lastIndexOf('dictionaries');
         if (dictsIdx != -1 && dictsIdx + 1 < parts.length) {
           activeFolderNames.add(parts[dictsIdx + 1]);
-        } else if (parts.isNotEmpty) {
-           // Fallback if path doesn't contain 'dictionaries/' explicitly but is relative
-           activeFolderNames.add(parts[0]);
+        } else if (parts.length >= 2) {
+          // Fallback: if it's a relative path starting with the dict folder
+          activeFolderNames.add(parts[0]);
         }
       }
+      
+      // ignore: avoid_print
+      print('Scanning for orphaned folders in: ${dictsDir.path}');
+      // ignore: avoid_print
+      print('Active dictionary folders: $activeFolderNames');
 
       await for (final entity in dictsDir.list()) {
         if (entity is Directory) {
           final folderName = p.basename(entity.path);
           if (!activeFolderNames.contains(folderName)) {
-            hDebugPrint('Cleaning orphaned dictionary folder: $folderName');
-            await entity.delete(recursive: true);
+            // ignore: avoid_print
+            print('Deleting orphaned folder: $folderName');
+            try {
+              await entity.delete(recursive: true);
+            } catch (e) {
+              // ignore: avoid_print
+              print('Failed to delete orphaned folder $folderName: $e');
+            }
+          } else {
+            // ignore: avoid_print
+            print('Keeping active folder: $folderName');
           }
         }
       }
@@ -816,6 +832,10 @@ class DictionaryManager {
 
           if (message.isCompleted) {
             if (message.error != null) {
+              receivePort.close();
+              if (message.error == 'ALREADY_EXISTS') {
+                throw Exception('ALREADY_EXISTS: ${message.message}');
+              }
               throw Exception(message.error);
             } else if (message.ifoPath != null) {
               final raw = jsonDecode(message.ifoPath!) as List;
@@ -1156,9 +1176,9 @@ class DictionaryManager {
       final existing = await _dbHelper.getDictionaryByChecksum(checksum);
       if (existing != null) {
         yield ImportProgress(
-          message: 'Error: Dictionary already imported (${existing['name']})',
-          value: 0.0,
-          error: 'Duplicate dictionary',
+          message: 'Dictionary "${existing['name']}" is already in your library.',
+          value: 1.0,
+          error: 'ALREADY_EXISTS',
           isCompleted: true,
         );
         return;
@@ -1250,6 +1270,9 @@ class DictionaryManager {
         if (message is ImportProgress) {
           if (message.error != null) {
             receivePort.close();
+            if (message.error == 'ALREADY_EXISTS') {
+              throw Exception('ALREADY_EXISTS: ${message.message}');
+            }
             throw Exception(message.error);
           }
           if (message.isCompleted) {
@@ -1512,7 +1535,8 @@ class DictionaryManager {
             // Only delete managed directories to be safe against accidental wiping
             if (dirName.startsWith('dict_') ||
                 dirName.startsWith('mdict_') ||
-                dirName.startsWith('dictd_')) {
+                dirName.startsWith('dictd_') ||
+                dirName.startsWith('slob_')) {
               await dir.delete(recursive: true);
               hDebugPrint('Deleted physical dictionary directory: ${dir.path}');
             }
@@ -1556,9 +1580,9 @@ class DictionaryManager {
       if (existing != null) {
         await reader.close();
         yield ImportProgress(
-          message: 'Error: MDict already imported (${existing['name']})',
-          value: 0.0,
-          error: 'Duplicate dictionary',
+          message: 'MDict dictionary "${existing['name']}" is already in your library.',
+          value: 1.0,
+          error: 'ALREADY_EXISTS',
           isCompleted: true,
         );
         return;
@@ -1621,6 +1645,9 @@ class DictionaryManager {
         if (message is ImportProgress) {
           if (message.error != null) {
             receivePort.close();
+            if (message.error == 'ALREADY_EXISTS') {
+              throw Exception('ALREADY_EXISTS: ${message.message}');
+            }
             throw Exception(message.error);
           }
           if (message.isCompleted) {
@@ -1676,9 +1703,9 @@ class DictionaryManager {
       final existing = await _dbHelper.getDictionaryByChecksum(checksum);
       if (existing != null) {
         yield ImportProgress(
-          message: 'Error: DICTD already imported (${existing['name']})',
-          value: 0.0,
-          error: 'Duplicate dictionary',
+          message: 'DICTD dictionary "${existing['name']}" is already in your library.',
+          value: 1.0,
+          error: 'ALREADY_EXISTS',
           isCompleted: true,
         );
         return;
@@ -1799,9 +1826,9 @@ class DictionaryManager {
       if (existing != null) {
         await reader.close();
         yield ImportProgress(
-          message: 'Error: Slob already imported (${existing['name']})',
-          value: 0.0,
-          error: 'Duplicate dictionary',
+          message: 'Slob dictionary "${existing['name']}" is already in your library.',
+          value: 1.0,
+          error: 'ALREADY_EXISTS',
           isCompleted: true,
         );
         return;

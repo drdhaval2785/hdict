@@ -160,9 +160,16 @@ class _DictionaryManagementScreenState
       } catch (e) {
         if (mounted) {
           Navigator.pop(context); // Close progress dialog
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Download/Import failed: $e')));
+          final String errorStr = e.toString();
+          String message;
+          if (errorStr.contains('ALREADY_EXISTS:')) {
+            message = errorStr.split('ALREADY_EXISTS:').last.trim();
+          } else if (errorStr.contains('already in your library')) {
+            message = errorStr.replaceAll('Exception: ', '').trim();
+          } else {
+            message = 'Download/Import failed: $e';
+          }
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
         }
       }
     }
@@ -353,9 +360,16 @@ class _DictionaryManagementScreenState
       } catch (e) {
         if (mounted) {
           Navigator.pop(context); // Close dialog
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Import failed: $e')));
+          final String errorStr = e.toString();
+          String message;
+          if (errorStr.contains('ALREADY_EXISTS:')) {
+            message = errorStr.split('ALREADY_EXISTS:').last.trim();
+          } else if (errorStr.contains('already in your library')) {
+            message = errorStr.replaceAll('Exception: ', '').trim();
+          } else {
+            message = 'Import failed: $e';
+          }
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
         }
       }
     }

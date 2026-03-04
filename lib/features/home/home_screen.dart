@@ -278,8 +278,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Future<void> _cleanOrphanedFiles() async {
     try {
-      final manager = context.read<DictionaryManager>();
-      await manager.cleanOrphanedDictionaryFiles();
+      // Small delay to let app settle
+      await Future.delayed(const Duration(seconds: 2));
+      if (!mounted) return;
+      await _dictManager.cleanOrphanedDictionaryFiles();
     } catch (e) {
       hDebugPrint('Clean orphaned files error: $e');
     }
