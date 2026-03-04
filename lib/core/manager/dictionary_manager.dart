@@ -287,6 +287,7 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
 
     List<Map<String, dynamic>> batch = [];
     int indexed = 0;
+    int defWordCount = 0;
 
     for (final word in allKeys) {
       String content = '';
@@ -302,14 +303,18 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
         'length': 0,
       });
       indexed++;
+      if (content.isNotEmpty) {
+        defWordCount += content.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
+      }
 
       if (batch.length >= 2000) {
         await dbHelper.batchInsertWords(args.dictId, batch);
         batch.clear();
         sendPort.send(ImportProgress(
-          message: 'Indexing $indexed / $totalKeys headwords...',
+          message: 'Indexed $indexed headwords and $defWordCount words in definition',
           value: 0.5 + (indexed / (totalKeys == 0 ? 1 : totalKeys)) * 0.4,
           headwordCount: indexed,
+          definitionWordCount: defWordCount,
           dictionaryName: args.bookName,
         ));
       }
@@ -324,6 +329,7 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
       value: 1.0,
       isCompleted: true,
       headwordCount: indexed,
+      definitionWordCount: defWordCount,
       dictionaryName: args.bookName,
     ));
   } catch (e, s) {
@@ -1963,6 +1969,8 @@ class DictionaryManager {
           break;
       }
 
+      int finalHeadwordCount = 0;
+      int finalDefWordCount = 0;
       await for (final message in receivePort) {
         if (message is ImportProgress) {
           if (message.error != null) {
@@ -1970,6 +1978,8 @@ class DictionaryManager {
             throw Exception(message.error);
           }
           if (message.isCompleted) {
+            finalHeadwordCount = message.headwordCount;
+            finalDefWordCount = message.definitionWordCount;
             receivePort.close();
             break;
           }
@@ -1977,9 +1987,11 @@ class DictionaryManager {
         }
       }
       yield ImportProgress(
-        message: 'Re-indexing complete!',
+        message: 'Re-indexed $finalHeadwordCount headwords and $finalDefWordCount words in definition',
         value: 1.0,
         isCompleted: true,
+        headwordCount: finalHeadwordCount,
+        definitionWordCount: finalDefWordCount,
         dictionaryName: bookName,
       );
     } catch (e) {
