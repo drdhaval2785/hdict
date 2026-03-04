@@ -13,10 +13,9 @@ All notable changes to this project will be documented in this file.
   - Added headword and definition word counts to the Manage Dictionary screen.
 - **Definition Indexing for slob, dictd and mdict**:
   - Added definition indexing for slob, dictd and mdict dictionaries.
+- **Deleting stored files if deleted**:
+  - Added deletion of stored files and clean up of database space, if a dictionary is deleted from Manage Dictionary screen.
 
-
-### Changed
-- Incremented app version to 1.2.7+9.
 
 ---
 
