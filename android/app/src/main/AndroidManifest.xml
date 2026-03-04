@@ -5,7 +5,7 @@
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon">
         <activity
-            android:name=".MainActivity"
+            android:name="in.sanskritworld.hdict.MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
