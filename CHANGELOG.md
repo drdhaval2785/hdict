@@ -15,6 +15,8 @@ All notable changes to this project will be documented in this file.
   - Added definition indexing for slob, dictd and mdict dictionaries.
 - **Deleting stored files if deleted**:
   - Added deletion of stored files and clean up of database space, if a dictionary is deleted from Manage Dictionary screen.
+- **Tests for dictd, mdict, slob files**:
+  - Added tests for dictd, mdict, slob files.
 
 
 ---
@@ -27,21 +29,115 @@ All notable changes to this project will be documented in this file.
 - **Performance Optimization**: 
   - Implemented dictionary reader caching to eliminate startup lag on lookups.
   - Optimized Slob lookups using O(1) jump addresses (packed IDs).
-  - Upgraded to `slob_reader` 0.1.2 with bulk-read optimizations.
+  **Dart libraries**
+  - Started to use `slob_reader`, `dictd_reader`, `dict_reader` dart libraries for slob, dictd and mdict dictionaries.
+  - Started to use `dictzip_reader` dart library, so that dict.dz file can be read without decompression, so as to save storage space. 
 - **HTML Rendering**: 
   - Added safety thresholds for large dictionary entries to prevent UI hangs.
   - Optimized regex processing for "Tap-on-Meaning" lookup links.
   - Improved standard HTML tag preservation (html, head, body).
 
-### Changed
-- Incremented app version to 1.2.6+8.
-- Updated README.md with comprehensive format support details.
+
 
 ---
 
-## [1.2.5] - Earlier
+## [1.2.5] - 2026-03-03
 
 ### Added
-- Initial support for StarDict dictionaries.
-- Flash card learning system.
-- Customizable theme and typography.
+
+**SQLITE vacuuming**
+- Added SQLITE vacuuming to reclaim space occupied by deleted entries.
+
+**SQLITE Fallback**
+- In machines without FTS5 support, the app will fallback to using SQLITE for search.
+
+**Delete Stored Files**
+- Added deletion of stored files, if a dictionary is deleted from Manage Dictionary screen.
+
+**Restored Synonym Handling**
+- Restored synonym handling for headword search.
+
+## [1.2.4] - 2026-03-02
+
+### Added
+
+**Progress Bar Improvements**
+- Added progress bar to the search screen to show the progress of the dictionary indexing.
+
+**Headword Size Improvements**
+- Headword size made the same as the definition size, to make it more readable.
+
+**HTML Rendering**
+- Added HTML rendering for texts which resemble HTML or has some HTML tags.
+
+**Pop-up Timing Discrepancy Corrected**
+- Corrected the pop-up timing discrepancy, so that the pop-up timings are shown correctly.
+
+**Logo Update**
+- Updated logo of the app. Now only the logo is there. Text removed from logo.
+
+## [1.2.3] - 2026-02-28
+
+### Added
+
+**Default Dictionary Added**
+- Added link to download default GCIDE dictionary to the app, so that users can play with the app.
+
+## [1.2.2] - 2026-02-27
+
+### Removed
+
+**Security**
+- Removed security.network entitlement from the app for release on App Store.
+
+## [1.2.1] - 2026-02-25
+
+### Added
+
+**DICTD Support**
+- Added .dictd file support.
+
+**Compressed Files Support**
+- Added support for tar.xz, tar.gz, .gz, .bz, .7z etc compressed file formats.
+
+## [1.1.0] - 2026-02-25
+
+**Prefix Search**
+- Added prefix search as the default search type.
+- Added FTS5 improvements for speedy retrieval.
+
+**Definition Search**
+- Added search within definition words.
+
+**Flash Cards Improvement**
+- Added faster loading of flash cards by generating random numbers.
+
+**Multiple Headwords with the same Definition**
+- Added a unified display for multiple headwords with the same definition.
+
+**Pop-up Search**
+- Added pop-up search to search for words in the definition area.
+
+**Privacy Policy**
+- Added privacy policy to the app.
+
+[1.0.0] - 2026-02-22
+
+**Dictionary Management**
+- Added dictionary management screen to manage dictionaries.
+
+**Search History**
+- Added search history to keep track of search history.
+
+**Flash Card Learning System**
+- Added flash card learning system to learn words.
+
+**Customizable Theme and Typography**
+- Added customizable theme and typography to customize the app.
+
+**Removed BHIM Payments**
+- Removed BHIM Payments from the app to comply with App Store guidelines.
+
+**Prefix Search if Word is Absent**
+- If the word is not found in the dictionary, the app will perform a prefix search for the word.
+
