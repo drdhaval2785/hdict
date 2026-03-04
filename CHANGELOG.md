@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.7] - 2026-03-04
+
+### Added
+- **Search History Enhancements**:
+  - Added tracking for different search types: 'Headword Search', 'Definition Search', and 'Pop-up Search'.
+  - Updated UI to display search types in the search history list.
+  - Implemented database migration (v15) to support search type storage.
+- **Display Headword dand Definition Word counts in Manage Dictionary**:
+  - Added headword and definition word counts to the Manage Dictionary screen.
+- **Definition Indexing for slob, dictd and mdict**:
+  - Added definition indexing for slob, dictd and mdict dictionaries.
+
+
+### Changed
+- Incremented app version to 1.2.7+9.
+
+---
+
 ## [1.2.6] - 2026-03-03
 
 ### Added
