@@ -92,7 +92,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 13, // Version 13: added 'css' to dictionaries
+      version: 14, // Version 14: added 'definition_word_count' to dictionaries
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onOpen: _onOpen,
@@ -203,7 +203,8 @@ class DatabaseHelper {
         end_rowid INTEGER,
         format TEXT DEFAULT 'stardict',
         type_sequence TEXT,
-        css TEXT
+        css TEXT,
+        definition_word_count INTEGER DEFAULT 0
       )
     ''');
 
@@ -332,6 +333,25 @@ class DatabaseHelper {
         debugPrint('Migration error (version 13): $e');
       }
     }
+    if (oldVersion < 14) {
+      try {
+        final tableInfo = await db.rawQuery("PRAGMA table_info('dictionaries')");
+        bool hasDefWordCount = false;
+        for (final row in tableInfo) {
+          if (row['name'] == 'definition_word_count') {
+            hasDefWordCount = true;
+            break;
+          }
+        }
+        if (!hasDefWordCount) {
+          await db.execute(
+            'ALTER TABLE dictionaries ADD COLUMN definition_word_count INTEGER DEFAULT 0',
+          );
+        }
+      } catch (e) {
+        debugPrint('Migration error (version 14): $e');
+      }
+    }
   }
 
   // --- Path Resolution Helper (iOS/macOS Absolute Path Volatility) ---
@@ -435,11 +455,15 @@ class DatabaseHelper {
     });
   }
 
-  Future<void> updateDictionaryWordCount(int id, int wordCount) async {
+  Future<void> updateDictionaryWordCount(int id, int wordCount, [int? definitionWordCount]) async {
     final db = await database;
+    final Map<String, dynamic> updateData = {'word_count': wordCount};
+    if (definitionWordCount != null) {
+      updateData['definition_word_count'] = definitionWordCount;
+    }
     await db.update(
       'dictionaries',
-      {'word_count': wordCount},
+      updateData,
       where: 'id = ?',
       whereArgs: [id],
     );

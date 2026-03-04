@@ -7,6 +7,8 @@ import 'package:hdict/core/database/database_helper.dart';
 import 'package:hdict/core/manager/dictionary_manager.dart';
 import 'package:dictd_reader/dictd_reader.dart';
 import 'package:hdict/core/parser/ifo_parser.dart';
+import 'package:hdict/core/parser/idx_parser.dart';
+import 'package:hdict/core/parser/dict_reader.dart';
 
 import 'package:flutter/services.dart';
 
@@ -46,7 +48,8 @@ void main() {
             end_rowid INTEGER,
             format TEXT DEFAULT 'stardict',
             type_sequence TEXT,
-            css TEXT
+            css TEXT,
+            definition_word_count INTEGER DEFAULT 0
           )
         ''');
         await db.execute('''
@@ -102,12 +105,49 @@ void main() {
       await reader.close();
     });
 
-    test('StarDict parsing logic (direct call)', () async {
+    test('StarDict indexing logic (direct call)', () async {
+      final ifoPath = p.join(tempDir.path, 'test.ifo');
+      final idxPath = p.join(tempDir.path, 'test.idx');
+      final dictPath = p.join(tempDir.path, 'test.dict');
+
+      await File(ifoPath).writeAsString("StarDict's dict ifo file\nversion=2.4.2\nwordcount=2\nidxfilesize=100\nbookname=Test\nidxoffsetbits=32\n");
+      await File(dictPath).writeAsString('hello worlddefinition of test');
+
+      final bytes = BytesBuilder();
+      bytes.add('hello'.codeUnits); bytes.addByte(0);
+      bytes.add([0, 0, 0, 0]); bytes.add([0, 0, 0, 11]);
+      bytes.add('test'.codeUnits); bytes.addByte(0);
+      bytes.add([0, 0, 0, 11]); bytes.add([0, 0, 0, 18]);
+      await File(idxPath).writeAsBytes(bytes.toBytes());
+
       final ifo = IfoParser();
-      final content = "version=2.4.2\nwordcount=2\nbookname=Test\nidxoffsetbits=32\n";
-      ifo.parseContent(content);
+      await ifo.parse(ifoPath);
+      final reader = DictReader(dictPath);
+      final idx = IdxParser(ifo);
+      final entries = await idx.parse(idxPath).toList();
+
+      int headwordCount = 0;
+      int defWordCount = 0;
+      for (final entry in entries) {
+        headwordCount++;
+        final content = await reader.readEntry(entry['offset'] as int, entry['length'] as int);
+        defWordCount += content.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
+      }
+
+      expect(headwordCount, 2);
+      expect(defWordCount, 5);
       expect(ifo.bookName, 'Test');
-      expect(ifo.wordCount, 2);
+    });
+
+    test('updateDictionaryWordCount saves both counts correctly', () async {
+      final dictId = await dbHelper.insertDictionary('Test Dict', 'test/path');
+      await dbHelper.updateDictionaryWordCount(dictId, 100, 500);
+
+      final dicts = await dbHelper.getDictionaries();
+      final dict = dicts.firstWhere((d) => d['id'] == dictId);
+
+      expect(dict['word_count'], 100);
+      expect(dict['definition_word_count'], 500);
     });
   });
 }

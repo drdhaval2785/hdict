@@ -201,7 +201,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
         batch.clear();
         sendPort.send(
           ImportProgress(
-            message: 'Indexed $headwordCount headwords and $defWordCount words in definition',
+            message: '${args.ifoParser.bookName}: $headwordCount headwords, $defWordCount words in definition',
             value: 0.85 +
                 (headwordCount /
                         (args.ifoParser.wordCount == 0
@@ -245,12 +245,12 @@ Future<void> _indexEntry(_IndexArgs args) async {
     }
 
     await dictReader.close();
-    await dbHelper.updateDictionaryWordCount(args.dictId, headwordCount);
+    await dbHelper.updateDictionaryWordCount(args.dictId, headwordCount, defWordCount);
 
     sendPort.send(
       ImportProgress(
-        message: 'Indexing complete.',
-        value: 0.95,
+        message: '${args.ifoParser.bookName}: $headwordCount headwords, $defWordCount words in definition',
+        value: 1.0,
         isCompleted: true,
         headwordCount: headwordCount,
         definitionWordCount: defWordCount,
@@ -322,7 +322,7 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
 
     if (batch.isNotEmpty) await dbHelper.batchInsertWords(args.dictId, batch);
     await reader.close();
-    await dbHelper.updateDictionaryWordCount(args.dictId, indexed);
+    await dbHelper.updateDictionaryWordCount(args.dictId, indexed, defWordCount);
 
     sendPort.send(ImportProgress(
       message: 'MDict indexing complete!',
@@ -379,9 +379,10 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
         await dbHelper.batchInsertWords(args.dictId, batch);
         batch.clear();
         sendPort.send(ImportProgress(
-          message: 'Indexing $headwordCount / $totalBlobs blobs...',
+          message: '${args.bookName}: $headwordCount headwords, $defWordCount words in definition',
           value: 0.45 + (headwordCount / (totalBlobs == 0 ? 1 : totalBlobs)) * 0.45,
           headwordCount: headwordCount,
+          definitionWordCount: defWordCount,
           dictionaryName: args.bookName,
         ));
       }
@@ -389,10 +390,10 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
 
     if (batch.isNotEmpty) await dbHelper.batchInsertWords(args.dictId, batch);
     await reader.close();
-    await dbHelper.updateDictionaryWordCount(args.dictId, headwordCount);
+    await dbHelper.updateDictionaryWordCount(args.dictId, headwordCount, defWordCount);
 
     sendPort.send(ImportProgress(
-      message: 'Slob indexing complete!',
+      message: '${args.bookName}: $headwordCount headwords, $defWordCount words in definition',
       value: 1.0,
       isCompleted: true,
       headwordCount: headwordCount,
@@ -454,9 +455,10 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
         await dbHelper.batchInsertWords(args.dictId, batch);
         batch.clear();
         sendPort.send(ImportProgress(
-          message: 'Indexing $headwordCount words...',
+          message: '${args.bookName}: $headwordCount headwords, $defWordCount words in definition',
           value: 0.45 + (headwordCount / 100000) * 0.45,
           headwordCount: headwordCount,
+          definitionWordCount: defWordCount,
           dictionaryName: args.bookName,
         ));
       }
@@ -464,10 +466,10 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
 
     if (batch.isNotEmpty) await dbHelper.batchInsertWords(args.dictId, batch);
     await dictdReader.close();
-    await dbHelper.updateDictionaryWordCount(args.dictId, headwordCount);
+    await dbHelper.updateDictionaryWordCount(args.dictId, headwordCount, defWordCount);
 
     sendPort.send(ImportProgress(
-      message: 'DICTD indexing complete!',
+      message: '${args.bookName}: $headwordCount headwords, $defWordCount words in definition',
       value: 1.0,
       isCompleted: true,
       headwordCount: headwordCount,
@@ -1987,7 +1989,7 @@ class DictionaryManager {
         }
       }
       yield ImportProgress(
-        message: 'Re-indexed $finalHeadwordCount headwords and $finalDefWordCount words in definition',
+        message: '$bookName: $finalHeadwordCount headwords, $finalDefWordCount words in definition',
         value: 1.0,
         isCompleted: true,
         headwordCount: finalHeadwordCount,

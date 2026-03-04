@@ -491,7 +491,7 @@ class _DictionaryManagementScreenState
                             overflow: TextOverflow.ellipsis,
                           ),
                           subtitle: Text(
-                            '${dict['word_count']} words',
+                            '${dict['word_count']} headwords${(dict['definition_word_count'] ?? 0) > 0 ? ', ${dict['definition_word_count']} words in definition' : ''}',
                             style: TextStyle(
                               color: Theme.of(context).colorScheme.primary,
                             ),
@@ -762,7 +762,7 @@ class _DictionaryManagementScreenState
         if (progress.headwordCount > 0) ...[
           const SizedBox(height: 8),
           Text(
-            '${progress.headwordCount} headwords indexed',
+            '${progress.headwordCount} headwords, ${progress.definitionWordCount} definition words indexed',
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
           ),
         ],
