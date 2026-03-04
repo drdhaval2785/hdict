@@ -88,7 +88,7 @@ class _SearchHistoryScreenState extends State<SearchHistoryScreen> {
                   leading: const Icon(Icons.history),
                   title: Text(item['word']),
                   subtitle: Text(
-                    DateFormat('MMM dd, yyyy - hh:mm a').format(date),
+                    '${item['search_type'] ?? 'Headword Search'} • ${DateFormat('MMM dd, yyyy - hh:mm a').format(date)}',
                   ),
                   onTap: () {
                     Navigator.pop(context, item['word']);

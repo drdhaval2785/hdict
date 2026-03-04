@@ -165,7 +165,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     if (headword.isEmpty && definition.isEmpty) return;
 
     if (headword.isNotEmpty) {
-      await _dbHelper.addSearchHistory(headword);
+      await _dbHelper.addSearchHistory(headword, searchType: 'Headword Search');
+    } else if (definition.isNotEmpty) {
+      await _dbHelper.addSearchHistory(definition, searchType: 'Definition Search');
     }
 
     if (!mounted) return;
@@ -748,6 +750,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   void _showWordPopup(String word) async {
     final settings = context.read<SettingsProvider>();
+    await _dbHelper.addSearchHistory(word, searchType: 'Pop-up Search');
+    if (!mounted) return;
     if (!settings.isOpenPopupOnTap) {
       _onWordSelected(word);
       return;

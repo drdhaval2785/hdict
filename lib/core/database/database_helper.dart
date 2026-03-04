@@ -93,7 +93,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 14, // Version 14: added 'definition_word_count' to dictionaries
+      version: 15, // Version 15: added 'search_type' to search_history
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onOpen: _onOpen,
@@ -217,7 +217,8 @@ class DatabaseHelper {
       CREATE TABLE IF NOT EXISTS search_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         word TEXT NOT NULL,
-        timestamp INTEGER NOT NULL
+        timestamp INTEGER NOT NULL,
+        search_type TEXT DEFAULT 'Headword Search'
       )
     ''');
 
@@ -351,6 +352,25 @@ class DatabaseHelper {
         }
       } catch (e) {
         hDebugPrint('Migration error (version 14): $e');
+      }
+    }
+    if (oldVersion < 15) {
+      try {
+        final tableInfo = await db.rawQuery("PRAGMA table_info('search_history')");
+        bool hasSearchType = false;
+        for (final row in tableInfo) {
+          if (row['name'] == 'search_type') {
+            hasSearchType = true;
+            break;
+          }
+        }
+        if (!hasSearchType) {
+          await db.execute(
+            "ALTER TABLE search_history ADD COLUMN search_type TEXT DEFAULT 'Headword Search'",
+          );
+        }
+      } catch (e) {
+        hDebugPrint('Migration error (version 15): $e');
       }
     }
   }
@@ -649,13 +669,14 @@ class DatabaseHelper {
 
   // --- Search History ---
 
-  Future<void> addSearchHistory(String word) async {
+  Future<void> addSearchHistory(String word, {String searchType = 'Headword Search'}) async {
     try {
       final db = await database;
       await db.delete('search_history', where: 'word = ?', whereArgs: [word]);
       await db.insert('search_history', {
         'word': word,
         'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'search_type': searchType,
       });
     } catch (e) {
       hDebugPrint('Error adding search history: $e');
