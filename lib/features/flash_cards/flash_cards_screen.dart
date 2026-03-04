@@ -1,3 +1,4 @@
+import 'package:hdict/core/utils/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:hdict/core/database/database_helper.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
@@ -433,7 +434,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
                         ),
                       },
                       onLinkTap: (url, attributes, element) {
-                        debugPrint("FlashCard Link tapped: $url");
+                        hDebugPrint("FlashCard Link tapped: $url");
                         if (url != null && url.startsWith('look_up:')) {
                           final encodedWord = url.substring(8);
                           try {
@@ -692,7 +693,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
                     ),
                   },
                   onLinkTap: (url, attributes, element) {
-                    debugPrint("FlashCard Popup Link tapped: $url");
+                    hDebugPrint("FlashCard Popup Link tapped: $url");
                     if (url != null && url.startsWith('look_up:')) {
                       final encodedWord = url.substring(8);
                       Navigator.pop(context);

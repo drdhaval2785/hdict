@@ -1,5 +1,6 @@
+import 'package:hdict/core/utils/logger.dart';
 import 'package:dict_reader/dict_reader.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 /// Wrapper around the `dict_reader` package.
 ///
@@ -22,7 +23,7 @@ class MdictReader {
       await _reader.initDict();
       _isInitialized = true;
     } catch (e) {
-      debugPrint('Error initializing MDict: $e');
+      hDebugPrint('Error initializing MDict: $e');
       rethrow;
     }
   }
@@ -46,7 +47,7 @@ class MdictReader {
       final data = await _reader.readOneMdx(info);
       return data;
     } catch (e) {
-      debugPrint('Error looking up $word: $e');
+      hDebugPrint('Error looking up $word: $e');
       return null;
     }
   }

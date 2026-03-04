@@ -1,3 +1,4 @@
+import 'package:hdict/core/utils/logger.dart';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:convert';
@@ -258,7 +259,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
       ),
     );
   } catch (e, s) {
-    debugPrint('Error in _indexEntry: $e\n$s');
+    hDebugPrint('Error in _indexEntry: $e\n$s');
     sendPort.send(
       ImportProgress(
         message: 'Error during indexing: $e',
@@ -333,7 +334,7 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
       dictionaryName: args.bookName,
     ));
   } catch (e, s) {
-    debugPrint('MDict indexing error: $e\n$s');
+    hDebugPrint('MDict indexing error: $e\n$s');
     sendPort.send(ImportProgress(
       message: 'MDict indexing error: $e',
       value: 0.0,
@@ -401,7 +402,7 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
       dictionaryName: args.bookName,
     ));
   } catch (e, s) {
-    debugPrint('Slob indexing error: $e\n$s');
+    hDebugPrint('Slob indexing error: $e\n$s');
     sendPort.send(ImportProgress(
       message: 'Slob indexing error: $e',
       value: 0.0,
@@ -477,7 +478,7 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
       dictionaryName: args.bookName,
     ));
   } catch (e, s) {
-    debugPrint('DICTD indexing error: $e\n$s');
+    hDebugPrint('DICTD indexing error: $e\n$s');
     sendPort.send(ImportProgress(
       message: 'DICTD indexing error: $e',
       value: 0.0,
@@ -516,7 +517,7 @@ Future<void> _extractToWorkspaceSync(_ExtractArgs args) async {
         archive = TarDecoder().decodeBytes(XZDecoder().decodeBytes(bytes));
       } catch (e) {
         if (Platform.isMacOS || Platform.isLinux) {
-          debugPrint('Dart archive package failed to extract .tar.xz ($e). Falling back to system tar.');
+          hDebugPrint('Dart archive package failed to extract .tar.xz ($e). Falling back to system tar.');
           final result = Process.runSync('tar', ['-xf', filePath, '-C', workspacePath]);
           if (result.exitCode != 0) {
             throw Exception('Native tar extraction failed: ${result.stderr}');
@@ -547,7 +548,7 @@ Future<void> _extractToWorkspaceSync(_ExtractArgs args) async {
       }
     }
   } catch (e) {
-    debugPrint('Error extracting $filePath: $e');
+    hDebugPrint('Error extracting $filePath: $e');
   }
 }
 
@@ -621,7 +622,7 @@ Future<void> _importEntry(_ImportArgs args) async {
       ),
     );
   } catch (e, s) {
-    debugPrint('Error in _importEntry: $e\n$s');
+    hDebugPrint('Error in _importEntry: $e\n$s');
     sendPort.send(
       ImportProgress(
         message: 'Error during extraction: $e',
@@ -719,7 +720,7 @@ class DictionaryManager {
         await File(target).writeAsBytes(decompressed);
       } catch (e) {
         if (Platform.isMacOS || Platform.isLinux) {
-          debugPrint('Dart archive package failed to decompress .xz ($e). Falling back to system xz.');
+          hDebugPrint('Dart archive package failed to decompress .xz ($e). Falling back to system xz.');
           final result = Process.runSync('xz', ['-dc', path], stdoutEncoding: null);
           if (result.exitCode != 0) {
             throw Exception('Native xz decompression failed: ${result.stderr}');
@@ -830,7 +831,7 @@ class DictionaryManager {
         }
       }
     } catch (e, s) {
-      debugPrint('Error in importDictionaryStream: $e\n$s');
+      hDebugPrint('Error in importDictionaryStream: $e\n$s');
       yield ImportProgress(
         message: 'Error: $e',
         value: 0.0,
@@ -1083,7 +1084,7 @@ class DictionaryManager {
             if (progress.isCompleted) break;
           }
         } catch (e) {
-          debugPrint('Web error importing $ifoName: $e');
+          hDebugPrint('Web error importing $ifoName: $e');
         }
       }
 
@@ -1216,7 +1217,7 @@ class DictionaryManager {
         dictionaryName: bookName,
       );
     } catch (e, s) {
-      debugPrint('Error in _processDictionaryFiles: $e\n$s');
+      hDebugPrint('Error in _processDictionaryFiles: $e\n$s');
       yield ImportProgress(
         message: 'Error: $e',
         value: 0.0,
@@ -1417,7 +1418,7 @@ class DictionaryManager {
         dictionaryName: bookName,
       );
     } catch (e, s) {
-      debugPrint('Web import error: $e\n$s');
+      hDebugPrint('Web import error: $e\n$s');
       yield ImportProgress(message: 'Web import error: $e', value: 0.0, error: e.toString(), isCompleted: true);
     }
   }
@@ -1454,11 +1455,11 @@ class DictionaryManager {
                 dirName.startsWith('mdict_') ||
                 dirName.startsWith('dictd_')) {
               await dir.delete(recursive: true);
-              debugPrint('Deleted physical dictionary directory: ${dir.path}');
+              hDebugPrint('Deleted physical dictionary directory: ${dir.path}');
             }
           }
         } catch (e) {
-          debugPrint('Failed to delete physical dictionary directory: $e');
+          hDebugPrint('Failed to delete physical dictionary directory: $e');
         }
       }
     }
@@ -1570,7 +1571,7 @@ class DictionaryManager {
         dictionaryName: bookName,
       );
     } catch (e, s) {
-      debugPrint('MDict import error: $e\n$s');
+      hDebugPrint('MDict import error: $e\n$s');
       yield ImportProgress(
         message: 'MDict import error: $e',
         value: 0.0, error: e.toString(), isCompleted: true,
@@ -1675,7 +1676,7 @@ class DictionaryManager {
         dictionaryName: bookName,
       );
     } catch (e, s) {
-      debugPrint('DICTD import error: $e\n$s');
+      hDebugPrint('DICTD import error: $e\n$s');
       yield ImportProgress(
         message: 'DICTD import error: $e',
         value: 0.0,
@@ -1784,7 +1785,7 @@ class DictionaryManager {
         dictionaryName: bookName,
       );
     } catch (e, s) {
-      debugPrint('Slob import error: $e\n$s');
+      hDebugPrint('Slob import error: $e\n$s');
       yield ImportProgress(
         message: 'Slob import error: $e',
         value: 0.0,
@@ -1822,7 +1823,7 @@ class DictionaryManager {
             result = await reader.lookup(word);
           }
         } catch (e) {
-          debugPrint('Error fetching MDict definition: $e');
+          hDebugPrint('Error fetching MDict definition: $e');
         }
         break;
 
@@ -1841,7 +1842,7 @@ class DictionaryManager {
             result = await reader.getBlobContentById(offset);
           }
         } catch (e) {
-          debugPrint('Error fetching Slob definition: $e');
+          hDebugPrint('Error fetching Slob definition: $e');
         }
         break;
 

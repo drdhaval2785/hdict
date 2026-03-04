@@ -1,3 +1,4 @@
+import 'package:hdict/core/utils/logger.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
@@ -23,20 +24,20 @@ class DatabaseHelper {
   DatabaseHelper._internal();
 
   void _log(String type, String sql, [dynamic args, dynamic result]) {
-    debugPrint('--- SQL $type ---');
-    debugPrint('Query: $sql');
-    if (args != null) debugPrint('Args: $args');
+    hDebugPrint('--- SQL $type ---');
+    hDebugPrint('Query: $sql');
+    if (args != null) hDebugPrint('Args: $args');
     if (result != null) {
       if (result is List) {
-        debugPrint('Result Count: ${result.length}');
+        hDebugPrint('Result Count: ${result.length}');
         if (result.isNotEmpty) {
-          debugPrint('Results: $result');
+          hDebugPrint('Results: $result');
         }
       } else {
-        debugPrint('Result: $result');
+        hDebugPrint('Result: $result');
       }
     }
-    debugPrint('-----------------');
+    hDebugPrint('-----------------');
   }
 
   static Future<void> initializeDatabaseFactory() async {
@@ -77,7 +78,7 @@ class DatabaseHelper {
         Directory documentsDirectory = await getApplicationDocumentsDirectory();
         path = join(documentsDirectory.path, 'novalex.db');
       } catch (e) {
-        debugPrint('Error getting documents directory: $e');
+        hDebugPrint('Error getting documents directory: $e');
         path = 'novalex.db'; // Fallback to local path
       }
     }
@@ -86,7 +87,7 @@ class DatabaseHelper {
     try {
       databaseFactory;
     } catch (e) {
-      debugPrint('Database factory not initialized: $e');
+      hDebugPrint('Database factory not initialized: $e');
       throw StateError('Database factory not initialized. Check main.dart');
     }
 
@@ -134,7 +135,7 @@ class DatabaseHelper {
     if (tableExists && tableIsFts5 && !fts5Available) {
       // The stored table is FTS5 but the runtime doesn't support it.
       // Drop and recreate as a regular table to restore functionality.
-      debugPrint(
+      hDebugPrint(
         'word_index is FTS5 but FTS5 module is unavailable — migrating to regular table.',
       );
       await db.execute('DROP TABLE word_index');
@@ -157,9 +158,9 @@ class DatabaseHelper {
             tokenize = 'unicode61'
           )
         ''');
-        debugPrint('word_index created as FTS5 virtual table.');
+        hDebugPrint('word_index created as FTS5 virtual table.');
       } else {
-        debugPrint(
+        hDebugPrint(
           'FTS5 unavailable — creating word_index as regular indexed table.',
         );
         await db.execute('''
@@ -264,7 +265,7 @@ class DatabaseHelper {
           'ALTER TABLE dictionaries ADD COLUMN end_rowid INTEGER',
         );
       } catch (e) {
-        debugPrint('Migration error (version 8): $e');
+        hDebugPrint('Migration error (version 8): $e');
       }
     }
     if (oldVersion < 9) {
@@ -283,7 +284,7 @@ class DatabaseHelper {
           );
         }
       } catch (e) {
-        debugPrint('Migration error (version 9): $e');
+        hDebugPrint('Migration error (version 9): $e');
       }
     }
     if (oldVersion < 10) {
@@ -302,7 +303,7 @@ class DatabaseHelper {
           );
         }
       } catch (e) {
-        debugPrint('Migration error (version 10): $e');
+        hDebugPrint('Migration error (version 10): $e');
       }
     }
     if (oldVersion < 11) {
@@ -311,7 +312,7 @@ class DatabaseHelper {
           'ALTER TABLE flash_card_scores ADD COLUMN dict_ids TEXT',
         );
       } catch (e) {
-        debugPrint('Migration error (version 11): $e');
+        hDebugPrint('Migration error (version 11): $e');
       }
     }
     if (oldVersion < 13) {
@@ -330,7 +331,7 @@ class DatabaseHelper {
           );
         }
       } catch (e) {
-        debugPrint('Migration error (version 13): $e');
+        hDebugPrint('Migration error (version 13): $e');
       }
     }
     if (oldVersion < 14) {
@@ -349,7 +350,7 @@ class DatabaseHelper {
           );
         }
       } catch (e) {
-        debugPrint('Migration error (version 14): $e');
+        hDebugPrint('Migration error (version 14): $e');
       }
     }
   }
@@ -543,7 +544,7 @@ class DatabaseHelper {
         return getSampleWords(dictId, limit: limit); // Recurse
       }
     } catch (e) {
-      debugPrint('Fallback random word lookup error: $e');
+      hDebugPrint('Fallback random word lookup error: $e');
     }
 
     // Last resort: standard offset
@@ -605,9 +606,9 @@ class DatabaseHelper {
       await db.execute("INSERT INTO word_index(word_index) VALUES('optimize')");
       // Re-write the database to shrink the native file size
       await db.execute('VACUUM');
-      debugPrint('Database optimized and vacuumed successfully');
+      hDebugPrint('Database optimized and vacuumed successfully');
     } catch (e) {
-      debugPrint('Error vacuuming database: $e');
+      hDebugPrint('Error vacuuming database: $e');
     }
   }
 
@@ -616,7 +617,7 @@ class DatabaseHelper {
       final db = await database;
       return await db.query('dictionaries', orderBy: 'display_order ASC');
     } catch (e) {
-      debugPrint('Error getting dictionaries: $e');
+      hDebugPrint('Error getting dictionaries: $e');
       return [];
     }
   }
@@ -657,7 +658,7 @@ class DatabaseHelper {
         'timestamp': DateTime.now().millisecondsSinceEpoch,
       });
     } catch (e) {
-      debugPrint('Error adding search history: $e');
+      hDebugPrint('Error adding search history: $e');
     }
   }
 
@@ -666,7 +667,7 @@ class DatabaseHelper {
       final db = await database;
       return await db.query('search_history', orderBy: 'timestamp DESC');
     } catch (e) {
-      debugPrint('Error getting search history: $e');
+      hDebugPrint('Error getting search history: $e');
       return [];
     }
   }
@@ -688,7 +689,7 @@ class DatabaseHelper {
         whereArgs: [cutOff],
       );
     } catch (e) {
-      debugPrint('Error deleting old search history: $e');
+      hDebugPrint('Error deleting old search history: $e');
     }
   }
 
@@ -854,7 +855,7 @@ class DatabaseHelper {
       _log('RAW_QUERY (Advanced Search)', sql, whereArgs, result);
       return result;
     } catch (e) {
-      debugPrint("Search error: $e");
+      hDebugPrint("Search error: $e");
       return [];
     }
   }
@@ -896,7 +897,7 @@ class DatabaseHelper {
         return results.map((r) => r['word'] as String).toList();
       }
     } catch (e) {
-      debugPrint('Error getting prefix suggestions: $e');
+      hDebugPrint('Error getting prefix suggestions: $e');
       return [];
     }
   }

@@ -1,3 +1,4 @@
+import 'package:hdict/core/utils/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:hdict/core/database/database_helper.dart';
@@ -246,7 +247,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint('Error fetching definitions: $e');
+      hDebugPrint('Error fetching definitions: $e');
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -277,7 +278,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       final settings = context.read<SettingsProvider>();
       await _dbHelper.deleteOldSearchHistory(settings.historyRetentionDays);
     } catch (e) {
-      debugPrint('Clean history error: $e');
+      hDebugPrint('Clean history error: $e');
     }
   }
 
@@ -645,7 +646,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   );
                 }
                 String rawHtml = rawDefinitions[index];
-                debugPrint('--- RAW DEFINITION (Index $index) [$format / ${typeSequence ?? ""}] ---\n$rawHtml\n-------------------');
+                hDebugPrint('--- RAW DEFINITION (Index $index) [$format / ${typeSequence ?? ""}] ---\n$rawHtml\n-------------------');
                 
                 String definitionHtml = rawHtml;
 
@@ -670,7 +671,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   );
                 }
                 
-                debugPrint('--- RENDERED HTML (Index $index) ---\n$definitionHtml\n-------------------');
+                hDebugPrint('--- RENDERED HTML (Index $index) ---\n$definitionHtml\n-------------------');
 
                 return Stack(
                   children: [
