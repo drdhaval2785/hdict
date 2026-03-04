@@ -93,7 +93,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 15, // Version 15: added 'search_type' to search_history
+      version: 16, // Version 16: added 'checksum' to dictionaries
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onOpen: _onOpen,
@@ -205,7 +205,8 @@ class DatabaseHelper {
         format TEXT DEFAULT 'stardict',
         type_sequence TEXT,
         css TEXT,
-        definition_word_count INTEGER DEFAULT 0
+        definition_word_count INTEGER DEFAULT 0,
+        checksum TEXT
       )
     ''');
 
@@ -373,6 +374,25 @@ class DatabaseHelper {
         hDebugPrint('Migration error (version 15): $e');
       }
     }
+    if (oldVersion < 16) {
+      try {
+        final tableInfo = await db.rawQuery("PRAGMA table_info('dictionaries')");
+        bool hasChecksum = false;
+        for (final row in tableInfo) {
+          if (row['name'] == 'checksum') {
+            hasChecksum = true;
+            break;
+          }
+        }
+        if (!hasChecksum) {
+          await db.execute(
+            'ALTER TABLE dictionaries ADD COLUMN checksum TEXT',
+          );
+        }
+      } catch (e) {
+        hDebugPrint('Migration error (version 16): $e');
+      }
+    }
   }
 
   // --- Path Resolution Helper (iOS/macOS Absolute Path Volatility) ---
@@ -456,6 +476,7 @@ class DatabaseHelper {
     bool indexDefinitions = false,
     String format = 'stardict',
     String? typeSequence,
+    String? checksum,
   }) async {
     final db = await database;
 
@@ -472,7 +493,8 @@ class DatabaseHelper {
       'index_definitions': indexDefinitions ? 1 : 0,
       'format': format,
       'type_sequence': typeSequence,
-      'css': null, // Can be updated later or passed if known
+      'css': null,
+      'checksum': checksum,
     });
   }
 
@@ -662,6 +684,17 @@ class DatabaseHelper {
       'dictionaries',
       where: 'id = ?',
       whereArgs: [id],
+    );
+    if (results.isNotEmpty) return results.first;
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> getDictionaryByChecksum(String checksum) async {
+    final db = await database;
+    final results = await db.query(
+      'dictionaries',
+      where: 'checksum = ?',
+      whereArgs: [checksum],
     );
     if (results.isNotEmpty) return results.first;
     return null;

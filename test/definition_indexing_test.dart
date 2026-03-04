@@ -49,7 +49,8 @@ void main() {
             format TEXT DEFAULT 'stardict',
             type_sequence TEXT,
             css TEXT,
-            definition_word_count INTEGER DEFAULT 0
+            definition_word_count INTEGER DEFAULT 0,
+            checksum TEXT
           )
         ''');
         await db.execute('''

@@ -17,6 +17,7 @@ import 'package:hdict/core/parser/dict_reader.dart';
 import 'package:hdict/core/parser/mdict_reader.dart';
 import 'package:hdict/core/parser/slob_reader.dart';
 import 'package:dictd_reader/dictd_reader.dart';
+import 'package:crypto/crypto.dart';
 
 // Top-level functions for compute
 List<int> _decompressGzip(List<int> bytes) {
@@ -679,9 +680,53 @@ class DictionaryManager {
   static Future<void> closeReader(int dictId) async {
     final reader = _readerCache.remove(dictId);
     if (reader != null) {
-      if (reader is SlobReader || reader is MdictReader) {
-        await reader.close();
+      if (reader is MdictReader) await reader.close();
+      if (reader is SlobReader) await reader.close();
+    }
+  }
+
+  /// Calculates the MD5 checksum of a file.
+  Future<String> _calculateChecksum(String filePath) async {
+    final file = File(filePath);
+    if (!await file.exists()) return '';
+    final bytes = await file.readAsBytes();
+    return md5.convert(bytes).toString();
+  }
+
+  /// Scans the 'dictionaries' directory and removes folders that are not referenced in the database.
+  Future<void> cleanOrphanedDictionaryFiles() async {
+    try {
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final dictsDir = Directory(p.join(appDocDir.path, 'dictionaries'));
+      if (!await dictsDir.exists()) return;
+
+      final List<Map<String, dynamic>> activeDicts = await _dbHelper.getDictionaries();
+      final Set<String> activeFolderNames = {};
+
+      for (final dict in activeDicts) {
+        final String path = dict['path'];
+        // Path is like 'dictionaries/dict_123/file.ifo' or 'dict_123/file.ifo'
+        final parts = p.split(path);
+        final dictsIdx = parts.indexOf('dictionaries');
+        if (dictsIdx != -1 && dictsIdx + 1 < parts.length) {
+          activeFolderNames.add(parts[dictsIdx + 1]);
+        } else if (parts.isNotEmpty) {
+           // Fallback if path doesn't contain 'dictionaries/' explicitly but is relative
+           activeFolderNames.add(parts[0]);
+        }
       }
+
+      await for (final entity in dictsDir.list()) {
+        if (entity is Directory) {
+          final folderName = p.basename(entity.path);
+          if (!activeFolderNames.contains(folderName)) {
+            hDebugPrint('Cleaning orphaned dictionary folder: $folderName');
+            await entity.delete(recursive: true);
+          }
+        }
+      }
+    } catch (e) {
+      hDebugPrint('Error cleaning orphaned files: $e');
     }
   }
 
@@ -1106,6 +1151,19 @@ class DictionaryManager {
       );
 
       final actualIfoPath = await _maybeDecompress(ifoPath);
+      final checksum = await _calculateChecksum(actualIfoPath);
+      
+      final existing = await _dbHelper.getDictionaryByChecksum(checksum);
+      if (existing != null) {
+        yield ImportProgress(
+          message: 'Error: Dictionary already imported (${existing['name']})',
+          value: 0.0,
+          error: 'Duplicate dictionary',
+          isCompleted: true,
+        );
+        return;
+      }
+
       final basePath = p.withoutExtension(actualIfoPath);
 
       // Robust file finding: checking local directory first
@@ -1163,6 +1221,7 @@ class DictionaryManager {
         finalDictPath,
         indexDefinitions: indexDefinitions,
         typeSequence: ifoParser.sameTypeSequence,
+        checksum: checksum,
       );
 
       yield ImportProgress(message: 'Indexing words...', value: 0.85, dictionaryName: bookName);
@@ -1492,6 +1551,19 @@ class DictionaryManager {
       final reader = MdictReader(mdxPath);
       await reader.open();
 
+      final checksum = await _calculateChecksum(mdxPath);
+      final existing = await _dbHelper.getDictionaryByChecksum(checksum);
+      if (existing != null) {
+        await reader.close();
+        yield ImportProgress(
+          message: 'Error: MDict already imported (${existing['name']})',
+          value: 0.0,
+          error: 'Duplicate dictionary',
+          isCompleted: true,
+        );
+        return;
+      }
+
       // Use the filename (without extension) as a fallback book name
       final bookName = p.basenameWithoutExtension(mdxPath);
 
@@ -1524,6 +1596,7 @@ class DictionaryManager {
         indexDefinitions: indexDefinitions,
         format: 'mdict',
         typeSequence: null,
+        checksum: checksum,
       );
 
       yield ImportProgress(message: 'Indexing headwords...', value: 0.5);
@@ -1599,6 +1672,17 @@ class DictionaryManager {
     yield ImportProgress(message: 'Setting up DICTD import...', value: 0.05);
 
     try {
+      final checksum = await _calculateChecksum(indexPath);
+      final existing = await _dbHelper.getDictionaryByChecksum(checksum);
+      if (existing != null) {
+        yield ImportProgress(
+          message: 'Error: DICTD already imported (${existing['name']})',
+          value: 0.0,
+          error: 'Duplicate dictionary',
+          isCompleted: true,
+        );
+        return;
+      }
 
       final bookName = p.basenameWithoutExtension(indexPath)
           .replaceAll(RegExp(r'\.dict$'), '');
@@ -1625,6 +1709,7 @@ class DictionaryManager {
         indexDefinitions: indexDefinitions,
         format: 'dictd',
         typeSequence: null,
+        checksum: checksum,
       );
 
       yield ImportProgress(message: 'Indexing DICTD words...', value: 0.45);
@@ -1709,6 +1794,19 @@ class DictionaryManager {
       final reader = SlobReader(slobPath);
       await reader.open();
 
+      final checksum = await _calculateChecksum(slobPath);
+      final existing = await _dbHelper.getDictionaryByChecksum(checksum);
+      if (existing != null) {
+        await reader.close();
+        yield ImportProgress(
+          message: 'Error: Slob already imported (${existing['name']})',
+          value: 0.0,
+          error: 'Duplicate dictionary',
+          isCompleted: true,
+        );
+        return;
+      }
+
       final bookName = reader.bookName.isNotEmpty 
           ? reader.bookName 
           : p.basenameWithoutExtension(slobPath);
@@ -1735,6 +1833,7 @@ class DictionaryManager {
         indexDefinitions: indexDefinitions,
         format: 'slob',
         typeSequence: null,
+        checksum: checksum,
       );
 
       yield ImportProgress(message: 'Indexing Slob blobs...', value: 0.45);

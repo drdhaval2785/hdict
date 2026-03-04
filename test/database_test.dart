@@ -30,7 +30,9 @@ void main() {
           end_rowid INTEGER,
           format TEXT DEFAULT 'stardict',
           type_sequence TEXT,
-          css TEXT
+          css TEXT,
+          definition_word_count INTEGER DEFAULT 0,
+          checksum TEXT
         )
       ''');
 
@@ -49,7 +51,8 @@ void main() {
         CREATE TABLE search_history (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           word TEXT NOT NULL,
-          timestamp INTEGER NOT NULL
+          timestamp INTEGER NOT NULL,
+          search_type TEXT DEFAULT 'Headword Search'
         )
       ''');
 
