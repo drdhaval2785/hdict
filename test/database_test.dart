@@ -37,12 +37,23 @@ void main() {
       ''');
 
       await db.execute('''
+        CREATE TABLE word_metadata(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          word TEXT,
+          dict_id INTEGER,
+          offset INTEGER,
+          length INTEGER
+        )
+      ''');
+      await db.execute('CREATE INDEX idx_metadata_dict_id ON word_metadata(dict_id)');
+
+      await db.execute('''
         CREATE VIRTUAL TABLE word_index USING fts5(
           word,
           content,
-          dict_id UNINDEXED,
-          offset UNINDEXED,
-          length UNINDEXED,
+          content = '',
+          detail = 'column',
+          columnsize = 0,
           tokenize = 'unicode61'
         )
       ''');

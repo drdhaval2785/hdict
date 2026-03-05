@@ -93,7 +93,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 16, // Version 16: added 'checksum' to dictionaries
+      version: 18, // Version 18: Hybrid FTS5 (Fixed scan/delete issue)
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onOpen: _onOpen,
@@ -148,13 +148,26 @@ class DatabaseHelper {
 
     if (!existsNow) {
       if (fts5Available) {
+        // 1. Physical metadata table (supports scanning/SQL joins/deletes)
+        await db.execute('''
+          CREATE TABLE word_metadata(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            word TEXT,
+            dict_id INTEGER,
+            offset INTEGER,
+            length INTEGER
+          )
+        ''');
+        await db.execute('CREATE INDEX idx_metadata_dict_id ON word_metadata(dict_id)');
+
+        // 2. Optimized FTS5 Index (Search only, no storage)
         await db.execute('''
           CREATE VIRTUAL TABLE word_index USING fts5(
             word,
             content,
-            dict_id UNINDEXED,
-            offset UNINDEXED,
-            length UNINDEXED,
+            content = '',
+            detail = 'column',
+            columnsize = 0,
             tokenize = 'unicode61'
           )
         ''');
@@ -393,6 +406,21 @@ class DatabaseHelper {
         hDebugPrint('Migration error (version 16): $e');
       }
     }
+    if (oldVersion < 18) {
+      try {
+        hDebugPrint('Migration to version 18: Hybrid FTS5 indexing');
+        // Drop everything related to old word index
+        await db.execute('DROP TABLE IF EXISTS word_index');
+        await db.execute('DROP TABLE IF EXISTS word_metadata');
+        // Reset dictionaries word counts and index setting to force re-indexing
+        await db.execute(
+          'UPDATE dictionaries SET word_count = 0, definition_word_count = 0, index_definitions = 0',
+        );
+        // Tables will be recreated in _onOpen -> _ensureWordIndexTable
+      } catch (e) {
+        hDebugPrint('Migration error (version 18): $e');
+      }
+    }
   }
 
   // --- Path Resolution Helper (iOS/macOS Absolute Path Volatility) ---
@@ -524,8 +552,11 @@ class DatabaseHelper {
 
   Future<int> getWordCountForDict(int dictId) async {
     final db = await database;
+    final bool useFts5 = _fts5Available ?? true;
+    final String targetTable = useFts5 ? 'word_metadata' : 'word_index';
+
     final result = await db.rawQuery(
-      'SELECT COUNT(*) as cnt FROM word_index WHERE dict_id = ?',
+      'SELECT COUNT(*) as cnt FROM $targetTable WHERE dict_id = ?',
       [dictId],
     );
     return Sqflite.firstIntValue(result) ?? 0;
@@ -563,9 +594,9 @@ class DatabaseHelper {
       for (int i = 0; i < limit * 2 && results.length < limit; i++) {
         int randomRowId = startRowId + random.nextInt(range);
         final res = await db.query(
-          'word_index',
+          'word_metadata',
           columns: ['word', 'offset', 'length', 'dict_id'],
-          where: 'rowid = ? AND dict_id = ?',
+          where: 'id = ? AND dict_id = ?',
           whereArgs: [randomRowId, dictId],
         );
         if (res.isNotEmpty) results.add(res.first);
@@ -576,7 +607,7 @@ class DatabaseHelper {
     // 3. Fallback: Slow O(N) scan strategy (if rowid metadata missing)
     try {
       final rangeRes = await db.rawQuery(
-        'SELECT MIN(rowid) as min_id, MAX(rowid) as max_id FROM word_index WHERE dict_id = ?',
+        'SELECT MIN(id) as min_id, MAX(id) as max_id FROM word_metadata WHERE dict_id = ?',
         [dictId],
       );
       if (rangeRes.isNotEmpty && rangeRes.first['min_id'] != null) {
@@ -593,7 +624,7 @@ class DatabaseHelper {
     for (int i = 0; i < limit; i++) {
       int randomOffset = random.nextInt(total);
       final res = await db.query(
-        'word_index',
+        'word_metadata',
         columns: ['word', 'offset', 'length', 'dict_id'],
         where: 'dict_id = ?',
         whereArgs: [dictId],
@@ -631,14 +662,40 @@ class DatabaseHelper {
 
   Future<void> deleteWordsByDictionaryId(int dictId) async {
     final db = await database;
-    await db.delete('word_index', where: 'dict_id = ?', whereArgs: [dictId]);
+    await db.transaction((txn) async {
+      final bool useFts5 = _fts5Available ?? true;
+      if (useFts5) {
+        // 1. Delete from FTS5 index first using rowids from metadata
+        await txn.execute(
+          'DELETE FROM word_index WHERE rowid IN (SELECT id FROM word_metadata WHERE dict_id = ?)',
+          [dictId],
+        );
+        // 2. Delete from physical metadata
+        await txn.delete('word_metadata', where: 'dict_id = ?', whereArgs: [dictId]);
+      } else {
+        await txn.delete('word_index', where: 'dict_id = ?', whereArgs: [dictId]);
+      }
+    });
   }
 
   Future<void> deleteDictionary(int id) async {
     final db = await database;
     await db.transaction((txn) async {
       await txn.delete('dictionaries', where: 'id = ?', whereArgs: [id]);
-      await txn.delete('word_index', where: 'dict_id = ?', whereArgs: [id]);
+      
+      final bool useFts5 = _fts5Available ?? true;
+      if (useFts5) {
+        // Delete from FTS5 index first
+        await txn.execute(
+          'DELETE FROM word_index WHERE rowid IN (SELECT id FROM word_metadata WHERE dict_id = ?)',
+          [id],
+        );
+        // Delete from metadata
+        await txn.delete('word_metadata', where: 'dict_id = ?', whereArgs: [id]);
+      } else {
+        await txn.delete('word_index', where: 'dict_id = ?', whereArgs: [id]);
+      }
+      
       await txn.delete('files', where: 'dict_id = ?', whereArgs: [id]);
     });
     
@@ -772,17 +829,38 @@ class DatabaseHelper {
   ) async {
     final db = await database;
     await db.transaction((txn) async {
-      final batch = txn.batch();
-      for (var word in words) {
-        batch.insert('word_index', {
-          'word': word['word'],
-          'content': word['content'],
-          'dict_id': dictId,
-          'offset': word['offset'],
-          'length': word['length'],
-        });
+      final bool useFts5 = _fts5Available ?? true;
+      
+      if (useFts5) {
+        for (var word in words) {
+          // 1. Insert into metadata first to get the rowid
+          final int id = await txn.insert('word_metadata', {
+            'word': word['word'],
+            'dict_id': dictId,
+            'offset': word['offset'],
+            'length': word['length'],
+          });
+
+          // 2. Insert into FTS5 index using the metadata ID as rowid
+          await txn.execute(
+            'INSERT INTO word_index(rowid, word, content) VALUES (?, ?, ?)',
+            [id, word['word'], word['content'] ?? ''],
+          );
+        }
+      } else {
+        final batch = txn.batch();
+        for (var word in words) {
+          batch.insert('word_index', {
+            'word': word['word'],
+            'content': word['content'],
+            'dict_id': dictId,
+            'offset': word['offset'],
+            'length': word['length'],
+          });
+        }
+        await batch.commit(noResult: true);
       }
-      await batch.commit(noResult: true);
+      hDebugPrint('Batch inserted ${words.length} words for dict $dictId');
     });
   }
 
@@ -791,112 +869,102 @@ class DatabaseHelper {
     SearchMode headwordMode = SearchMode.prefix,
     String? definitionQuery,
     SearchMode definitionMode = SearchMode.substring,
+    int? dictId,
     int limit = 50,
   }) async {
     try {
       final db = await database;
       final List<String> whereClauses = [];
       final List<Object?> whereArgs = [];
+      bool needsFts5Join = false; // only JOIN word_index when MATCH is used
 
       whereClauses.add(
-          'dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1)');
+          'm.dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1)');
 
       // 1. Process Headword Query
       if (headwordQuery != null && headwordQuery.trim().isNotEmpty) {
-        final String hQuery = headwordQuery.trim();
-        final String safeHQuery = hQuery.replaceAll('"', '""');
-        final bool useFts5 = _fts5Available ?? true;
-
-        if (hQuery.contains('*') || hQuery.contains('?')) {
-          whereClauses.add('word GLOB ?');
-          whereArgs.add(hQuery);
-        } else {
-          switch (headwordMode) {
-            case SearchMode.prefix:
-              if (useFts5) {
-                whereClauses.add('word MATCH ?');
-                whereArgs.add('$safeHQuery*');
-              } else {
-                whereClauses.add('word LIKE ?');
-                whereArgs.add('$hQuery%');
-              }
-              break;
-            case SearchMode.suffix:
-              whereClauses.add('word LIKE ?');
-              whereArgs.add('%$hQuery');
-              break;
-            case SearchMode.substring:
-              whereClauses.add('word LIKE ?');
-              whereArgs.add('%$hQuery%');
-              break;
-            case SearchMode.exact:
-              if (useFts5) {
-                whereClauses.add('word MATCH ?');
-                whereArgs.add('"$safeHQuery"');
-              } else {
-                whereClauses.add('word = ?');
-                whereArgs.add(hQuery);
-              }
-              break;
-          }
+        final String hq = headwordQuery.trim();
+        final String safeHq = hq.replaceAll('"', '""');
+        switch (headwordMode) {
+          case SearchMode.exact:
+            if (_fts5Available ?? true) {
+              // FTS5 exact match: quote the term to match the full word
+              whereClauses.add('i.word MATCH ?');
+              whereArgs.add('"$safeHq"');
+              needsFts5Join = true;
+            } else {
+              whereClauses.add('m.word = ?');
+              whereArgs.add(hq);
+            }
+            break;
+          case SearchMode.prefix:
+            if (_fts5Available ?? true) {
+              whereClauses.add('i.word MATCH ?');
+              whereArgs.add('$safeHq*');
+              needsFts5Join = true;
+            } else {
+              whereClauses.add('LOWER(m.word) LIKE LOWER(?)');
+              whereArgs.add('$hq%');
+            }
+            break;
+          case SearchMode.suffix:
+            // FTS5 does not support suffix wildcards - always use LIKE on metadata
+            whereClauses.add('LOWER(m.word) LIKE LOWER(?)');
+            whereArgs.add('%$hq');
+            break;
+          case SearchMode.substring:
+            // FTS5 does not support leading wildcards - always use LIKE on metadata
+            whereClauses.add('LOWER(m.word) LIKE LOWER(?)');
+            whereArgs.add('%$hq%');
+            break;
         }
       }
 
-      // 2. Process Definition Query
-      if (definitionQuery != null && definitionQuery.trim().isNotEmpty) {
-        final String dQuery = definitionQuery.trim();
-        final String safeDQuery = dQuery.replaceAll('"', '""');
-        final bool useFts5 = _fts5Available ?? true;
+      if (dictId != null) {
+        whereClauses.add('m.dict_id = ?');
+        whereArgs.add(dictId);
+      }
 
-        if ((dQuery.contains('*') || dQuery.contains('?')) && definitionMode == SearchMode.suffix) {
-          whereClauses.add('content GLOB ?');
-          whereArgs.add(dQuery);
+      if (definitionQuery != null) {
+        // FTS5 contentless tables ONLY support MATCH - no LIKE on content.
+        final String dq = definitionQuery.trim();
+        final String safeDq = dq.replaceAll('"', '""');
+        whereClauses.add('i.content MATCH ?');
+        if (definitionMode == SearchMode.substring ||
+            definitionMode == SearchMode.prefix) {
+          whereArgs.add('$safeDq*');
         } else {
-          switch (definitionMode) {
-            case SearchMode.prefix:
-              if (useFts5) {
-                whereClauses.add('content MATCH ?');
-                whereArgs.add('"$safeDQuery" *');
-              } else {
-                whereClauses.add('content LIKE ?');
-                whereArgs.add('$dQuery%');
-              }
-              break;
-            case SearchMode.suffix:
-              whereClauses.add('content LIKE ?');
-              whereArgs.add('%$dQuery');
-              break;
-            case SearchMode.substring:
-              whereClauses.add('content LIKE ?');
-              whereArgs.add('%$dQuery%');
-              break;
-            case SearchMode.exact:
-              if (useFts5) {
-                whereClauses.add('content MATCH ?');
-                whereArgs.add('"$safeDQuery"');
-              } else {
-                // Fallback: treat exact as substring match since LIKE on full
-                // content field won't do token equality the way FTS5 MATCH does.
-                whereClauses.add('content LIKE ?');
-                whereArgs.add('%$dQuery%');
-              }
-              break;
-          }
+          whereArgs.add('"$safeDq"');
         }
+        needsFts5Join = true;
       }
 
       // If no search terms, return empty
       if (whereArgs.isEmpty) return [];
 
+      // Only JOIN word_index when a MATCH clause is actually used
+      final bool useFts5 = _fts5Available ?? true;
+      final String fromClause;
+      if (!useFts5) {
+        // FTS5 unavailable: word_index is a plain table with all columns
+        fromClause = 'FROM word_index m JOIN dictionaries d ON m.dict_id = d.id';
+      } else if (needsFts5Join) {
+        fromClause =
+            'FROM word_metadata m JOIN word_index i ON m.id = i.rowid JOIN dictionaries d ON m.dict_id = d.id';
+      } else {
+        // Suffix/substring headword search: just query word_metadata, no FTS5
+        fromClause =
+            'FROM word_metadata m JOIN dictionaries d ON m.dict_id = d.id';
+      }
+
       final String sql = '''
-        SELECT wi.word, wi.dict_id, wi.offset, wi.length 
-        FROM word_index wi
-        JOIN dictionaries d ON wi.dict_id = d.id
-        WHERE ${whereClauses.map((c) => c.replaceAll('word', 'wi.word').replaceAll('content', 'wi.content').replaceAll('dict_id', 'wi.dict_id')).join(' AND ')}
+        SELECT m.word, m.dict_id, m.offset, m.length 
+        $fromClause
+        WHERE ${whereClauses.join(' AND ')}
         ORDER BY 
           d.display_order ASC,
-          ${headwordQuery != null ? "(LOWER(wi.word) = LOWER(?)) DESC," : ""}
-          wi.word ASC
+          ${headwordQuery != null ? "(LOWER(m.word) = LOWER(?)) DESC," : ""}
+          m.word ASC
         LIMIT ?
       ''';
 
@@ -923,11 +991,14 @@ class DatabaseHelper {
       final db = await database;
       final String safePrefix = prefix.replaceAll('"', '""');
 
-      if (fuzzy || !(_fts5Available ?? true)) {
+      final bool useFts5 = _fts5Available ?? true;
+      final String fallbackTable = useFts5 ? 'word_metadata' : 'word_index';
+
+      if (fuzzy || !useFts5) {
         // Use LIKE for fuzzy mode or when FTS5 is unavailable.
         final String sql = '''
           SELECT DISTINCT word 
-          FROM word_index 
+          FROM $fallbackTable 
           WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
           AND word LIKE ?
           ORDER BY word ASC
@@ -939,11 +1010,12 @@ class DatabaseHelper {
       } else {
         final String prefixMatchQuery = '$safePrefix*';
         final String sql = '''
-          SELECT DISTINCT word 
-          FROM word_index 
-          WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
-          AND word MATCH ?
-          ORDER BY word ASC
+          SELECT DISTINCT m.word 
+          FROM word_metadata m
+          JOIN word_index i ON m.id = i.rowid
+          WHERE m.dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
+          AND i.word MATCH ?
+          ORDER BY m.word ASC
           LIMIT ?
         ''';
         final results = await db.rawQuery(sql, [prefixMatchQuery, limit]);
