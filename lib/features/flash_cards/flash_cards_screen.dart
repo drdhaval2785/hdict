@@ -8,6 +8,7 @@ import 'package:flutter_html/flutter_html.dart';
 import 'package:provider/provider.dart';
 import 'dart:math';
 import 'package:hdict/features/home/widgets/app_drawer.dart';
+import 'package:hdict/features/flash_cards/result_screen.dart';
 
 class FlashCardsScreen extends StatefulWidget {
   const FlashCardsScreen({super.key});
@@ -16,7 +17,8 @@ class FlashCardsScreen extends StatefulWidget {
   State<FlashCardsScreen> createState() => _FlashCardsScreenState();
 }
 
-class _FlashCardsScreenState extends State<FlashCardsScreen> {
+class _FlashCardsScreenState extends State<FlashCardsScreen>
+    with SingleTickerProviderStateMixin {
   final DatabaseHelper _dbHelper = DatabaseHelper();
   List<Map<String, dynamic>> _allDictionaries = [];
   final Set<int> _selectedDictIds = {};
@@ -28,10 +30,28 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
   bool _showMeaning = false;
   List<bool> _results = [];
 
+  // Animation controller for slide transition between cards
+  late AnimationController _slideController;
+  late Animation<Offset> _slideAnimation;
+
   @override
   void initState() {
     super.initState();
+    _slideController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 320),
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(1.0, 0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic));
     _loadDictionaries();
+  }
+
+  @override
+  void dispose() {
+    _slideController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadDictionaries() async {
@@ -138,6 +158,17 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
       _isLoading = false;
       _results = List.filled(filteredWords.length, false);
     });
+
+    // Animate first card sliding in
+    _slideController.forward(from: 0);
+  }
+
+  /// Animate to next card and call [onComplete] after animation.
+  void _animateToNextCard(VoidCallback onComplete) {
+    _slideController.reverse(from: 1.0).then((_) {
+      onComplete();
+      _slideController.forward(from: 0);
+    });
   }
 
   void _answer(bool correct) {
@@ -145,8 +176,10 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
     if (correct) _score++;
 
     if (_currentIndex < _quizWords.length - 1) {
-      setState(() {
-        _currentIndex++;
+      _animateToNextCard(() {
+        setState(() {
+          _currentIndex++;
+        });
       });
     } else {
       _finishQuiz();
@@ -154,52 +187,104 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
   }
 
   Future<void> _finishQuiz() async {
-    // We will save to DB after review mode instead of here,
-    // to allow user to change their guess based on the results.
-    if (mounted) {
-      _showResultsDialog();
+    if (!mounted) return;
+    final result = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ResultScreen(score: _score, total: _quizWords.length),
+      ),
+    );
+    if (!mounted) return;
+    if (result == 'review') {
+      setState(() {
+        _showMeaning = true;
+        _currentIndex = 0;
+      });
+    } else {
+      // 'done' or dismissed
+      setState(() {
+        _isQuizStarted = false;
+      });
     }
   }
 
-  void _showResultsDialog() {
-    showDialog(
+  /// Show the meaning of the current quiz word as a bottom sheet (peek).
+  void _peekMeaning() {
+    final currentWord = _quizWords[_currentIndex];
+    final settings = context.read<SettingsProvider>();
+
+    showModalBottomSheet(
       context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Quiz Finished!'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Your score: $_score / ${_quizWords.length}',
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            const Text('Now verify your guesses by looking at the meanings.'),
-          ],
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.3,
+        maxChildSize: 0.85,
+        expand: false,
+        builder: (_, controller) => Container(
+          decoration: BoxDecoration(
+            color: settings.backgroundColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              // Handle + header
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx).colorScheme.primaryContainer,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.menu_book_outlined, size: 20, color: Colors.orange),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        currentWord['word'],
+                        style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(ctx).colorScheme.onPrimaryContainer,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.keyboard_arrow_down),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+              ),
+              // Meaning content
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: controller,
+                  padding: const EdgeInsets.all(16),
+                  child: SelectionArea(
+                    child: Html(
+                      data: currentWord['meaning'],
+                      style: {
+                        "body": Style(
+                          fontSize: FontSize(settings.fontSize),
+                          lineHeight: LineHeight.em(1.5),
+                          margin: Margins.zero,
+                          padding: HtmlPaddings.zero,
+                          color: settings.textColor,
+                          fontFamily: settings.fontFamily,
+                        ),
+                        "a": Style(
+                          color: settings.textColor,
+                          textDecoration: TextDecoration.none,
+                        ),
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              setState(() {
-                _isQuizStarted = true;
-                _showMeaning = true;
-                _currentIndex = 0; // Reset index to let user review
-              });
-            },
-            child: const Text('Review Meanings'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              setState(() {
-                _isQuizStarted = false;
-              });
-            },
-            child: const Text('Done'),
-          ),
-        ],
       ),
     );
   }
@@ -278,39 +363,47 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
     return Scaffold(
       drawer: const AppDrawer(),
       appBar: AppBar(title: Text('Word ${_currentIndex + 1} of ${_quizWords.length}')),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              currentWord['word'],
-              style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'from ${currentWord['dict_name']}',
-              style: const TextStyle(color: Colors.grey),
-            ),
-            const SizedBox(height: 64),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildActionButton(
-                  Icons.close,
-                  Colors.red,
-                  () => _answer(false),
+      body: SlideTransition(
+        position: _slideAnimation,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Word
+              Text(
+                currentWord['word'],
+                style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 64),
+              // Action buttons
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildActionButton(
+                    Icons.close,
+                    Colors.red,
+                    () => _answer(false),
+                  ),
+                  const SizedBox(width: 48),
+                  _buildActionButton(
+                    Icons.check,
+                    Colors.green,
+                    () => _answer(true),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 40),
+              // Peek meaning button
+              TextButton.icon(
+                onPressed: _peekMeaning,
+                icon: const Icon(Icons.visibility_outlined),
+                label: const Text('Check Meaning'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.primary,
                 ),
-                const SizedBox(width: 48),
-                _buildActionButton(
-                  Icons.check,
-                  Colors.green,
-                  () => _answer(true),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-            const Text('Did you guess it right?'),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -695,29 +788,27 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
     );
   }
 
+  /// Action button with proper Material ripple effect.
   Widget _buildActionButton(
     IconData icon,
     Color color,
     VoidCallback onPressed,
   ) {
-    return InkWell(
-      onTap: onPressed,
-      borderRadius: BorderRadius.circular(40),
-      child: Container(
-        width: 80,
-        height: 80,
-        decoration: BoxDecoration(
-          color: color,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: color.withValues(alpha: 0.3),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
+    return Material(
+      color: color,
+      shape: const CircleBorder(),
+      elevation: 4,
+      shadowColor: color.withValues(alpha: 0.4),
+      child: InkWell(
+        onTap: onPressed,
+        customBorder: const CircleBorder(),
+        splashColor: Colors.white.withValues(alpha: 0.35),
+        highlightColor: Colors.white.withValues(alpha: 0.15),
+        child: SizedBox(
+          width: 80,
+          height: 80,
+          child: Icon(icon, color: Colors.white, size: 40),
         ),
-        child: Icon(icon, color: Colors.white, size: 40),
       ),
     );
   }
