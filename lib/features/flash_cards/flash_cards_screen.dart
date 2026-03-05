@@ -1,4 +1,3 @@
-import 'package:hdict/core/utils/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:hdict/core/database/database_helper.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
@@ -58,13 +57,15 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
 
   Future<void> _loadDictionaries() async {
     final dicts = await _dbHelper.getDictionaries();
-    setState(() {
-      _allDictionaries = dicts.where((d) => d['is_enabled'] == 1).toList();
-      for (var d in _allDictionaries) {
-        _selectedDictIds.add(d['id']);
-      }
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _allDictionaries = dicts.where((d) => d['is_enabled'] == 1).toList();
+        for (var d in _allDictionaries) {
+          _selectedDictIds.add(d['id']);
+        }
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _startQuiz() async {
@@ -121,7 +122,6 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
       }
     }
 
-    // Fetch full meanings in parallel for faster loading
     final List<Map<String, dynamic>> selectedWords = await Future.wait(
       selectedWordMetas.map((meta) async {
         final dict = await _dbHelper.getDictionaryById(meta['dict_id']);
@@ -145,33 +145,33 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
       }),
     );
 
-    // Filter out any potential empty results
     final filteredWords = selectedWords
         .where((w) => w.isNotEmpty)
         .toList()
         .cast<Map<String, dynamic>>();
 
-    setState(() {
-      _quizWords = filteredWords;
-      _isQuizStarted = true;
-      _currentIndex = 0;
-      _score = 0;
-      _showMeaning = false;
-      _isLoading = false;
-      _isPeeking = false;
-      _peekCount = 0;
-      _results = List.filled(filteredWords.length, false);
-    });
-
-    // Animate first card sliding in
-    _slideController.forward(from: 0);
+    if (mounted) {
+      setState(() {
+        _quizWords = filteredWords;
+        _isQuizStarted = true;
+        _currentIndex = 0;
+        _score = 0;
+        _showMeaning = false;
+        _isLoading = false;
+        _isPeeking = false;
+        _peekCount = 0;
+        _results = List.filled(filteredWords.length, false);
+      });
+      _slideController.forward(from: 0);
+    }
   }
 
-  /// Animate to next card and call [onComplete] after animation.
   void _animateToNextCard(VoidCallback onComplete) {
     _slideController.reverse(from: 1.0).then((_) {
-      onComplete();
-      _slideController.forward(from: 0);
+      if (mounted) {
+        onComplete();
+        _slideController.forward(from: 0);
+      }
     });
   }
 
@@ -210,14 +210,12 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
         _currentIndex = 0;
       });
     } else {
-      // 'done' or dismissed
       setState(() {
         _isQuizStarted = false;
       });
     }
   }
 
-  /// Toggle the meaning of the current quiz word inline.
   void _peekMeaning() {
     setState(() {
       _isPeeking = !_isPeeking;
@@ -280,7 +278,6 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
               },
             ),
           ),
-
           Padding(
             padding: const EdgeInsets.all(24.0),
             child: ElevatedButton(
@@ -303,126 +300,118 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
     return Scaffold(
       drawer: const AppDrawer(),
       appBar: AppBar(title: Text('Word ${_currentIndex + 1} of ${_quizWords.length}')),
-      body: SlideTransition(
-        position: _slideAnimation,
-        child: Column(
-          children: [
-            Expanded(
-              flex: _isPeeking ? 2 : 5,
-              child: Center(
-                child: Column(
+      body: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 32),
+            child: Column(
+              children: [
+                Text(
+                  currentWord['word'],
+                  style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 32),
+                Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Word
-                    Text(
-                      currentWord['word'],
-                      style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold),
+                    _buildActionButton(
+                      Icons.close,
+                      Colors.red,
+                      () => _answer(false),
                     ),
-                    const SizedBox(height: 32),
-                    // Action buttons
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _buildActionButton(
-                          Icons.close,
-                          Colors.red,
-                          () => _answer(false),
-                        ),
-                        const SizedBox(width: 48),
-                        _buildActionButton(
-                          Icons.check,
-                          Colors.green,
-                          () => _answer(true),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    // Peek meaning button
-                    TextButton.icon(
-                      onPressed: _peekMeaning,
-                      icon: Icon(_isPeeking ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                      label: Text(_isPeeking ? 'Hide Meaning' : 'Check Meaning'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: Theme.of(context).colorScheme.primary,
-                      ),
+                    const SizedBox(width: 48),
+                    _buildActionButton(
+                      Icons.check,
+                      Colors.green,
+                      () => _answer(true),
                     ),
                   ],
                 ),
-              ),
-            ),
-            if (_isPeeking)
-              Expanded(
-                flex: 3,
-                child: Container(
-                  margin: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: settings.backgroundColor,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Theme.of(context).dividerColor),
-                  ),
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.5),
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.menu_book_outlined, size: 16),
-                            const SizedBox(width: 8),
-                            const Text('Meaning Snippet', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: SingleChildScrollView(
-                          padding: const EdgeInsets.all(12),
-                          child: SelectionArea(
-                            child: Html(
-                              data: currentWord['meaning'],
-                              style: {
-                                "body": Style(
-                                  fontSize: FontSize(settings.fontSize - 2),
-                                  lineHeight: LineHeight.em(1.4),
-                                  margin: Margins.zero,
-                                  padding: HtmlPaddings.zero,
-                                  color: settings.textColor,
-                                  fontFamily: settings.fontFamily,
-                                ),
-                                "a": Style(
-                                  color: settings.textColor,
-                                  textDecoration: TextDecoration.none,
-                                ),
-                              },
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                const SizedBox(height: 16),
+                TextButton.icon(
+                  onPressed: _peekMeaning,
+                  icon: Icon(_isPeeking ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                  label: Text(_isPeeking ? 'Hide Meaning' : 'Check Meaning'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.primary,
                   ),
                 ),
-              ),
-          ],
-        ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: SlideTransition(
+              position: _slideAnimation,
+              child: _isPeeking
+                  ? Container(
+                      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      decoration: BoxDecoration(
+                        color: settings.backgroundColor,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Theme.of(context).dividerColor),
+                      ),
+                      child: Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.5),
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.menu_book_outlined, size: 16),
+                                SizedBox(width: 8),
+                                Text('Meaning Snippet', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: SingleChildScrollView(
+                              padding: const EdgeInsets.all(12),
+                              child: SelectionArea(
+                                child: Html(
+                                  data: currentWord['meaning'],
+                                  style: {
+                                    "body": Style(
+                                      fontSize: FontSize(settings.fontSize - 2),
+                                      lineHeight: LineHeight.em(1.4),
+                                      margin: Margins.zero,
+                                      padding: HtmlPaddings.zero,
+                                      color: settings.textColor,
+                                      fontFamily: settings.fontFamily,
+                                    ),
+                                    "a": Style(
+                                      color: settings.textColor,
+                                      textDecoration: TextDecoration.none,
+                                    ),
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildReviewUI() {
-    final currentWord = _quizWords[_currentIndex];
-    final wasCorrect = _results[_currentIndex];
     final settings = context.watch<SettingsProvider>();
 
     return Scaffold(
       drawer: const AppDrawer(),
       appBar: AppBar(
-        title: Text('Review: ${currentWord['word']}'),
+        title: const Text('Review Session'),
         actions: [
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Center(
               child: Text(
                 'Score: $_score/${_quizWords.length}',
                 style: const TextStyle(fontWeight: FontWeight.bold),
@@ -433,130 +422,119 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
       ),
       body: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: wasCorrect
-                ? Colors.green.withValues(alpha: 0.1)
-                : Colors.red.withValues(alpha: 0.1),
-            child: Row(
-              children: [
-                Icon(
-                  wasCorrect ? Icons.check_circle : Icons.cancel,
-                  color: wasCorrect ? Colors.green : Colors.red,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    wasCorrect ? 'Correct Guess' : 'Incorrect Guess',
+          Expanded(
+            child: ListView.builder(
+              itemCount: _quizWords.length,
+              itemBuilder: (context, index) {
+                final wordData = _quizWords[index];
+                final wasCorrect = _results[index];
+
+                return ExpansionTile(
+                  title: Text(
+                    wordData['word'],
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: wasCorrect ? Colors.green : Colors.red,
                     ),
                   ),
-                ),
-                TextButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _results[_currentIndex] = !wasCorrect;
-                      if (!wasCorrect) {
-                        _score++;
-                      } else {
-                        _score--;
-                      }
-                    });
-                  },
-                  icon: Icon(
-                    wasCorrect ? Icons.undo : Icons.check_circle_outline,
-                    size: 18,
-                  ),
-                  label: Text(
-                    wasCorrect ? 'Mark Incorrect' : 'Mark Correct',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                Navigator.of(context).popUntil((route) => route.isFirst);
-              },
-              behavior: HitTestBehavior.translucent,
-              child: Container(
-                color: settings.backgroundColor,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: SelectionArea(
-                    child: Html(
-                      data: settings.isTapOnMeaningEnabled
-                          ? HtmlLookupWrapper.wrapWords(currentWord['meaning'])
-                          : currentWord['meaning'],
-                      style: {
-                        "body": Style(
-                          fontSize: FontSize(settings.fontSize),
-                          lineHeight: LineHeight.em(1.5),
-                          margin: Margins.zero,
-                          padding: HtmlPaddings.zero,
-                          color: settings.textColor,
-                          fontFamily: settings.fontFamily,
-                        ),
-                        "a": Style(
-                          color: settings.textColor,
-                          textDecoration: TextDecoration.none,
-                        ),
-                      },
-                      onLinkTap: (url, attributes, element) {
-                        hDebugPrint("FlashCard Link tapped: $url");
-                        if (url != null && url.startsWith('look_up:')) {
-                          final encodedWord = url.substring(8);
-                          try {
-                            final word = encodedWord.contains('%')
-                                ? Uri.decodeComponent(encodedWord)
-                                : encodedWord;
-                            _showWordPopup(word);
-                          } catch (e) {
-                            _showWordPopup(encodedWord);
-                          }
-                        }
-                      },
+                  subtitle: Text(
+                    wasCorrect ? 'Correct Guess' : 'Incorrect Guess',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: wasCorrect ? Colors.green.withValues(alpha: 0.8) : Colors.red.withValues(alpha: 0.8),
                     ),
                   ),
-                ),
-              ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          wasCorrect ? Icons.check_circle : Icons.check_circle_outline,
+                          color: wasCorrect ? Colors.green : Colors.grey,
+                        ),
+                        onPressed: () {
+                          if (!wasCorrect) {
+                            setState(() {
+                              _results[index] = true;
+                              _score++;
+                            });
+                          }
+                        },
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          !wasCorrect ? Icons.cancel : Icons.cancel_outlined,
+                          color: !wasCorrect ? Colors.red : Colors.grey,
+                        ),
+                        onPressed: () {
+                          if (wasCorrect) {
+                            setState(() {
+                              _results[index] = false;
+                              _score--;
+                            });
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      child: SelectionArea(
+                        child: Html(
+                          data: settings.isTapOnMeaningEnabled
+                              ? HtmlLookupWrapper.wrapWords(wordData['meaning'])
+                              : wordData['meaning'],
+                          style: {
+                            "body": Style(
+                              fontSize: FontSize(settings.fontSize),
+                              lineHeight: LineHeight.em(1.5),
+                              margin: Margins.zero,
+                              padding: HtmlPaddings.zero,
+                              color: settings.textColor,
+                              fontFamily: settings.fontFamily,
+                            ),
+                            "a": Style(
+                              color: settings.textColor,
+                              textDecoration: TextDecoration.none,
+                            ),
+                          },
+                          onLinkTap: (url, attributes, element) {
+                            if (url != null && url.startsWith('look_up:')) {
+                              final encodedWord = url.substring(8);
+                              try {
+                                final word = encodedWord.contains('%')
+                                    ? Uri.decodeComponent(encodedWord)
+                                    : encodedWord;
+                                _showWordPopup(word);
+                              } catch (e) {
+                                _showWordPopup(encodedWord);
+                              }
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
           Padding(
             padding: const EdgeInsets.all(16.0),
-            child: Row(
-              children: [
-                if (_currentIndex > 0)
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => setState(() => _currentIndex--),
-                      child: const Text('Previous'),
-                    ),
-                  ),
-                if (_currentIndex > 0) const SizedBox(width: 16),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      if (_currentIndex < _quizWords.length - 1) {
-                        setState(() => _currentIndex++);
-                      } else {
-                        // Save score to database at the very end
-                        _dbHelper.addFlashCardScore(
-                          _score,
-                          _quizWords.length,
-                          _selectedDictIds.join(','),
-                        );
-                        setState(() => _isQuizStarted = false);
-                      }
-                    },
-                    child: Text(_currentIndex < _quizWords.length - 1 ? 'Next' : 'Finish Review'),
-                  ),
-                ),
-              ],
+            child: ElevatedButton(
+              onPressed: () {
+                _dbHelper.addFlashCardScore(
+                  _score,
+                  _quizWords.length,
+                  _selectedDictIds.join(','),
+                );
+                setState(() => _isQuizStarted = false);
+              },
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 50),
+              ),
+              child: const Text('Finish Review'),
             ),
           ),
         ],
@@ -587,17 +565,11 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.primaryContainer,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(20),
-                ),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
               ),
               child: Row(
                 children: [
-                  const Icon(
-                    Icons.info_outline,
-                    size: 20,
-                    color: Colors.orange,
-                  ),
+                  const Icon(Icons.info_outline, size: 20, color: Colors.orange),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -618,55 +590,25 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
             Expanded(
               child: FutureBuilder<List<Map<String, dynamic>>>(
                 future: () async {
-                  // Get all exact matches for this word across all dictionaries
-                  final candidates =
-                      await _dbHelper.searchWords(headwordQuery: word);
+                  final candidates = await _dbHelper.searchWords(headwordQuery: word);
                   final List<Map<String, dynamic>> defs = [];
-
                   for (final res in candidates) {
-                    if (res['word'].toLowerCase() != word.toLowerCase()) {
-                      continue;
-                    }
-
-                    final dict = await _dbHelper.getDictionaryById(
-                      res['dict_id'],
-                    );
+                    if (res['word'].toLowerCase() != word.toLowerCase()) continue;
+                    final dict = await _dbHelper.getDictionaryById(res['dict_id']);
                     if (dict == null) continue;
-
                     String dictPath = await _dbHelper.resolvePath(dict['path']);
-                    if (dictPath.endsWith('.ifo')) {
-                      dictPath = dictPath.replaceAll('.ifo', '.dict');
-                    }
+                    if (dictPath.endsWith('.ifo')) dictPath = dictPath.replaceAll('.ifo', '.dict');
                     final reader = DictReader(dictPath, dictId: res['dict_id']);
-                    final content = await reader.readEntry(
-                      res['offset'],
-                      res['length'],
-                    );
-
-                    defs.add({
-                      'word': res['word'],
-                      'dict_name': dict['name'],
-                      'definition': content,
-                    });
+                    final content = await reader.readEntry(res['offset'], res['length']);
+                    defs.add({'word': res['word'], 'dict_name': dict['name'], 'definition': content});
                   }
                   return defs;
                 }(),
                 builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                    return const Center(child: Text('No definition found.'));
-                  }
-
+                  if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) return const Center(child: Text('No definition found.'));
                   final defs = snapshot.data!;
-                  if (defs.length == 1) {
-                    return _buildDefinitionContentInPopup(
-                      Theme.of(context),
-                      defs.first,
-                    );
-                  }
-
+                  if (defs.length == 1) return _buildDefinitionContentInPopup(Theme.of(context), defs.first);
                   return DefaultTabController(
                     length: defs.length,
                     child: Column(
@@ -675,20 +617,11 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                           isScrollable: true,
                           labelColor: Theme.of(context).colorScheme.primary,
                           unselectedLabelColor: Colors.grey,
-                          tabs: defs
-                              .map((d) => Tab(text: d['dict_name']))
-                              .toList(),
+                          tabs: defs.map((d) => Tab(text: d['dict_name'])).toList(),
                         ),
                         Expanded(
                           child: TabBarView(
-                            children: defs
-                                .map(
-                                  (d) => _buildDefinitionContentInPopup(
-                                    Theme.of(context),
-                                    d,
-                                  ),
-                                )
-                                .toList(),
+                            children: defs.map((d) => _buildDefinitionContentInPopup(Theme.of(context), d)).toList(),
                           ),
                         ),
                       ],
@@ -703,98 +636,54 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
     );
   }
 
-  Widget _buildDefinitionContentInPopup(
-    ThemeData theme,
-    Map<String, dynamic> def, {
-    String? highlightQuery,
-  }) {
+  Widget _buildDefinitionContentInPopup(ThemeData theme, Map<String, dynamic> def, {String? highlightQuery}) {
     final settings = context.watch<SettingsProvider>();
-
     String definitionHtml = def['definition'];
     if (settings.isTapOnMeaningEnabled) {
       definitionHtml = HtmlLookupWrapper.wrapWords(definitionHtml);
     }
     if (highlightQuery != null && highlightQuery.isNotEmpty) {
-      final isDark =
-          ThemeData.estimateBrightnessForColor(settings.backgroundColor) ==
-          Brightness.dark;
-      definitionHtml = HtmlLookupWrapper.highlightText(
-        definitionHtml,
-        highlightQuery,
-        highlightColor: isDark ? '#ff9800' : '#ffeb3b',
-        textColor: 'black',
-      );
+      final isDark = ThemeData.estimateBrightnessForColor(settings.backgroundColor) == Brightness.dark;
+      definitionHtml = HtmlLookupWrapper.highlightText(definitionHtml, highlightQuery, highlightColor: isDark ? '#ff9800' : '#ffeb3b', textColor: 'black');
     }
 
-    return GestureDetector(
-      onTap: () {
-        Navigator.of(context).popUntil((route) => route.isFirst);
-      },
-      behavior: HitTestBehavior.translucent,
-      child: Container(
-        color: settings.backgroundColor,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                def['word'],
-                style: theme.textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: settings.headwordColor,
-                  fontFamily: settings.fontFamily,
-                  fontSize: settings.fontSize + 8,
-                ),
-              ),
-              const Divider(height: 32),
-              SelectionArea(
-                child: Html(
-                  data: definitionHtml,
-                  style: {
-                    "body": Style(
-                      fontSize: FontSize(settings.fontSize),
-                      lineHeight: LineHeight.em(1.5),
-                      margin: Margins.zero,
-                      padding: HtmlPaddings.zero,
-                      color: settings.textColor,
-                      fontFamily: settings.fontFamily,
-                    ),
-                    "a": Style(
-                      color: settings.textColor,
-                      textDecoration: TextDecoration.none,
-                    ),
-                  },
-                  onLinkTap: (url, attributes, element) {
-                    hDebugPrint("FlashCard Popup Link tapped: $url");
-                    if (url != null && url.startsWith('look_up:')) {
-                      final encodedWord = url.substring(8);
-                      Navigator.pop(context);
-                      try {
-                        final word = encodedWord.contains('%')
-                            ? Uri.decodeComponent(encodedWord)
-                            : encodedWord;
-                        _showWordPopup(word);
-                      } catch (e) {
-                        _showWordPopup(encodedWord);
-                      }
+    return Container(
+      color: settings.backgroundColor,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(def['word'], style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: settings.headwordColor, fontFamily: settings.fontFamily, fontSize: settings.fontSize + 8)),
+            const Divider(height: 32),
+            SelectionArea(
+              child: Html(
+                data: definitionHtml,
+                style: {
+                  "body": Style(fontSize: FontSize(settings.fontSize), lineHeight: LineHeight.em(1.5), margin: Margins.zero, padding: HtmlPaddings.zero, color: settings.textColor, fontFamily: settings.fontFamily),
+                  "a": Style(color: settings.textColor, textDecoration: TextDecoration.none),
+                },
+                onLinkTap: (url, attributes, element) {
+                  if (url != null && url.startsWith('look_up:')) {
+                    final encodedWord = url.substring(8);
+                    Navigator.pop(context);
+                    try {
+                      final word = encodedWord.contains('%') ? Uri.decodeComponent(encodedWord) : encodedWord;
+                      _showWordPopup(word);
+                    } catch (e) {
+                      _showWordPopup(encodedWord);
                     }
-                  },
-                ),
+                  }
+                },
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  /// Action button with proper Material ripple effect.
-  Widget _buildActionButton(
-    IconData icon,
-    Color color,
-    VoidCallback onPressed,
-  ) {
+  Widget _buildActionButton(IconData icon, Color color, VoidCallback onPressed) {
     return Material(
       color: color,
       shape: const CircleBorder(),
