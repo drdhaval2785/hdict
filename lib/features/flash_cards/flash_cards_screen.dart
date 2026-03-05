@@ -29,6 +29,8 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
   int _score = 0;
   bool _showMeaning = false;
   List<bool> _results = [];
+  bool _isPeeking = false;
+  int _peekCount = 0;
 
   // Animation controller for slide transition between cards
   late AnimationController _slideController;
@@ -39,7 +41,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
     super.initState();
     _slideController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 320),
+      duration: const Duration(milliseconds: 100),
     );
     _slideAnimation = Tween<Offset>(
       begin: const Offset(1.0, 0),
@@ -156,6 +158,8 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
       _score = 0;
       _showMeaning = false;
       _isLoading = false;
+      _isPeeking = false;
+      _peekCount = 0;
       _results = List.filled(filteredWords.length, false);
     });
 
@@ -179,6 +183,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
       _animateToNextCard(() {
         setState(() {
           _currentIndex++;
+          _isPeeking = false;
         });
       });
     } else {
@@ -191,7 +196,11 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
     final result = await Navigator.push<String>(
       context,
       MaterialPageRoute(
-        builder: (_) => ResultScreen(score: _score, total: _quizWords.length),
+        builder: (_) => ResultScreen(
+          score: _score,
+          total: _quizWords.length,
+          peekCount: _peekCount,
+        ),
       ),
     );
     if (!mounted) return;
@@ -208,85 +217,14 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
     }
   }
 
-  /// Show the meaning of the current quiz word as a bottom sheet (peek).
+  /// Toggle the meaning of the current quiz word inline.
   void _peekMeaning() {
-    final currentWord = _quizWords[_currentIndex];
-    final settings = context.read<SettingsProvider>();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.5,
-        minChildSize: 0.3,
-        maxChildSize: 0.85,
-        expand: false,
-        builder: (_, controller) => Container(
-          decoration: BoxDecoration(
-            color: settings.backgroundColor,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: Column(
-            children: [
-              // Handle + header
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: Theme.of(ctx).colorScheme.primaryContainer,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.menu_book_outlined, size: 20, color: Colors.orange),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        currentWord['word'],
-                        style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(ctx).colorScheme.onPrimaryContainer,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.keyboard_arrow_down),
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
-                  ],
-                ),
-              ),
-              // Meaning content
-              Expanded(
-                child: SingleChildScrollView(
-                  controller: controller,
-                  padding: const EdgeInsets.all(16),
-                  child: SelectionArea(
-                    child: Html(
-                      data: currentWord['meaning'],
-                      style: {
-                        "body": Style(
-                          fontSize: FontSize(settings.fontSize),
-                          lineHeight: LineHeight.em(1.5),
-                          margin: Margins.zero,
-                          padding: HtmlPaddings.zero,
-                          color: settings.textColor,
-                          fontFamily: settings.fontFamily,
-                        ),
-                        "a": Style(
-                          color: settings.textColor,
-                          textDecoration: TextDecoration.none,
-                        ),
-                      },
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    setState(() {
+      _isPeeking = !_isPeeking;
+      if (_isPeeking) {
+        _peekCount++;
+      }
+    });
   }
 
   @override
@@ -360,50 +298,113 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
 
   Widget _buildQuizUI() {
     final currentWord = _quizWords[_currentIndex];
+    final settings = context.read<SettingsProvider>();
+
     return Scaffold(
       drawer: const AppDrawer(),
       appBar: AppBar(title: Text('Word ${_currentIndex + 1} of ${_quizWords.length}')),
       body: SlideTransition(
         position: _slideAnimation,
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Word
-              Text(
-                currentWord['word'],
-                style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 64),
-              // Action buttons
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _buildActionButton(
-                    Icons.close,
-                    Colors.red,
-                    () => _answer(false),
-                  ),
-                  const SizedBox(width: 48),
-                  _buildActionButton(
-                    Icons.check,
-                    Colors.green,
-                    () => _answer(true),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 40),
-              // Peek meaning button
-              TextButton.icon(
-                onPressed: _peekMeaning,
-                icon: const Icon(Icons.visibility_outlined),
-                label: const Text('Check Meaning'),
-                style: TextButton.styleFrom(
-                  foregroundColor: Theme.of(context).colorScheme.primary,
+        child: Column(
+          children: [
+            Expanded(
+              flex: _isPeeking ? 2 : 5,
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Word
+                    Text(
+                      currentWord['word'],
+                      style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 32),
+                    // Action buttons
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildActionButton(
+                          Icons.close,
+                          Colors.red,
+                          () => _answer(false),
+                        ),
+                        const SizedBox(width: 48),
+                        _buildActionButton(
+                          Icons.check,
+                          Colors.green,
+                          () => _answer(true),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    // Peek meaning button
+                    TextButton.icon(
+                      onPressed: _peekMeaning,
+                      icon: Icon(_isPeeking ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                      label: Text(_isPeeking ? 'Hide Meaning' : 'Check Meaning'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+            if (_isPeeking)
+              Expanded(
+                flex: 3,
+                child: Container(
+                  margin: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: settings.backgroundColor,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Theme.of(context).dividerColor),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.5),
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.menu_book_outlined, size: 16),
+                            const SizedBox(width: 8),
+                            const Text('Meaning Snippet', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(12),
+                          child: SelectionArea(
+                            child: Html(
+                              data: currentWord['meaning'],
+                              style: {
+                                "body": Style(
+                                  fontSize: FontSize(settings.fontSize - 2),
+                                  lineHeight: LineHeight.em(1.4),
+                                  margin: Margins.zero,
+                                  padding: HtmlPaddings.zero,
+                                  color: settings.textColor,
+                                  fontFamily: settings.fontFamily,
+                                ),
+                                "a": Style(
+                                  color: settings.textColor,
+                                  textDecoration: TextDecoration.none,
+                                ),
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

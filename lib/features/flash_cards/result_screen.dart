@@ -5,8 +5,14 @@ import 'package:flutter/material.dart';
 class ResultScreen extends StatelessWidget {
   final int score;
   final int total;
+  final int peekCount;
 
-  const ResultScreen({super.key, required this.score, required this.total});
+  const ResultScreen({
+    super.key,
+    required this.score,
+    required this.total,
+    required this.peekCount,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +30,7 @@ class ResultScreen extends StatelessWidget {
         automaticallyImplyLeading: false,
       ),
       body: Center(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(32.0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -74,6 +80,33 @@ class ResultScreen extends StatelessWidget {
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
                 ),
                 textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              // Statistics Section
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.visibility_outlined, size: 20, color: theme.colorScheme.primary),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Sneak Peeks Used: ',
+                      style: theme.textTheme.bodyLarge,
+                    ),
+                    Text(
+                      '$peekCount',
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 48),
               // Review meanings button
