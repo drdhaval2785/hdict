@@ -41,6 +41,17 @@ class AppDrawer extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.search),
             title: const Text('Search'),
+            trailing: IconButton(
+              icon: const Icon(Icons.history),
+              tooltip: 'Search History',
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SearchHistoryScreen()),
+                );
+              },
+            ),
             onTap: () {
               Navigator.pop(context);
               Navigator.of(context).pushAndRemoveUntil(
@@ -50,35 +61,24 @@ class AppDrawer extends StatelessWidget {
             },
           ),
           ListTile(
-            leading: const Icon(Icons.history),
-            title: const Text('Search History'),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const SearchHistoryScreen()),
-              );
-            },
-          ),
-          ListTile(
             leading: const Icon(Icons.flash_on),
             title: const Text('Flash Cards'),
+            trailing: IconButton(
+              icon: const Icon(Icons.assessment),
+              tooltip: 'Flash Card Scores',
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ScoreHistoryScreen()),
+                );
+              },
+            ),
             onTap: () {
               Navigator.pop(context);
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const FlashCardsScreen()),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.assessment),
-            title: const Text('Flash Card Scores'),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ScoreHistoryScreen()),
               );
             },
           ),

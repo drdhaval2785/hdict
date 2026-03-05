@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:hdict/core/database/database_helper.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
 import 'package:hdict/core/utils/html_lookup_wrapper.dart';
-import 'package:hdict/features/flash_cards/score_history_screen.dart';
 import 'package:hdict/features/settings/settings_provider.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:provider/provider.dart';
@@ -258,27 +257,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen> {
               },
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 24.0,
-              vertical: 8.0,
-            ),
-            child: OutlinedButton.icon(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ScoreHistoryScreen(),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.history),
-              label: const Text('View Score History'),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50),
-              ),
-            ),
-          ),
+
           Padding(
             padding: const EdgeInsets.all(24.0),
             child: ElevatedButton(
