@@ -16,6 +16,9 @@ class DatabaseHelper {
   /// Cached result of whether FTS5 is available on this device's SQLite.
   /// Set during [_onOpen]; null means not yet determined.
   static bool? _fts5Available;
+  
+  /// Whether the user just upgraded from version 16 and needs a notice.
+  static bool needsMigrationAlert = false;
 
   factory DatabaseHelper() {
     return _instance;
@@ -422,6 +425,9 @@ class DatabaseHelper {
       } catch (e) {
         hDebugPrint('Migration error (version 16): $e');
       }
+    }
+    if (oldVersion == 16) {
+      needsMigrationAlert = true;
     }
     if (oldVersion < 18) {
       try {

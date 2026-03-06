@@ -689,29 +689,27 @@ class _DictionaryManagementScreenState
   }
 
   Future<void> _showReindexDialog(Map<String, dynamic> dict) async {
-    final confirm = await showDialog<bool>(
+    final bool? indexDefinitions = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(dict['index_definitions'] == 1 ? 'Re-index Dictionary?' : 'Enable Meaning Search?'),
-        content: Text(
-          dict['index_definitions'] == 1
-              ? 'Are you sure you want to re-index "${dict['name']}"? This might take a while.'
-              : 'Index definitions for "${dict['name']}"? This will enable searching inside meanings but will take some time.',
+        title: const Text('Re-index Dictionary'),
+        content: const Text(
+          'How would you like to re-index this dictionary?',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: const Text('Headwords Only'),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Start'),
+            child: const Text('Headwords & Definitions'),
           ),
         ],
       ),
     );
 
-    if (confirm == true) {
+    if (indexDefinitions != null) {
       if (!mounted) return;
       showDialog(
         context: context,
@@ -733,7 +731,10 @@ class _DictionaryManagementScreenState
       );
 
       try {
-        final stream = _dictionaryManager.reindexDictionaryStream(dict['id']);
+        final stream = _dictionaryManager.reindexDictionaryStream(
+          dict['id'],
+          indexDefinitions: indexDefinitions,
+        );
         await for (final progress in stream) {
           _progressNotifier.value = progress;
           if (progress.isCompleted && progress.error != null) {

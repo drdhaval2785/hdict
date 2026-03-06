@@ -274,6 +274,34 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _checkDictionaries();
     _cleanHistory();
     _cleanOrphanedFiles();
+    
+    // Check for migration alert from version 16
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (DatabaseHelper.needsMigrationAlert) {
+        DatabaseHelper.needsMigrationAlert = false;
+        _showMigrationNotice();
+      }
+    });
+  }
+
+  void _showMigrationNotice() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Database Update'),
+        content: const Text(
+          'Because of a newer version of database to reduce your storage space, '
+          'you may see your dictionaries having 0 words. '
+          'Just reindex the dictionaries again from Manage Dictionaries.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _cleanOrphanedFiles() async {
@@ -281,10 +309,81 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       // Small delay to let app settle
       await Future.delayed(const Duration(seconds: 2));
       if (!mounted) return;
-      await _dictManager.cleanOrphanedDictionaryFiles();
+      
+      final orphanedFolders = await _dictManager.getOrphanedDictionaryFolders();
+      if (orphanedFolders.isNotEmpty && mounted) {
+        _showOrphanCleanupDialog(orphanedFolders);
+      }
     } catch (e) {
       hDebugPrint('Clean orphaned files error: $e');
     }
+  }
+
+  void _showOrphanCleanupDialog(List<String> folders) {
+    List<String> selectedFolders = List.from(folders);
+    
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Orphaned Data Found'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Your App Data has dictionaries which you have deleted. '
+                  'Would you like to delete the following dictionary data to free up space?',
+                ),
+                const SizedBox(height: 16),
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: folders.length,
+                    itemBuilder: (context, index) {
+                      final folder = folders[index];
+                      return CheckboxListTile(
+                        title: Text(folder),
+                        value: selectedFolders.contains(folder),
+                        onChanged: (val) {
+                          setDialogState(() {
+                            if (val == true) {
+                              selectedFolders.add(folder);
+                            } else {
+                              selectedFolders.remove(folder);
+                            }
+                          });
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Later'),
+            ),
+            ElevatedButton(
+              onPressed: selectedFolders.isEmpty 
+                ? null 
+                : () async {
+                    await _dictManager.deleteOrphanedFolders(selectedFolders);
+                    if (context.mounted) Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Cleanup complete.')),
+                    );
+                  },
+              child: const Text('Delete Selected'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _cleanHistory() async {

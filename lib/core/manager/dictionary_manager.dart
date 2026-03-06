@@ -693,12 +693,13 @@ class DictionaryManager {
     return md5.convert(bytes).toString();
   }
 
-  /// Scans the 'dictionaries' directory and removes folders that are not referenced in the database.
-  Future<void> cleanOrphanedDictionaryFiles() async {
+  /// Scans the 'dictionaries' directory and returns folder names that are not referenced in the database.
+  Future<List<String>> getOrphanedDictionaryFolders() async {
+    final List<String> orphanedFolders = [];
     try {
       final appDocDir = await getApplicationDocumentsDirectory();
       final dictsDir = Directory(p.join(appDocDir.path, 'dictionaries'));
-      if (!await dictsDir.exists()) return;
+      if (!await dictsDir.exists()) return orphanedFolders;
 
       final List<Map<String, dynamic>> activeDicts = await _dbHelper.getDictionaries();
       final Set<String> activeFolderNames = {};
@@ -718,31 +719,35 @@ class DictionaryManager {
         }
       }
       
-      // ignore: avoid_print
-      print('Scanning for orphaned folders in: ${dictsDir.path}');
-      // ignore: avoid_print
-      print('Active dictionary folders: $activeFolderNames');
-
       await for (final entity in dictsDir.list()) {
         if (entity is Directory) {
           final folderName = p.basename(entity.path);
           if (!activeFolderNames.contains(folderName)) {
-            // ignore: avoid_print
-            print('Deleting orphaned folder: $folderName');
-            try {
-              await entity.delete(recursive: true);
-            } catch (e) {
-              // ignore: avoid_print
-              print('Failed to delete orphaned folder $folderName: $e');
-            }
-          } else {
-            // ignore: avoid_print
-            print('Keeping active folder: $folderName');
+            orphanedFolders.add(folderName);
           }
         }
       }
     } catch (e) {
-      hDebugPrint('Error cleaning orphaned files: $e');
+      hDebugPrint('Error getting orphaned folders: $e');
+    }
+    return orphanedFolders;
+  }
+
+  /// Deletes specifically requested folders from the 'dictionaries' directory.
+  Future<void> deleteOrphanedFolders(List<String> folderNames) async {
+    try {
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final dictsDir = p.join(appDocDir.path, 'dictionaries');
+      
+      for (final folderName in folderNames) {
+        final dir = Directory(p.join(dictsDir, folderName));
+        if (await dir.exists()) {
+          hDebugPrint('Deleting requested orphaned folder: $folderName');
+          await dir.delete(recursive: true);
+        }
+      }
+    } catch (e) {
+      hDebugPrint('Error deleting orphaned folders: $e');
     }
   }
 
@@ -1987,7 +1992,8 @@ class DictionaryManager {
     yield ImportProgress(message: 'Re-indexing not fully implemented for Web yet.', value: 1.0, isCompleted: true);
   }
 
-  Stream<ImportProgress> reindexDictionaryStream(int dictId) async* {
+  /// Re-indexes a dictionary.
+  Stream<ImportProgress> reindexDictionaryStream(int dictId, {bool indexDefinitions = true}) async* {
     yield ImportProgress(message: 'Preparing to re-index...', value: 0.1);
 
     if (kIsWeb) {
@@ -2010,7 +2016,7 @@ class DictionaryManager {
       // Wipe existing index
       yield ImportProgress(message: 'Wiping existing index...', value: 0.2, dictionaryName: bookName);
       await _dbHelper.deleteWordsByDictionaryId(dictId);
-      await _dbHelper.updateDictionaryIndexDefinitions(dictId, true);
+      await _dbHelper.updateDictionaryIndexDefinitions(dictId, indexDefinitions);
 
       yield ImportProgress(message: 'Starting re-indexing...', value: 0.3, dictionaryName: bookName);
 
@@ -2024,7 +2030,7 @@ class DictionaryManager {
             _IndexMdictArgs(
               dictId: dictId,
               mdxPath: dictPath,
-              indexDefinitions: true,
+              indexDefinitions: indexDefinitions,
               bookName: bookName,
               sendPort: receivePort.sendPort,
               rootIsolateToken: rootIsolateToken,
@@ -2038,7 +2044,7 @@ class DictionaryManager {
             _IndexSlobArgs(
               dictId: dictId,
               slobPath: dictPath,
-              indexDefinitions: true,
+              indexDefinitions: indexDefinitions,
               bookName: bookName,
               sendPort: receivePort.sendPort,
               rootIsolateToken: rootIsolateToken,
@@ -2058,7 +2064,7 @@ class DictionaryManager {
               dictId: dictId,
               indexPath: indexPath,
               dictPath: dictPath,
-              indexDefinitions: true,
+              indexDefinitions: indexDefinitions,
               bookName: bookName,
               sendPort: receivePort.sendPort,
               rootIsolateToken: rootIsolateToken,
