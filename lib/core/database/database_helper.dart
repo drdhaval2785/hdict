@@ -720,12 +720,10 @@ class DatabaseHelper {
     await db.transaction((txn) async {
       final bool useFts5 = _fts5Available ?? true;
       if (useFts5) {
-        // 1. Delete from FTS5 index first using rowids from metadata
-        await txn.execute(
-          'DELETE FROM word_index WHERE rowid IN (SELECT id FROM word_metadata WHERE dict_id = ?)',
-          [dictId],
-        );
-        // 2. Delete from physical metadata
+        // LAZY DELETION: We only delete from word_metadata.
+        // FTS5 contentless tables don't support selective deletes on many versions.
+        // Because search queries INNER JOIN metadata and index, orphaned FTS5 rows
+        // are naturally excluded from results.
         await txn.delete('word_metadata', where: 'dict_id = ?', whereArgs: [dictId]);
       } else {
         await txn.delete('word_index', where: 'dict_id = ?', whereArgs: [dictId]);
@@ -740,12 +738,7 @@ class DatabaseHelper {
       
       final bool useFts5 = _fts5Available ?? true;
       if (useFts5) {
-        // Delete from FTS5 index first
-        await txn.execute(
-          'DELETE FROM word_index WHERE rowid IN (SELECT id FROM word_metadata WHERE dict_id = ?)',
-          [id],
-        );
-        // Delete from metadata
+        // LAZY DELETION: Delete from metadata only. JOIN handles the rest.
         await txn.delete('word_metadata', where: 'dict_id = ?', whereArgs: [id]);
       } else {
         await txn.delete('word_index', where: 'dict_id = ?', whereArgs: [id]);
