@@ -150,7 +150,7 @@ class DatabaseHelper {
       if (fts5Available) {
         // 1. Physical metadata table (supports scanning/SQL joins/deletes)
         await db.execute('''
-          CREATE TABLE word_metadata(
+          CREATE TABLE IF NOT EXISTS word_metadata(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             word TEXT,
             dict_id INTEGER,
@@ -158,8 +158,8 @@ class DatabaseHelper {
             length INTEGER
           )
         ''');
-        await db.execute('CREATE INDEX idx_metadata_dict_id ON word_metadata(dict_id)');
-        await db.execute('CREATE INDEX idx_metadata_word ON word_metadata(word)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_metadata_dict_id ON word_metadata(dict_id)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_metadata_word ON word_metadata(word)');
 
         await db.execute('''
           CREATE VIRTUAL TABLE word_index USING fts5(
