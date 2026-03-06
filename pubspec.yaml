@@ -43,7 +43,6 @@ dependencies:
   url_launcher: ^6.3.2
   sqflite_common_ffi: ^2.4.0+2
   sqflite_common_ffi_web: ^1.1.1
-  sqlite3_flutter_libs: ^0.6.0+eol
   http: ^1.6.0
   shared_preferences: ^2.2.2
   flutter_colorpicker: ^1.1.0

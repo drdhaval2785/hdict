@@ -47,7 +47,7 @@ class DatabaseHelper {
     if (kIsWeb) {
       databaseFactory = createDatabaseFactoryFfiWeb();
     } else if (Platform.isWindows || Platform.isLinux || Platform.isAndroid) {
-      // On Android, sqflite_common_ffi + sqlite3_flutter_libs provides a bundled
+      // On Android, sqflite_common_ffi + sqlite3 (3.x+) provides a bundled
       // SQLite compiled with FTS5 support, bypassing the device's system SQLite
       // which may lack FTS5 on older Android versions.
       sqfliteFfiInit();
