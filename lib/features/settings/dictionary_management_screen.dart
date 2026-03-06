@@ -698,12 +698,12 @@ class _DictionaryManagementScreenState
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Headwords Only'),
-          ),
-          ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Headwords & Definitions'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Headwords Only'),
           ),
         ],
       ),
