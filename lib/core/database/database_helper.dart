@@ -93,7 +93,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 19, // Version 19: Pre-tokenized keyword storage (saves ~11% more)
+      version: 20, // Version 20: Full language-agnostic FTS5 indexing
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onOpen: _onOpen,
@@ -159,15 +159,13 @@ class DatabaseHelper {
           )
         ''');
         await db.execute('CREATE INDEX idx_metadata_dict_id ON word_metadata(dict_id)');
+        await db.execute('CREATE INDEX idx_metadata_word ON word_metadata(word)');
 
-        // 2. Optimized FTS5 Index (Search only, no storage)
         await db.execute('''
           CREATE VIRTUAL TABLE word_index USING fts5(
             word,
             content,
             content = '',
-            detail = 'column',
-            columnsize = 0,
             tokenize = 'unicode61'
           )
         ''');
@@ -435,6 +433,20 @@ class DatabaseHelper {
         hDebugPrint('Migration error (version 19): $e');
       }
     }
+    if (oldVersion < 20) {
+      try {
+        hDebugPrint('Migration to version 20: Full language-agnostic FTS5 indexing');
+        // Re-index is required because content storage format has changed (removed English tokenization).
+        await db.execute('DROP TABLE IF EXISTS word_index');
+        await db.execute('DELETE FROM word_metadata');
+        await db.execute(
+          'UPDATE dictionaries SET word_count = 0, definition_word_count = 0, index_definitions = 0',
+        );
+        try { await db.execute('CREATE INDEX IF NOT EXISTS idx_metadata_word ON word_metadata(word)'); } catch (_) {}
+      } catch (e) {
+        hDebugPrint('Migration error (version 20): $e');
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -455,28 +467,10 @@ class DatabaseHelper {
   ///
   /// Limitation: phrase searches (e.g. "red fruit") won't work — each token
   /// is an independent search unit. Individual token searches ("red", "fruit") work.
+  /// Returning raw lowercased text lets FTS5's unicode61 handle all languages natively
   static String _tokenizeContent(String? text) {
     if (text == null || text.isEmpty) return '';
-
-    const stopwords = <String>{
-      'a', 'an', 'the', 'of', 'and', 'in', 'on', 'to', 'is', 'are', 'was',
-      'were', 'be', 'been', 'being', 'with', 'or', 'at', 'from', 'by', 'as',
-      'it', 'its', 'for', 'that', 'this', 'these', 'those', 'but', 'not',
-      'no', 'can', 'may', 'will', 'do', 'has', 'have', 'had', 'also',
-      'into', 'than', 'so', 'if', 'up', 'out', 'about', 'who', 'which',
-      'what', 'when', 'where', 'how', 'all', 'each', 'their', 'they',
-      'used', 'use', 'more', 'most', 'some', 'any', 'such', 'only',
-    };
-
-    final tokens = <String>{}; // Set for automatic deduplication
-    // Split on any non-alphanumeric character (handles spaces, hyphens, dots, etc.)
-    for (final raw in text.split(RegExp(r'[^\w]+'))) {
-      final t = raw.toLowerCase().trim();
-      if (t.length >= 3 && !stopwords.contains(t) && !RegExp(r'^\d+$').hasMatch(t)) {
-        tokens.add(t);
-      }
-    }
-    return tokens.join(' ');
+    return text.toLowerCase();
   }
 
 
@@ -934,14 +928,29 @@ class DatabaseHelper {
       // 1. Process Headword Query
       if (headwordQuery != null && headwordQuery.trim().isNotEmpty) {
         final String hq = headwordQuery.trim();
-        final String safeHq = hq.replaceAll('"', '""');
+        
+        // Helper to safely convert user query to FTS5 AND query avoiding phrase query issues
+        String toFts5Query(String query, bool isPrefix) {
+          final terms = query.split(RegExp(r'\s+')).where((s) => s.isNotEmpty);
+          if (terms.isEmpty) return '';
+          return terms.map((t) {
+            String clean = t.replaceAll(RegExp(r'["*\(\)]'), '');
+            return isPrefix ? '$clean*' : clean;
+          }).join(' AND ');
+        }
+
         switch (headwordMode) {
           case SearchMode.exact:
             if (_fts5Available ?? true) {
-              // FTS5 exact match: quote the term to match the full word
-              whereClauses.add('i.word MATCH ?');
-              whereArgs.add('"$safeHq"');
-              needsFts5Join = true;
+              final ftsQuery = toFts5Query(hq, false);
+              if (ftsQuery.isNotEmpty) {
+                whereClauses.add('i.word MATCH ?');
+                whereArgs.add(ftsQuery);
+                // Augment with SQL '=' to ensure exact match of the entire string
+                whereClauses.add('m.word = ?');
+                whereArgs.add(hq);
+                needsFts5Join = true;
+              }
             } else {
               whereClauses.add('m.word = ?');
               whereArgs.add(hq);
@@ -949,9 +958,15 @@ class DatabaseHelper {
             break;
           case SearchMode.prefix:
             if (_fts5Available ?? true) {
-              whereClauses.add('i.word MATCH ?');
-              whereArgs.add('$safeHq*');
-              needsFts5Join = true;
+              final ftsQuery = toFts5Query(hq, true);
+              if (ftsQuery.isNotEmpty) {
+                whereClauses.add('i.word MATCH ?');
+                whereArgs.add(ftsQuery);
+                // Augment with SQL LIKE to ensure precise prefix matching
+                whereClauses.add('LOWER(m.word) LIKE LOWER(?)');
+                whereArgs.add('$hq%');
+                needsFts5Join = true;
+              }
             } else {
               whereClauses.add('LOWER(m.word) LIKE LOWER(?)');
               whereArgs.add('$hq%');
@@ -978,15 +993,23 @@ class DatabaseHelper {
       if (definitionQuery != null) {
         // FTS5 contentless tables ONLY support MATCH - no LIKE on content.
         final String dq = definitionQuery.trim();
-        final String safeDq = dq.replaceAll('"', '""');
-        whereClauses.add('i.content MATCH ?');
-        if (definitionMode == SearchMode.substring ||
-            definitionMode == SearchMode.prefix) {
-          whereArgs.add('$safeDq*');
-        } else {
-          whereArgs.add('"$safeDq"');
+        final terms = dq.split(RegExp(r'\s+')).where((s) => s.isNotEmpty);
+        
+        if (terms.isNotEmpty) {
+          final bool isPrefixSearch = definitionMode == SearchMode.substring ||
+              definitionMode == SearchMode.prefix;
+              
+          final ftsQuery = terms.map((t) {
+            String clean = t.replaceAll(RegExp(r'["*\(\)]'), '');
+            return isPrefixSearch ? '$clean*' : clean;
+          }).join(' AND ');
+          
+          if (ftsQuery.isNotEmpty) {
+            whereClauses.add('i.content MATCH ?');
+            whereArgs.add(ftsQuery);
+            needsFts5Join = true;
+          }
         }
-        needsFts5Join = true;
       }
 
       // If no search terms, return empty
@@ -1039,26 +1062,27 @@ class DatabaseHelper {
   }) async {
     try {
       final db = await database;
-      final String safePrefix = prefix.replaceAll('"', '""');
-
+      // prefix may have quotes, clean them for both branch logic
+      final String cleanPrefix = prefix.replaceAll(RegExp(r'["*\(\)]'), '').trim();
       final bool useFts5 = _fts5Available ?? true;
       final String fallbackTable = useFts5 ? 'word_metadata' : 'word_index';
 
-      if (fuzzy || !useFts5) {
-        // Use LIKE for fuzzy mode or when FTS5 is unavailable.
+      if (fuzzy || !useFts5 || cleanPrefix.contains(' ')) {
+        // Use LIKE for fuzzy mode, missing FTS5, or multiple words
+        // Multiple words via FTS5 prefix match could trigger unsupported phrase queries.
         final String sql = '''
           SELECT DISTINCT word 
           FROM $fallbackTable 
           WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
-          AND word LIKE ?
+          AND LOWER(word) LIKE LOWER(?)
           ORDER BY word ASC
           LIMIT ?
         ''';
-        final results = await db.rawQuery(sql, ['%$prefix%', limit]);
-        _log('RAW_QUERY (Suggest Fuzzy/NoFTS5)', sql, ['%$prefix%', limit], results);
+        final results = await db.rawQuery(sql, ['%$cleanPrefix%', limit]);
+        _log('RAW_QUERY (Suggest Fuzzy/NoFTS5/Multi)', sql, ['%$cleanPrefix%', limit], results);
         return results.map((r) => r['word'] as String).toList();
       } else {
-        final String prefixMatchQuery = '$safePrefix*';
+        final String prefixMatchQuery = '$cleanPrefix*';
         final String sql = '''
           SELECT DISTINCT m.word 
           FROM word_metadata m
