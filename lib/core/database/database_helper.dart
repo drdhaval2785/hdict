@@ -93,7 +93,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 20, // Version 20: Full language-agnostic FTS5 indexing
+      version: 21, // Version 21: Added missing type_sequence column
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onOpen: _onOpen,
@@ -328,6 +328,25 @@ class DatabaseHelper {
         hDebugPrint('Migration error (version 11): $e');
       }
     }
+    if (oldVersion < 12) {
+      try {
+        final tableInfo = await db.rawQuery("PRAGMA table_info('dictionaries')");
+        bool hasTypeSequence = false;
+        for (final row in tableInfo) {
+          if (row['name'] == 'type_sequence') {
+            hasTypeSequence = true;
+            break;
+          }
+        }
+        if (!hasTypeSequence) {
+          await db.execute(
+            'ALTER TABLE dictionaries ADD COLUMN type_sequence TEXT',
+          );
+        }
+      } catch (e) {
+        hDebugPrint('Migration error (version 12): $e');
+      }
+    }
     if (oldVersion < 13) {
       try {
         final tableInfo = await db.rawQuery("PRAGMA table_info('dictionaries')");
@@ -445,6 +464,25 @@ class DatabaseHelper {
         try { await db.execute('CREATE INDEX IF NOT EXISTS idx_metadata_word ON word_metadata(word)'); } catch (_) {}
       } catch (e) {
         hDebugPrint('Migration error (version 20): $e');
+      }
+    }
+    if (oldVersion < 21) {
+      try {
+        final tableInfo = await db.rawQuery("PRAGMA table_info('dictionaries')");
+        bool hasTypeSequence = false;
+        for (final row in tableInfo) {
+          if (row['name'] == 'type_sequence') {
+            hasTypeSequence = true;
+            break;
+          }
+        }
+        if (!hasTypeSequence) {
+          await db.execute(
+            'ALTER TABLE dictionaries ADD COLUMN type_sequence TEXT',
+          );
+        }
+      } catch (e) {
+        hDebugPrint('Migration error (version 21): $e');
       }
     }
   }
