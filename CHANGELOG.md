@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-03-06
+
+### Added
+- **Database Migration**: Optimised the database for faster lookups and less memory usage by contentless method.
+- **Interactive Orphan Folder Cleanup**: Users can now choose which orphaned dictionary data folders to delete via a checkboxes dialog, for efficient cleanup.
+- **Migration Notice**: Added a one-time informative alert for users upgrading from database version 16.
+- **Split Re-indexing Options**: Provided separate options to re-index "Headwords Only" or "Headwords & Definitions".
+- **Flash Card Sneak Peek**: Added Sneak Peek feature to Flash Card Learning System.
+- **Flash Card Results**: Added a single view of Flash Card Results to show all the results at once.
+
+
+### Fixed
+- **Database Migration**: Resolved a critical issue where the `type_sequence` column was missing in previous upgrades.
+
 ## [1.2.7] - 2026-03-04
 
 ### Added

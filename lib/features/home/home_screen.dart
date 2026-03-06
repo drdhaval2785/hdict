@@ -372,9 +372,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               onPressed: selectedFolders.isEmpty 
                 ? null 
                 : () async {
+                    final messenger = ScaffoldMessenger.of(context);
                     await _dictManager.deleteOrphanedFolders(selectedFolders);
-                    if (context.mounted) Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    if (!context.mounted) return;
+                    Navigator.pop(context);
+                    messenger.showSnackBar(
                       const SnackBar(content: Text('Cleanup complete.')),
                     );
                   },
