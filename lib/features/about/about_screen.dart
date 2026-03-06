@@ -1,9 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:hdict/features/home/widgets/app_drawer.dart';
 
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
+
+  Future<String> _getVersion() async {
+    try {
+      final pubspec = await rootBundle.loadString('pubspec.yaml');
+      final match = RegExp(r'^version:\s*(.*)$', multiLine: true).firstMatch(pubspec);
+      return match?.group(1)?.split('+').first.trim() ?? 'Unknown';
+    } catch (e) {
+      return 'Unknown';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +42,15 @@ class AboutScreen extends StatelessWidget {
                 style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
-              const Text('Version 1.2.5', style: TextStyle(color: Colors.grey)),
+              FutureBuilder<String>(
+                future: _getVersion(),
+                builder: (context, snapshot) {
+                  return Text(
+                    'Version ${snapshot.data ?? '...'}',
+                    style: const TextStyle(color: Colors.grey),
+                  );
+                },
+              ),
               const SizedBox(height: 32),
               const Text(
                 'Vibe coded by Dr. Dhaval Patel',
