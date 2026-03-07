@@ -11,6 +11,93 @@ import 'package:hdict/features/settings/settings_provider.dart';
 import 'package:hdict/features/home/widgets/app_drawer.dart';
 import 'package:hdict/features/settings/dictionary_management_screen.dart';
 import 'dart:async';
+import 'package:flutter/foundation.dart' show compute;
+
+
+/// Arguments for HTML processing in a separate isolate.
+class _ProcessHtmlArgs {
+  final List<_EntryToProcess> entries;
+  final bool isTapOnMeaningEnabled;
+  final String headword;
+  final String definition;
+  final String highlightCol;
+
+  _ProcessHtmlArgs({
+    required this.entries,
+    required this.isTapOnMeaningEnabled,
+    required this.headword,
+    required this.definition,
+    required this.highlightCol,
+  });
+}
+
+class _EntryToProcess {
+  final int index;
+  final String content;
+  final String word;
+  final String format;
+  final String? typeSequence;
+
+  _EntryToProcess({
+    required this.index,
+    required this.content,
+    required this.word,
+    required this.format,
+    this.typeSequence,
+  });
+}
+
+/// Processed result from the isolate.
+class _ProcessedResult {
+  final int index;
+  final String content;
+
+  _ProcessedResult(this.index, this.content);
+}
+
+/// Top-level function for isolate processing.
+Future<List<_ProcessedResult>> _processHtmlInIsolate(_ProcessHtmlArgs args) async {
+  final List<_ProcessedResult> results = [];
+  
+  for (final entry in args.entries) {
+    String content = entry.content;
+    
+    // Normalize whitespace
+    content = HomeScreen.normalizeWhitespace(
+      content, 
+      format: entry.format, 
+      typeSequence: entry.typeSequence
+    );
+    
+    // Headword header inside definition
+    content = '<div class="headword" style="font-weight:bold;margin-bottom:8px;">${entry.word}</div>$content';
+
+    if (args.isTapOnMeaningEnabled) {
+      content = HtmlLookupWrapper.wrapWords(content);
+    }
+
+    if (args.headword.isNotEmpty) {
+      content = HtmlLookupWrapper.highlightText(
+        content,
+        args.headword,
+        highlightColor: args.highlightCol,
+        textColor: 'black',
+      );
+    }
+
+    if (args.definition.isNotEmpty) {
+      content = HtmlLookupWrapper.underlineText(
+        content,
+        args.definition,
+        underlineColor: args.highlightCol,
+      );
+    }
+    
+    results.add(_ProcessedResult(entry.index, content));
+  }
+  
+  return results;
+}
 
 
 /// The main search screen of the hdict app.
@@ -198,92 +285,127 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       sqliteWatch.stop();
       final sqliteMs = sqliteWatch.elapsedMilliseconds;
 
-      final Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults = {};
-      int resultCount = 0;
+      final List<_EntryToProcess> entriesToProcess = [];
+      final List<Map<String, dynamic>> resultsMetadata = [];
       
-      hDebugPrint('--- ENRICHMENT_START ---');
+      hDebugPrint('--- ENRICHMENT_START (Parallel Fetch) ---');
       final enrichmentWatch = Stopwatch()..start();
 
       final isDark = ThemeData.estimateBrightnessForColor(settings.backgroundColor) == Brightness.dark;
       final highlightCol = isDark ? '#ff9900' : '#ffeb3b';
 
-      // Parallelize definition fetching and pre-processing
-      await Future.wait(results.map((result) async {
+      // Phase 1: Parallel definition fetching (IO bound, on main thread due to readers)
+      await Future.wait(results.asMap().entries.map((entry) async {
+        final index = entry.key;
+        final result = entry.value;
         final dictId = result['dict_id'] as int;
         final dict = await _dbHelper.getDictionaryById(dictId);
+        
         if (dict != null && dict['is_enabled'] == 1) {
           final word = result['word'] as String;
           final offset = result['offset'] as int;
           final length = result['length'] as int;
 
-          String content = await _dictManager.fetchDefinition(dict, word, offset, length) ?? '';
+          final content = await _dictManager.fetchDefinition(dict, word, offset, length) ?? '';
           
-          // PRE-PROCESS HTML HERE (not on the UI thread!)
-          content = HomeScreen.normalizeWhitespace(content, format: dict['format'], typeSequence: dict['type_sequence']);
+          entriesToProcess.add(_EntryToProcess(
+            index: index,
+            content: content,
+            word: word,
+            format: dict['format'],
+            typeSequence: dict['type_sequence'],
+          ));
           
-          // Headword header inside definition
-          content = '<div class="headword" style="font-weight:bold;margin-bottom:8px;">$word</div>$content';
-
-          if (settings.isTapOnMeaningEnabled) {
-            content = HtmlLookupWrapper.wrapWords(content);
-          }
-
-          if (headword.isNotEmpty) {
-            content = HtmlLookupWrapper.highlightText(
-              content,
-              headword,
-              highlightColor: highlightCol,
-              textColor: 'black',
-            );
-          }
-
-          if (definition.isNotEmpty) {
-            content = HtmlLookupWrapper.underlineText(
-              content,
-              definition,
-              underlineColor: highlightCol,
-            );
-          }
-
-          final String uniqueKey = '${offset}_$length';
-
-          resultCount++;
-          groupedResults.putIfAbsent(dictId, () => {});
-          groupedResults[dictId]!.putIfAbsent(uniqueKey, () => []);
-          groupedResults[dictId]![uniqueKey]!.add({
+          resultsMetadata.add({
             ...result,
             'dict_name': dict['name'],
-            'definition': content,
             'format': dict['format'],
             'type_sequence': dict['type_sequence'],
           });
         }
       }));
 
-      enrichmentWatch.stop();
-      hDebugPrint('--- ENRICHMENT_DONE: ${enrichmentWatch.elapsedMilliseconds}ms ---');
+      final fetchMs = enrichmentWatch.elapsedMilliseconds;
+      hDebugPrint('--- FETCH_DONE: ${fetchMs}ms ---');
 
-      final consolidatedDefs = HomeScreen.consolidateDefinitions(groupedResults);
-      
-      totalWatch.stop();
+      // Phase 2: Isolate-based HTML processing (CPU bound)
+      if (entriesToProcess.isNotEmpty) {
+        hDebugPrint('--- ISOLATE_PROCESSING_START (${entriesToProcess.length} entries) ---');
+        final isolateResults = await compute(_processHtmlInIsolate, _ProcessHtmlArgs(
+          entries: entriesToProcess,
+          isTapOnMeaningEnabled: settings.isTapOnMeaningEnabled,
+          headword: headword,
+          definition: definition,
+          highlightCol: highlightCol,
+        ));
 
-      setState(() {
-        _currentDefinitions = consolidatedDefs;
-        _searchResultCount = resultCount;
-        _searchSqliteMs = sqliteMs;
-        _searchTotalMs = totalWatch.elapsedMilliseconds;
-        _searchOtherMs = _searchTotalMs - _searchSqliteMs;
-        _tabController?.dispose();
-        if (consolidatedDefs.isNotEmpty) {
-          _tabController = TabController(
-            length: consolidatedDefs.length,
-            vsync: this,
-          );
-        } else {
-          _tabController = null;
+        // Map back to grouped results
+        final Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults = {};
+        for (final processed in isolateResults) {
+          final meta = resultsMetadata.firstWhere((m) => results.indexOf(m) == processed.index || (m['offset'] == results[processed.index]['offset'] && m['length'] == results[processed.index]['length']));
+          // Actually, using the index from ProcessedResult is safer if we align our metadata.
+          // Let's just Re-construct metadata to be safe.
         }
-        _isLoading = false;
-      });
+        
+        // Simplified mapping back
+        final Map<int, List<_ProcessedResult>> resultsByIndexMap = {
+          for (var r in isolateResults) r.index: [r]
+        };
+
+        final Map<int, Map<String, List<Map<String, dynamic>>>> finalGrouped = {};
+        int finalResultCount = 0;
+
+        for (final entry in entriesToProcess) {
+          final processed = isolateResults.firstWhere((r) => r.index == entry.index);
+          final meta = resultsMetadata.firstWhere((m) {
+             final originalMatch = results[entry.index];
+             return m['offset'] == originalMatch['offset'] && m['length'] == originalMatch['length'] && m['dict_id'] == originalMatch['dict_id'];
+          });
+
+          final dictId = meta['dict_id'] as int;
+          final String uniqueKey = '${meta['offset']}_${meta['length']}';
+
+          finalResultCount++;
+          finalGrouped.putIfAbsent(dictId, () => {});
+          finalGrouped[dictId]!.putIfAbsent(uniqueKey, () => []);
+          finalGrouped[dictId]![uniqueKey]!.add({
+            ...meta,
+            'definition': processed.content,
+          });
+        }
+
+        enrichmentWatch.stop();
+        hDebugPrint('--- ENRICHMENT_DONE: ${enrichmentWatch.elapsedMilliseconds}ms (Fetch: ${fetchMs}ms, Isolate: ${enrichmentWatch.elapsedMilliseconds - fetchMs}ms) ---');
+
+        final consolidatedDefs = HomeScreen.consolidateDefinitions(finalGrouped);
+        
+        totalWatch.stop();
+
+        setState(() {
+          _currentDefinitions = consolidatedDefs;
+          _searchResultCount = finalResultCount;
+          _searchSqliteMs = sqliteMs;
+          _searchTotalMs = totalWatch.elapsedMilliseconds;
+          _searchOtherMs = _searchTotalMs - _searchSqliteMs;
+          _tabController?.dispose();
+          if (consolidatedDefs.isNotEmpty) {
+            _tabController = TabController(
+              length: consolidatedDefs.length,
+              vsync: this,
+            );
+          } else {
+            _tabController = null;
+          }
+          _isLoading = false;
+        });
+      } else {
+        enrichmentWatch.stop();
+        setState(() {
+          _currentDefinitions = [];
+          _searchResultCount = 0;
+          _isLoading = false;
+        });
+      }
       hDebugPrint('--- SEARCH_TOTAL: ${_searchTotalMs}ms (SQLite: ${sqliteMs}ms, Other: ${_searchOtherMs}ms) ---');
     } catch (e) {
       hDebugPrint('Error fetching definitions: $e');
