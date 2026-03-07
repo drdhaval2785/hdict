@@ -2,6 +2,7 @@ import 'package:hdict/core/utils/logger.dart';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:archive/archive.dart';
@@ -646,6 +647,27 @@ class DictionaryManager {
 
   /// Cache of open dictionary readers to avoid re-opening files.
   static final Map<int, dynamic> _readerCache = {};
+
+  /// Per-dictionary locks to prevent concurrent file access on the same reader.
+  static final Map<int, Future<void>> _readerLocks = {};
+
+  /// Executes a task while ensuring only one task runs per dictionary ID.
+  Future<T> _synchronized<T>(int dictId, Future<T> Function() task) async {
+    final prev = _readerLocks[dictId] ?? Future.value();
+    final completer = Completer<void>();
+    _readerLocks[dictId] = completer.future;
+
+    try {
+      await prev;
+      return await task();
+    } finally {
+      completer.complete();
+      // Cleanup the lock if no one else is waiting (optional but cleaner)
+      if (_readerLocks[dictId] == completer.future) {
+        _readerLocks.remove(dictId);
+      }
+    }
+  }
 
   /// Gets a cached reader or creates a new one.
   Future<dynamic> _getReader(Map<String, dynamic> dict) async {
@@ -1957,18 +1979,25 @@ class DictionaryManager {
     String? result;
     
     try {
-      final reader = await _getReader(dictRecord);
-      if (reader != null) {
-        if (reader is MdictReader) {
-          result = await reader.lookup(word);
-        } else if (reader is SlobReader) {
-          result = await reader.getBlobContentById(offset);
-        } else if (reader is DictdReader) {
-          result = await reader.readEntry(offset, length);
-        } else if (reader is DictReader) {
-          result = await reader.readAtIndex(offset, length);
+      final int? dictId = dictRecord['id'] as int?;
+      if (dictId == null) return null;
+
+      // Use a per-dictionary lock to prevent concurrent FileSystem access on the same handle
+      result = await _synchronized(dictId, () async {
+        final reader = await _getReader(dictRecord);
+        if (reader != null) {
+          if (reader is MdictReader) {
+            return await reader.lookup(word);
+          } else if (reader is SlobReader) {
+            return await reader.getBlobContentById(offset);
+          } else if (reader is DictdReader) {
+            return await reader.readEntry(offset, length);
+          } else if (reader is DictReader) {
+            return await reader.readAtIndex(offset, length);
+          }
         }
-      }
+        return null;
+      });
     } catch (e) {
       hDebugPrint('Error fetching definition ($format): $e');
     }
