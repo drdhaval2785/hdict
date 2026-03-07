@@ -668,6 +668,12 @@ class DictionaryManager {
     } else if (format == 'slob') {
       reader = SlobReader(dictPath);
       await reader.open();
+    } else if (format == 'stardict') {
+      reader = DictReader(dictPath, dictId: dictId);
+      await reader.open();
+    } else if (format == 'dictd') {
+      reader = DictdReader(dictPath);
+      await reader.open();
     }
 
     if (reader != null) {
@@ -682,6 +688,8 @@ class DictionaryManager {
     if (reader != null) {
       if (reader is MdictReader) await reader.close();
       if (reader is SlobReader) await reader.close();
+      if (reader is DictReader) await reader.close();
+      if (reader is DictdReader) await reader.close();
     }
   }
 
@@ -1945,45 +1953,29 @@ class DictionaryManager {
     if (kIsWeb) return null;
     final format = (dictRecord['format'] as String?) ?? 'stardict';
 
+    final fetchWatch = Stopwatch()..start();
     String? result;
-    switch (format) {
-      case 'mdict':
-        try {
-          final reader = await _getReader(dictRecord);
-          if (reader is MdictReader) {
-            result = await reader.lookup(word);
-          }
-        } catch (e) {
-          hDebugPrint('Error fetching MDict definition: $e');
+    
+    try {
+      final reader = await _getReader(dictRecord);
+      if (reader != null) {
+        if (reader is MdictReader) {
+          result = await reader.lookup(word);
+        } else if (reader is SlobReader) {
+          result = await reader.getBlobContentById(offset);
+        } else if (reader is DictdReader) {
+          result = await reader.readEntry(offset, length);
+        } else if (reader is DictReader) {
+          result = await reader.readAtIndex(offset, length);
         }
-        break;
+      }
+    } catch (e) {
+      hDebugPrint('Error fetching definition ($format): $e');
+    }
 
-      case 'dictd':
-        final rawPath = dictRecord['path'] as String;
-        final dictPath = await _dbHelper.resolvePath(rawPath);
-        final reader = DictdReader(dictPath);
-        result = await reader.readEntry(offset, length);
-        break;
-
-      case 'slob':
-        // SlobReader uses the stored offset as the direct packed ID for O(1) lookup.
-        try {
-          final reader = await _getReader(dictRecord);
-          if (reader is SlobReader) {
-            result = await reader.getBlobContentById(offset);
-          }
-        } catch (e) {
-          hDebugPrint('Error fetching Slob definition: $e');
-        }
-        break;
-
-      case 'stardict':
-      default:
-        final rawPath = dictRecord['path'] as String;
-        final dictPath = await _dbHelper.resolvePath(rawPath);
-        final reader = DictReader(dictPath);
-        result = await reader.readEntry(offset, length);
-        break;
+    fetchWatch.stop();
+    if (fetchWatch.elapsedMilliseconds > 5) {
+      hDebugPrint('fetchDefinition [$format] took ${fetchWatch.elapsedMilliseconds}ms');
     }
     return result;
   }

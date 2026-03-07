@@ -52,8 +52,7 @@ class HomeScreen extends StatefulWidget {
         'format': format,
         'type_sequence': typeSequence,
         'word': allHeadwords.join(' | '),
-        'definition': definitionsList.join('<hr>'),
-        'definitions': definitionsList,
+        'definitions': definitionsList, // These will be pre-processed now
       });
     });
     return consolidated;
@@ -201,22 +200,56 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
       final Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults = {};
       int resultCount = 0;
-      for (final result in results) {
+      
+      hDebugPrint('--- ENRICHMENT_START ---');
+      final enrichmentWatch = Stopwatch()..start();
+
+      final isDark = ThemeData.estimateBrightnessForColor(settings.backgroundColor) == Brightness.dark;
+      final highlightCol = isDark ? '#ff9900' : '#ffeb3b';
+
+      // Parallelize definition fetching and pre-processing
+      await Future.wait(results.map((result) async {
         final dictId = result['dict_id'] as int;
         final dict = await _dbHelper.getDictionaryById(dictId);
         if (dict != null && dict['is_enabled'] == 1) {
-          resultCount++;
           final word = result['word'] as String;
           final offset = result['offset'] as int;
           final length = result['length'] as int;
 
-          final content = await _dictManager.fetchDefinition(dict, word, offset, length) ?? '';
+          String content = await _dictManager.fetchDefinition(dict, word, offset, length) ?? '';
+          
+          // PRE-PROCESS HTML HERE (not on the UI thread!)
+          content = HomeScreen.normalizeWhitespace(content, format: dict['format'], typeSequence: dict['type_sequence']);
+          
+          // Headword header inside definition
+          content = '<div class="headword" style="font-weight:bold;margin-bottom:8px;">$word</div>$content';
+
+          if (settings.isTapOnMeaningEnabled) {
+            content = HtmlLookupWrapper.wrapWords(content);
+          }
+
+          if (headword.isNotEmpty) {
+            content = HtmlLookupWrapper.highlightText(
+              content,
+              headword,
+              highlightColor: highlightCol,
+              textColor: 'black',
+            );
+          }
+
+          if (definition.isNotEmpty) {
+            content = HtmlLookupWrapper.underlineText(
+              content,
+              definition,
+              underlineColor: highlightCol,
+            );
+          }
 
           final String uniqueKey = '${offset}_$length';
 
+          resultCount++;
           groupedResults.putIfAbsent(dictId, () => {});
           groupedResults[dictId]!.putIfAbsent(uniqueKey, () => []);
-
           groupedResults[dictId]![uniqueKey]!.add({
             ...result,
             'dict_name': dict['name'],
@@ -225,7 +258,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             'type_sequence': dict['type_sequence'],
           });
         }
-      }
+      }));
+
+      enrichmentWatch.stop();
+      hDebugPrint('--- ENRICHMENT_DONE: ${enrichmentWatch.elapsedMilliseconds}ms ---');
 
       final consolidatedDefs = HomeScreen.consolidateDefinitions(groupedResults);
       
@@ -248,6 +284,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         }
         _isLoading = false;
       });
+      hDebugPrint('--- SEARCH_TOTAL: ${_searchTotalMs}ms (SQLite: ${sqliteMs}ms, Other: ${_searchOtherMs}ms) ---');
     } catch (e) {
       hDebugPrint('Error fetching definitions: $e');
       if (mounted) {
@@ -271,6 +308,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    enableDebugLogs = true; // Enable logging for performance investigation
     _checkDictionaries();
     _cleanHistory();
     _cleanOrphanedFiles();
@@ -707,6 +745,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       int? searchOtherMs,
       int? searchTotalMs,
       int? searchResultCount}) {
+    hDebugPrint('--- BUILD_DEFINITION_CONTENT_START (dict: ${defMap['dict_name']}) ---');
+    final buildWatch = Stopwatch()..start();
     final settings = context.watch<SettingsProvider>();
     final List<String> rawDefinitions = defMap['definitions'];
     final String? format = defMap['format'];
@@ -760,33 +800,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     textAlign: TextAlign.center,
                   );
                 }
-                String rawHtml = rawDefinitions[index];
-                hDebugPrint('--- RAW DEFINITION (Index $index) [$format / ${typeSequence ?? ""}] ---\n$rawHtml\n-------------------');
                 
-                String definitionHtml = rawHtml;
-
-                if (settings.isTapOnMeaningEnabled) {
-                  definitionHtml = HtmlLookupWrapper.wrapWords(definitionHtml);
-                }
-
-                if (highlightHeadword != null && highlightHeadword.isNotEmpty) {
-                  definitionHtml = HtmlLookupWrapper.highlightText(
-                    definitionHtml,
-                    highlightHeadword,
-                    highlightColor: highlightCol,
-                    textColor: 'black',
-                  );
-                }
-
-                if (highlightDefinition != null && highlightDefinition.isNotEmpty) {
-                  definitionHtml = HtmlLookupWrapper.underlineText(
-                    definitionHtml,
-                    highlightDefinition,
-                    underlineColor: highlightCol,
-                  );
-                }
-                
-                hDebugPrint('--- RENDERED HTML (Index $index) ---\n$definitionHtml\n-------------------');
+                // HTML is already pre-processed!
+                final String definitionHtml = rawDefinitions[index];
 
                 return Stack(
                   children: [
