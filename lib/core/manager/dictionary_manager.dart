@@ -641,6 +641,9 @@ class DictionaryManager {
   final DatabaseHelper _dbHelper;
   final http.Client _client;
 
+  static DictionaryManager? _instance;
+  static DictionaryManager get instance => _instance ??= DictionaryManager();
+
   DictionaryManager({DatabaseHelper? dbHelper, http.Client? client})
     : _dbHelper = dbHelper ?? DatabaseHelper(),
       _client = client ?? http.Client();

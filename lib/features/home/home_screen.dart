@@ -1012,57 +1012,91 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     final totalWatch = Stopwatch()..start();
                     final sqliteWatch = Stopwatch()..start();
 
-                    List<Map<String, dynamic>> candidates =
-                        await _dbHelper.searchWords(
+                  // 1. Try exact match first for popups
+                  List<Map<String, dynamic>> candidates =
+                      await _dbHelper.searchWords(
+                    headwordQuery: word,
+                    headwordMode: SearchMode.exact,
+                  );
+
+                  // 2. Fallback to user setting or prefix if exact fails
+                  if (candidates.isEmpty) {
+                    candidates = await _dbHelper.searchWords(
                       headwordQuery: word,
                       headwordMode: settings.headwordSearchMode,
                     );
-                    if (candidates.isEmpty) {
-                      // fallback: longest prefix match
-                      String prefix = word;
-                      while (prefix.length > 2) {
-                        prefix = prefix.substring(0, prefix.length - 1);
-                        candidates = await _dbHelper.searchWords(
-                          headwordQuery: prefix,
-                          headwordMode: SearchMode.prefix,
-                        );
-                        if (candidates.isNotEmpty) break;
-                      }
+                  }
+
+                  // 3. Last fallback: longest prefix match
+                  if (candidates.isEmpty) {
+                    String prefix = word;
+                    while (prefix.length > 2) {
+                      prefix = prefix.substring(0, prefix.length - 1);
+                      candidates = await _dbHelper.searchWords(
+                        headwordQuery: prefix,
+                        headwordMode: SearchMode.prefix,
+                      );
+                      if (candidates.isNotEmpty) break;
                     }
+                  }
 
-                    sqliteWatch.stop();
+                  sqliteWatch.stop();
 
-                    // Group by dictionary, consolidate headwords
-                    final Map<int, Map<String, List<Map<String, dynamic>>>>
-                        groupedResults = {};
-                    int resultCount = 0;
-                    for (final res in candidates) {
-                      final dictId = res['dict_id'] as int;
-                      final wordValue = res['word'] as String;
-                      final dict = await _dbHelper.getDictionaryById(dictId);
-                      if (dict == null || dict['is_enabled'] != 1) continue;
-                      resultCount++;
-                      final content = await _dictManager.fetchDefinition(
-                            dict,
-                            wordValue,
-                            res['offset'] as int,
-                            res['length'] as int,
-                          ) ??
-                          '';
-                      groupedResults.putIfAbsent(dictId, () => {});
-                      groupedResults[dictId]!.putIfAbsent(wordValue, () => []);
-                      groupedResults[dictId]![wordValue]!.add({
-                        ...res,
-                        'dict_name': dict['name'],
-                        'definition': content,
-                        'format': dict['format'],
-                        'type_sequence': dict['type_sequence'],
-                      });
-                    }
-                    totalWatch.stop();
+                  // Parallelize definition fetching and HTML pre-processing
+                  final isDark = ThemeData.estimateBrightnessForColor(
+                          settings.backgroundColor) ==
+                      Brightness.dark;
+                  final highlightColor = isDark ? '#ff9800' : '#ffeb3b';
 
-                    final consolidated =
-                        HomeScreen.consolidateDefinitions(groupedResults);
+                  final results = await Future.wait(candidates.map((res) async {
+                    final dictId = res['dict_id'] as int;
+                    final wordValue = res['word'] as String;
+                    final dict = await _dbHelper.getDictionaryById(dictId);
+                    if (dict == null || dict['is_enabled'] != 1) return null;
+
+                    String content = await _dictManager.fetchDefinition(
+                          dict,
+                          wordValue,
+                          res['offset'] as int,
+                          res['length'] as int,
+                        ) ??
+                        '';
+
+                    // Pre-process HTML here to avoid main thread lag during build
+                    content = HtmlLookupWrapper.processRecord(
+                      html: content,
+                      format: dict['format'] ?? 'stardict',
+                      highlightQuery: word, // Highlighting the word tapped
+                      highlightColor: highlightColor,
+                      wrapWords: settings.isTapOnMeaningEnabled,
+                    );
+
+                    return {
+                      'id': dictId,
+                      'word': wordValue,
+                      'dict_name': dict['name'],
+                      'definition': content,
+                      'format': dict['format'],
+                      'type_sequence': dict['type_sequence'],
+                    };
+                  }));
+
+                  final Map<int, Map<String, List<Map<String, dynamic>>>>
+                      groupedResults = {};
+                  int resultCount = 0;
+                  for (final res in results) {
+                    if (res == null) continue;
+                    resultCount++;
+                    final dictId = res['id'] as int;
+                    final wordValue = res['word'] as String;
+                    groupedResults.putIfAbsent(dictId, () => {});
+                    groupedResults[dictId]!.putIfAbsent(wordValue, () => []);
+                    groupedResults[dictId]![wordValue]!.add(res);
+                  }
+                  totalWatch.stop();
+
+                  final consolidated =
+                      HomeScreen.consolidateDefinitions(groupedResults);
 
                     final timing = {
                       'sqliteMs': sqliteWatch.elapsedMilliseconds,

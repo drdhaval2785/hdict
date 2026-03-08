@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hdict/core/database/database_helper.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
+import 'package:hdict/core/manager/dictionary_manager.dart';
 import 'package:hdict/core/utils/html_lookup_wrapper.dart';
 import 'package:hdict/features/settings/settings_provider.dart';
 import 'package:flutter_html/flutter_html.dart';
@@ -590,19 +591,55 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
             Expanded(
               child: FutureBuilder<List<Map<String, dynamic>>>(
                 future: () async {
-                  final candidates = await _dbHelper.searchWords(headwordQuery: word);
-                  final List<Map<String, dynamic>> defs = [];
-                  for (final res in candidates) {
-                    if (res['word'].toLowerCase() != word.toLowerCase()) continue;
-                    final dict = await _dbHelper.getDictionaryById(res['dict_id']);
-                    if (dict == null) continue;
-                    String dictPath = await _dbHelper.resolvePath(dict['path']);
-                    if (dictPath.endsWith('.ifo')) dictPath = dictPath.replaceAll('.ifo', '.dict');
-                    final reader = DictReader(dictPath, dictId: res['dict_id']);
-                    final content = await reader.readEntry(res['offset'], res['length']);
-                    defs.add({'word': res['word'], 'dict_name': dict['name'], 'definition': content});
+                  final brightness = Theme.of(context).brightness;
+                  final isDark = brightness == Brightness.dark;
+
+                  // 1. Try exact match first
+                  List<Map<String, dynamic>> candidates =
+                      await _dbHelper.searchWords(
+                    headwordQuery: word,
+                    headwordMode: SearchMode.exact,
+                  );
+
+                  // 2. Fallback to prefix if exact fails
+                  if (candidates.isEmpty) {
+                    candidates = await _dbHelper.searchWords(
+                      headwordQuery: word,
+                      headwordMode: SearchMode.prefix,
+                    );
                   }
-                  return defs;
+                  final highlightColor = isDark ? '#ff9800' : '#ffeb3b';
+
+                  // 3. Parallel fetch & pre-process
+                  final results = await Future.wait(candidates.map((res) async {
+                    final dict =
+                        await _dbHelper.getDictionaryById(res['dict_id']);
+                    if (dict == null || dict['is_enabled'] != 1) return null;
+
+                    String content =
+                        await DictionaryManager.instance.fetchDefinition(
+                              dict,
+                              res['word'],
+                              res['offset'],
+                              res['length'],
+                            ) ??
+                            '';
+
+                    content = HtmlLookupWrapper.processRecord(
+                      html: content,
+                      format: dict['format'] ?? 'stardict',
+                      highlightQuery: word, // Highlighting the word tapped
+                      highlightColor: highlightColor,
+                      wrapWords: settings.isTapOnMeaningEnabled,
+                    );
+
+                    return {
+                      'word': res['word'],
+                      'dict_name': dict['name'],
+                      'definition': content,
+                    };
+                  }));
+                  return results.whereType<Map<String, dynamic>>().toList();
                 }(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
@@ -636,16 +673,10 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
     );
   }
 
-  Widget _buildDefinitionContentInPopup(ThemeData theme, Map<String, dynamic> def, {String? highlightQuery}) {
+  Widget _buildDefinitionContentInPopup(ThemeData theme, Map<String, dynamic> def) {
     final settings = context.watch<SettingsProvider>();
-    String definitionHtml = def['definition'];
-    if (settings.isTapOnMeaningEnabled) {
-      definitionHtml = HtmlLookupWrapper.wrapWords(definitionHtml);
-    }
-    if (highlightQuery != null && highlightQuery.isNotEmpty) {
-      final isDark = ThemeData.estimateBrightnessForColor(settings.backgroundColor) == Brightness.dark;
-      definitionHtml = HtmlLookupWrapper.highlightText(definitionHtml, highlightQuery, highlightColor: isDark ? '#ff9800' : '#ffeb3b', textColor: 'black');
-    }
+    // HTML is now pre-processed and cached in the Future result
+    final String definitionHtml = def['definition'];
 
     return Container(
       color: settings.backgroundColor,
