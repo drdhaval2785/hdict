@@ -810,10 +810,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final settings = context.watch<SettingsProvider>();
     final List<Map<String, dynamic>> rawDefinitions = List<Map<String, dynamic>>.from(defMap['definitions']);
     
-    final isDark =
-        ThemeData.estimateBrightnessForColor(settings.backgroundColor) ==
-            Brightness.dark;
-    final highlightCol = isDark ? '#ff9900' : '#ffeb3b';
+    final highlightCol = ThemeData.estimateBrightnessForColor(settings.backgroundColor) == Brightness.dark ? '#ff9900' : '#ffeb3b';
 
     return Container(
       color: settings.backgroundColor,
@@ -1034,9 +1031,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   final enrichmentWatch = HPerf.start('Pop-up_Enrichment');
 
                   // Parallelize definition fetching and HTML pre-processing
-                  final isDark = ThemeData.estimateBrightnessForColor(
-                          settings.backgroundColor) ==
-                       Brightness.dark;
+
 
                   // Fix #2: Pre-fetch unique dicts in one pass to avoid N SQL
                   // queries inside Future.wait (one per result, not per dict).

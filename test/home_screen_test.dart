@@ -7,13 +7,13 @@ void main() {
       final grouped = <int, Map<String, List<Map<String, dynamic>>>>{
         1: {
           'alpha': [
-            {'word': 'alpha', 'dict_name': 'A', 'definition': 'def1'},
+            {'word': 'alpha', 'dict_name': 'A', 'raw_content': 'def1'},
           ],
           'beta': [
-            {'word': 'beta', 'dict_name': 'A', 'definition': 'def1'},
+            {'word': 'beta', 'dict_name': 'A', 'raw_content': 'def1'},
           ],
           'gamma': [
-            {'word': 'gamma', 'dict_name': 'A', 'definition': 'def2'},
+            {'word': 'gamma', 'dict_name': 'A', 'raw_content': 'def2'},
           ],
         },
       };
@@ -27,21 +27,17 @@ void main() {
       expect(dict1['word'], 'alpha | beta | gamma');
       expect(dict1['dict_name'], 'A');
       
-      final defHtmlList = dict1['definitions'] as List<String>;
-      final defHtml = defHtmlList.join('<hr>');
+      final definitionsList = dict1['definitions'] as List<Map<String, dynamic>>;
+      expect(definitionsList.length, 3);
       
       // Each headword should have its own heading now, not merged
-      expect(defHtml, contains('<div class="headword" style="font-weight:bold;margin-bottom:8px;">alpha</div>'));
-      expect(defHtml, contains('<div class="headword" style="font-weight:bold;margin-bottom:8px;">beta</div>'));
-      expect(defHtml, contains('<div class="headword" style="font-weight:bold;margin-bottom:8px;">gamma</div>'));
+      expect(definitionsList[0]['headwordHtml'], contains('>alpha</div>'));
+      expect(definitionsList[1]['headwordHtml'], contains('>beta</div>'));
+      expect(definitionsList[2]['headwordHtml'], contains('>gamma</div>'));
       
       // Definitions should be present
-      expect(defHtml, contains('def1'));
-      expect(defHtml, contains('def2'));
-      
-      // Separators should exist between the 3 entries (there are 2 elements added by join + possibly internal hr if there were duplicates, but we only have 3 list elements so 2 hr's)
-      final hrCount = RegExp('<hr').allMatches(defHtml).length;
-      expect(hrCount, 2);
+      expect(definitionsList[0]['rawContent'], contains('def1'));
+      expect(definitionsList[2]['rawContent'], contains('def2'));
     });
   });
 }
