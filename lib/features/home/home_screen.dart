@@ -62,37 +62,20 @@ Future<List<_ProcessedResult>> _processHtmlInIsolate(_ProcessHtmlArgs args) asyn
   for (final entry in args.entries) {
     String content = entry.content;
     
-    // Normalize whitespace
-    content = HomeScreen.normalizeWhitespace(
-      content, 
-      format: entry.format, 
-      typeSequence: entry.typeSequence
+    // Unified pass for performance: normalization, wrapping, highlighting, and underlining
+    content = HtmlLookupWrapper.processRecord(
+      html: content,
+      format: entry.format,
+      typeSequence: entry.typeSequence,
+      wrapWords: args.isTapOnMeaningEnabled,
+      highlightQuery: args.headword,
+      underlineQuery: args.definition,
+      highlightColor: args.highlightCol,
     );
     
-    // Headword header inside definition
+    // Add headword header (staying as is for structure)
     content = '<div class="headword" style="font-weight:bold;margin-bottom:8px;">${entry.word}</div>$content';
 
-    if (args.isTapOnMeaningEnabled) {
-      content = HtmlLookupWrapper.wrapWords(content);
-    }
-
-    if (args.headword.isNotEmpty) {
-      content = HtmlLookupWrapper.highlightText(
-        content,
-        args.headword,
-        highlightColor: args.highlightCol,
-        textColor: 'black',
-      );
-    }
-
-    if (args.definition.isNotEmpty) {
-      content = HtmlLookupWrapper.underlineText(
-        content,
-        args.definition,
-        underlineColor: args.highlightCol,
-      );
-    }
-    
     results.add(_ProcessedResult(entry.index, content));
   }
   

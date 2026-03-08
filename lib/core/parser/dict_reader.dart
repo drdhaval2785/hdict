@@ -2,13 +2,13 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io';
 import 'dart:convert';
 import 'package:hdict/core/database/database_helper.dart';
-import 'package:dictzip_reader/dictzip_reader.dart';
+import 'package:hdict/core/parser/dictzip_local_reader.dart';
 import 'package:path/path.dart' as p;
 
 /// Reads definitions from a StarDict .dict or .dict.dz file at specified offsets and lengths.
 ///
 /// For plain `.dict` files, uses a [RandomAccessFile] for direct byte reads.
-/// For `.dict.dz` files, delegates to [DictzipReader] which performs
+/// For `.dict.dz` files, delegates to [DictzipLocalReader] which performs
 /// chunk-based random access without decompressing the file to disk.
 class DictReader {
   final File? file;
@@ -18,7 +18,7 @@ class DictReader {
   DictReader(this.path, {this.dictId}) : file = kIsWeb ? null : File(path);
 
   RandomAccessFile? _raf;
-  DictzipReader? _dzReader;
+  DictzipLocalReader? _dzReader;
 
   bool get _isDz => path.toLowerCase().endsWith('.dz');
 
@@ -26,7 +26,7 @@ class DictReader {
   Future<void> open() async {
     if (kIsWeb) return; // No-op on web
     if (_isDz) {
-      _dzReader = DictzipReader(path);
+      _dzReader = DictzipLocalReader(path);
       await _dzReader!.open();
     } else {
       _raf = await file!.open(mode: FileMode.read);

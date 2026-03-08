@@ -17,6 +17,9 @@ class DatabaseHelper {
   /// Set during [_onOpen]; null means not yet determined.
   static bool? _fts5Available;
   
+  /// Cached app documents directory to avoid redundant platform channel calls.
+  static Directory? _appDocDir;
+
   /// Whether the user just upgraded from version 16 and needs a notice.
   static bool needsMigrationAlert = false;
 
@@ -96,7 +99,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 22, // Version 22: Added COLLATE NOCASE to word_metadata.word
+      version: 23, // Version 23: Added idx_metadata_dict_word composite index
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onOpen: _onOpen,
@@ -163,6 +166,7 @@ class DatabaseHelper {
         ''');
         await db.execute('CREATE INDEX IF NOT EXISTS idx_metadata_dict_id ON word_metadata(dict_id)');
         await db.execute('CREATE INDEX IF NOT EXISTS idx_metadata_word ON word_metadata(word)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_metadata_dict_word ON word_metadata(dict_id, word COLLATE NOCASE)');
 
         await db.execute('''
           CREATE VIRTUAL TABLE word_index USING fts5(
@@ -528,6 +532,17 @@ class DatabaseHelper {
         hDebugPrint('Migration error (version 22): $e');
       }
     }
+
+    if (oldVersion < 23) {
+      try {
+        hDebugPrint('Migration to version 23: Adding composite index for search speed');
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_metadata_dict_word ON word_metadata(dict_id, word COLLATE NOCASE)',
+        );
+      } catch (e) {
+        hDebugPrint('Migration error (version 23): $e');
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -572,8 +587,8 @@ class DatabaseHelper {
       relativePart = storedPath;
     }
 
-    final appDocDir = await getApplicationDocumentsDirectory();
-    return join(appDocDir.path, relativePart);
+    _appDocDir ??= await getApplicationDocumentsDirectory();
+    return join(_appDocDir!.path, relativePart);
   }
 
   // --- Virtual Filesystem Methods ---
@@ -999,6 +1014,18 @@ class DatabaseHelper {
   }) async {
     try {
       final db = await database;
+
+      // OPTIMIZATION: If this is a simple headword search (no multi-dictionary definition search),
+      // we can iterate through dictionaries sequentially to avoid the expensive cross-table SQLite sort.
+      if (definitionQuery == null && (headwordMode == SearchMode.prefix || headwordMode == SearchMode.exact)) {
+        return _searchWordsSequential(
+          headwordQuery: headwordQuery,
+          headwordMode: headwordMode,
+          dictId: dictId,
+          limit: limit,
+        );
+      }
+
       final List<String> whereClauses = [];
       final List<Object?> whereArgs = [];
       bool needsFts5Join = false; // only JOIN word_index when MATCH is used
@@ -1137,6 +1164,59 @@ class DatabaseHelper {
     }
   }
 
+  /// Sequential dictionary search to leverage indexing and avoid global sorts.
+  Future<List<Map<String, dynamic>>> _searchWordsSequential({
+    String? headwordQuery,
+    required SearchMode headwordMode,
+    int? dictId,
+    required int limit,
+  }) async {
+    final db = await database;
+    final String hq = headwordQuery?.trim() ?? '';
+    if (hq.isEmpty) return [];
+
+    // 1. Get enabled dictionaries in order
+    final List<Map<String, dynamic>> dicts;
+    if (dictId != null) {
+      final d = await getDictionaryById(dictId);
+      dicts = d != null ? [d] : [];
+    } else {
+      dicts = await getDictionaries();
+    }
+
+    final List<Map<String, dynamic>> finalResults = [];
+    final String likePattern = headwordMode == SearchMode.prefix ? '$hq%' : hq;
+    final String operator = headwordMode == SearchMode.prefix ? 'LIKE' : '=';
+
+    // 2. Query each dictionary
+    // Because we have idx_metadata_dict_word(dict_id, word), 
+    // SQLite can satisfy the WHERE and the ORDER BY word ASC entirely from the index.
+    for (final dict in dicts) {
+      if (dict['is_enabled'] != 1) continue;
+      
+      final int currentLimit = limit - finalResults.length;
+      if (currentLimit <= 0) break;
+
+      final results = await db.query(
+        'word_metadata',
+        columns: ['word', 'dict_id', 'offset', 'length'],
+        where: 'dict_id = ? AND word $operator ?',
+        whereArgs: [dict['id'], likePattern],
+        orderBy: 'word ASC',
+        limit: currentLimit,
+      );
+
+      finalResults.addAll(results);
+    }
+
+    // 3. Optional: Move exact matches to the top of the combined result set 
+    // if the user expects "apple" to be first even if it's not the first dict.
+    // However, original logic sorts by dict_id first.
+    
+    _log('SEQUENTIAL_QUERY (Headword Only)', 'Iterated ${dicts.length} dicts', [likePattern, limit], finalResults);
+    return finalResults;
+  }
+
   Future<List<String>> getPrefixSuggestions(
     String prefix, {
     int limit = 10,
@@ -1144,40 +1224,52 @@ class DatabaseHelper {
   }) async {
     try {
       final db = await database;
-      // prefix may have quotes, clean them for both branch logic
+      // prefix may have quotes, clean them
       final String cleanPrefix = prefix.replaceAll(RegExp(r'["*\(\)]'), '').trim();
       final bool useFts5 = _fts5Available ?? true;
       final String fallbackTable = useFts5 ? 'word_metadata' : 'word_index';
 
-      if (fuzzy || !useFts5 || cleanPrefix.contains(' ')) {
-        // Use LIKE for fuzzy mode, missing FTS5, or multiple words
-        // Multiple words via FTS5 prefix match could trigger unsupported phrase queries.
-        final String sql = '''
-          SELECT DISTINCT word 
-          FROM $fallbackTable 
-          WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
-          AND word LIKE ?
-          ORDER BY word ASC
-          LIMIT ?
-        ''';
-        final results = await db.rawQuery(sql, ['%$cleanPrefix%', limit]);
-        _log('RAW_QUERY (Suggest Fuzzy/NoFTS5/Multi)', sql, ['%$cleanPrefix%', limit], results);
-        return results.map((r) => r['word'] as String).toList();
-      } else {
-        final String prefixMatchQuery = '$cleanPrefix*';
-        final String sql = '''
-          SELECT DISTINCT m.word 
-          FROM word_metadata m
-          JOIN word_index i ON m.id = i.rowid
-          WHERE m.dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
-          AND i.word MATCH ?
-          ORDER BY m.word ASC
-          LIMIT ?
-        ''';
-        final results = await db.rawQuery(sql, [prefixMatchQuery, limit]);
-        _log('RAW_QUERY (Suggest Prefix)', sql, [prefixMatchQuery, limit], results);
-        return results.map((r) => r['word'] as String).toList();
+      // Use sequential search for standard prefix suggestions to leverage idx_metadata_dict_word
+      if (!fuzzy && !cleanPrefix.contains(' ')) {
+        final List<Map<String, dynamic>> dicts = await getDictionaries();
+        final List<String> suggestions = [];
+        
+        for (final dict in dicts) {
+          if (dict['is_enabled'] != 1) continue;
+          
+          final int currentLimit = limit - suggestions.length;
+          if (currentLimit <= 0) break;
+
+          final results = await db.query(
+            'word_metadata',
+            columns: ['word'],
+            where: 'dict_id = ? AND word LIKE ?',
+            whereArgs: [dict['id'], '$cleanPrefix%'],
+            orderBy: 'word ASC',
+            limit: currentLimit,
+          );
+          
+          for (var r in results) {
+            String w = r['word'] as String;
+            if (!suggestions.contains(w)) suggestions.add(w);
+          }
+        }
+        _log('SEQUENTIAL_SUGGEST (Prefix)', 'Iterated ${dicts.length} dicts', [cleanPrefix, limit], suggestions);
+        return suggestions;
       }
+
+      // Fallback for fuzzy/multi-word/no-FTS suggestions
+      final String sql = '''
+        SELECT DISTINCT word 
+        FROM $fallbackTable 
+        WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
+        AND word LIKE ?
+        ORDER BY word ASC
+        LIMIT ?
+      ''';
+      final results = await db.rawQuery(sql, [fuzzy ? '%$cleanPrefix%' : '$cleanPrefix%', limit]);
+      _log('RAW_QUERY (Suggest Fallback)', sql, [cleanPrefix, limit], results);
+      return results.map((r) => r['word'] as String).toList();
     } catch (e) {
       hDebugPrint('Error getting prefix suggestions: $e');
       return [];
