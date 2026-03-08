@@ -288,18 +288,25 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       final List<_EntryToProcess> entriesToProcess = [];
       final List<Map<String, dynamic>> resultsMetadata = [];
       
-      hDebugPrint('--- ENRICHMENT_START (Parallel Fetch) ---');
       final enrichmentWatch = Stopwatch()..start();
 
       final isDark = ThemeData.estimateBrightnessForColor(settings.backgroundColor) == Brightness.dark;
       final highlightCol = isDark ? '#ff9900' : '#ffeb3b';
+
+      // Pre-fetch unique dictionaries to avoid repeated SQL queries in the loop
+      final uniqueDictIds = results.map((r) => r['dict_id'] as int).toSet();
+      final Map<int, Map<String, dynamic>> dictCache = {};
+      for (final id in uniqueDictIds) {
+        final dict = await _dbHelper.getDictionaryById(id);
+        if (dict != null) dictCache[id] = dict;
+      }
 
       // Phase 1: Parallel definition fetching (IO bound, on main thread due to readers)
       await Future.wait(results.asMap().entries.map((entry) async {
         final index = entry.key;
         final result = entry.value;
         final dictId = result['dict_id'] as int;
-        final dict = await _dbHelper.getDictionaryById(dictId);
+        final dict = dictCache[dictId];
         
         if (dict != null && dict['is_enabled'] == 1) {
           final word = result['word'] as String;
@@ -324,9 +331,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           });
         }
       }));
-
-      final fetchMs = enrichmentWatch.elapsedMilliseconds;
-      hDebugPrint('--- FETCH_DONE: ${fetchMs}ms ---');
 
       // Phase 2: Isolate-based HTML processing (CPU bound)
       if (entriesToProcess.isNotEmpty) {
@@ -364,7 +368,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         }
 
         enrichmentWatch.stop();
-        hDebugPrint('--- ENRICHMENT_DONE: ${enrichmentWatch.elapsedMilliseconds}ms (Fetch: ${fetchMs}ms, Isolate: ${enrichmentWatch.elapsedMilliseconds - fetchMs}ms) ---');
+        hDebugPrint('--- SEARCH_ENRICHMENT_DONE: ${enrichmentWatch.elapsedMilliseconds}ms ---');
 
         final consolidatedDefs = HomeScreen.consolidateDefinitions(finalGrouped);
         
@@ -856,7 +860,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       int? searchOtherMs,
       int? searchTotalMs,
       int? searchResultCount}) {
-    hDebugPrint('--- BUILD_DEFINITION_CONTENT_START (dict: ${defMap['dict_name']}) ---');
     final settings = context.watch<SettingsProvider>();
     final List<String> rawDefinitions = defMap['definitions'];
     
