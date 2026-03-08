@@ -16,11 +16,15 @@ class HtmlLookupWrapper {
   }) {
     if (html.isEmpty) return '';
 
-    final highlightReg = (highlightQuery != null && highlightQuery.isNotEmpty)
+    // Optimization: Pre-compile only if needed
+    final bool hasHighlight = highlightQuery != null && highlightQuery.isNotEmpty;
+    final bool hasUnderline = underlineQuery != null && underlineQuery.isNotEmpty;
+    
+    final highlightReg = hasHighlight
         ? RegExp('(\\b${RegExp.escape(highlightQuery)}[\\w]*)', caseSensitive: false, unicode: true)
         : null;
 
-    final underlineReg = (underlineQuery != null && underlineQuery.isNotEmpty)
+    final underlineReg = hasUnderline
         ? RegExp(RegExp.escape(underlineQuery), caseSensitive: false)
         : null;
 
@@ -49,33 +53,49 @@ class HtmlLookupWrapper {
         String text = part;
         
         if (!isStardict) {
-          // Normalize newlines to \n
-          text = text.replaceAll('\r\n', '\n');
-          
-          // Collapse multiple non-newline spaces, but preserve newlines
-          text = text.replaceAllMapped(RegExp(r' [ ]+'), (m) => ' ');
+          // Fast path for normalization if no multi-spaces or \r
+          if (text.contains('\r') || text.contains('  ')) {
+            text = text.replaceAll('\r\n', '\n').replaceAll(RegExp(r' [ ]+'), ' ');
+          }
         }
 
-        if (wrapWords && !inAnchor && text.trim().isNotEmpty && text.length < 10000) {
+        // Optimization: Combining word wrapping and highlighting safely
+        if (wrapWords && !inAnchor && text.trim().isNotEmpty && text.length < 20000) {
+          // If we have highlights, we must handle them during wrapping to avoid breaking tags
           text = text.replaceAllMapped(_wordRegExp, (m) {
             final word = m.group(1)!;
+            String content = word;
+
+            if (highlightReg != null && highlightReg.hasMatch(word)) {
+              content = highlightReg.allMatches(word).fold(word, (prev, m) =>
+                prev.replaceRange(m.start, m.end, '<mark>${m.group(1)}</mark>'));
+            } else if (underlineReg != null && underlineReg.hasMatch(word)) {
+              content = underlineReg.allMatches(word).fold(word, (prev, m) =>
+                prev.replaceRange(m.start, m.end, '<mark>${m.group(0)}</mark>'));
+            }
+
             final encoded = (word.contains('%') || word.contains(' ') || word.contains('?')) 
                 ? Uri.encodeComponent(word) 
                 : word;
-            return '<a href="look_up:$encoded" class="dict-word">$word</a>';
+            
+            return '<a href="look_up:$encoded" class="dict-word">$content</a>';
           });
+        } else {
+          // No wrapping, just highlight/underline
+          if (highlightReg != null) {
+            text = text.replaceAllMapped(highlightReg, (m) => '<mark>${m.group(1)!}</mark>');
+          }
+          if (underlineReg != null) {
+            text = text.replaceAllMapped(underlineReg, (m) => '<mark>${m.group(0)!}</mark>');
+          }
         }
 
-        if (highlightReg != null) {
-          text = text.replaceAllMapped(highlightReg, (m) => '<mark>${m.group(1)!}</mark>');
+        // Convert \n to <br> as the last step
+        if (text.contains('\n')) {
+          buffer.write(text.replaceAll('\n', '<br>'));
+        } else {
+          buffer.write(text);
         }
-
-        if (underlineReg != null) {
-          text = text.replaceAllMapped(underlineReg, (m) => '<mark>${m.group(0)!}</mark>');
-        }
-
-        // Convert \n to <br> as the last step for this text block
-        buffer.write(text.replaceAll('\n', '<br>'));
       }
     }
 

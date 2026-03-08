@@ -219,6 +219,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _searchTotalMs = 0;
   int _searchResultCount = 0;
 
+  // Fix #5: Cache the dictionaries future so FutureBuilder doesn't fire a new
+  // SQL query on every widget rebuild (keyboard, theme, settings changes, etc.).
+  late Future<List<Map<String, dynamic>>> _dictionariesFuture;
+
   @override
   void dispose() {
     _headwordController.dispose();
@@ -326,17 +330,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           highlightCol: highlightCol,
         ));
 
-        // Simplified mapping back
+        // Fix #3: O(1) Map lookups instead of O(N²) nested firstWhere.
+        // Build lookup maps once before the loop.
+        final processedByIndex = <int, _ProcessedResult>{
+          for (final r in isolateResults) r.index: r,
+        };
+        final metaByKey = <String, Map<String, dynamic>>{};
+        for (final m in resultsMetadata) {
+          final k = '${m['offset']}_${m['length']}_${m['dict_id']}';
+          metaByKey[k] = m;
+        }
 
         final Map<int, Map<String, List<Map<String, dynamic>>>> finalGrouped = {};
         int finalResultCount = 0;
 
         for (final entry in entriesToProcess) {
-          final processed = isolateResults.firstWhere((r) => r.index == entry.index);
-          final meta = resultsMetadata.firstWhere((m) {
-             final originalMatch = results[entry.index];
-             return m['offset'] == originalMatch['offset'] && m['length'] == originalMatch['length'] && m['dict_id'] == originalMatch['dict_id'];
-          });
+          final processed = processedByIndex[entry.index];
+          if (processed == null) continue;
+          final original = results[entry.index];
+          final metaKey = '${original['offset']}_${original['length']}_${original['dict_id']}';
+          final meta = metaByKey[metaKey];
+          if (meta == null) continue;
 
           final dictId = meta['dict_id'] as int;
           final String uniqueKey = '${meta['offset']}_${meta['length']}';
@@ -407,6 +421,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     enableDebugLogs = true; // Enable logging for performance investigation
+    _dictionariesFuture = _dbHelper.getDictionaries();
     _checkDictionaries();
     _cleanHistory();
     _cleanOrphanedFiles();
@@ -742,7 +757,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildDefaultContent(ThemeData theme) {
     return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _dbHelper.getDictionaries(),
+      future: _dictionariesFuture, // Fix #5: use cached future
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.data!.isEmpty) return const SizedBox.shrink();
         return ListView(
@@ -1048,10 +1063,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       Brightness.dark;
                   final highlightColor = isDark ? '#ff9800' : '#ffeb3b';
 
+                  // Fix #2: Pre-fetch unique dicts in one pass to avoid N SQL
+                  // queries inside Future.wait (one per result, not per dict).
+                  final uniquePopupDictIds =
+                      candidates.map((r) => r['dict_id'] as int).toSet();
+                  final Map<int, Map<String, dynamic>> popupDictCache = {};
+                  for (final id in uniquePopupDictIds) {
+                    final d = await _dbHelper.getDictionaryById(id);
+                    if (d != null) popupDictCache[id] = d;
+                  }
+
                   final results = await Future.wait(candidates.map((res) async {
                     final dictId = res['dict_id'] as int;
                     final wordValue = res['word'] as String;
-                    final dict = await _dbHelper.getDictionaryById(dictId);
+                    final dict = popupDictCache[dictId];
                     if (dict == null || dict['is_enabled'] != 1) return null;
 
                     String content = await _dictManager.fetchDefinition(
