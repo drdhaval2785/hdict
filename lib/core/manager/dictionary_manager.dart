@@ -167,58 +167,70 @@ Future<void> _indexEntry(_IndexArgs args) async {
     final dictReader = DictReader(args.dictPath);
     await dictReader.open();
 
-    List<Map<String, dynamic>> batch = [];
     List<({int offset, int length, String content})> wordOffsets = [];
+
+    final List<Map<String, dynamic>> entriesList = [];
+    await for (final entry in stream) {
+      entriesList.add(entry);
+    }
+
     int headwordCount = 0;
     int defWordCount = 0;
+    const int readBatchSize = 100;
+    const int dbBatchSize = 2000;
+    List<Map<String, dynamic>> dbBatch = [];
 
-    await for (final entry in stream) {
-      final String word = entry['word'];
-      final offset = entry['offset'] as int;
-      final length = entry['length'] as int;
-      final content =
-          args.indexDefinitions ? await dictReader.readAtIndex(offset, length) : '';
+    for (int i = 0; i < entriesList.length; i += readBatchSize) {
+      final end = (i + readBatchSize < entriesList.length) ? i + readBatchSize : entriesList.length;
+      final currentBatch = entriesList.sublist(i, end);
+      
+      final List<({int offset, int length})> readEntries = currentBatch.map((e) => (
+        offset: e['offset'] as int,
+        length: e['length'] as int,
+      )).toList();
 
-      // Track offset+length for every headword so .syn synonyms can
-      // resolve back to the correct definition position.
-      wordOffsets.add((offset: offset, length: length, content: content));
+      final List<String> contents = args.indexDefinitions 
+          ? await dictReader.readBulk(readEntries) 
+          : List.filled(currentBatch.length, '');
 
-      batch.add({
-        'word': word,
-        'content': content,
-        'dict_id': args.dictId,
-        'offset': offset,
-        'length': length,
-      });
+      for (int j = 0; j < currentBatch.length; j++) {
+        final entry = currentBatch[j];
+        final content = contents[j];
+        final word = entry['word'] as String;
+        final offset = entry['offset'] as int;
+        final length = entry['length'] as int;
 
-      headwordCount++;
-      if (content.isNotEmpty) {
-        defWordCount += content
-            .split(RegExp(r'\s+'))
-            .where((s) => s.isNotEmpty)
-            .length;
-      }
+        wordOffsets.add((offset: offset, length: length, content: content));
 
-      if (batch.length >= 2000) {
-        await dbHelper.batchInsertWords(args.dictId, batch);
-        batch.clear();
-        sendPort.send(
-          ImportProgress(
+        dbBatch.add({
+          'word': word,
+          'content': content,
+          'dict_id': args.dictId,
+          'offset': offset,
+          'length': length,
+        });
+
+        headwordCount++;
+        if (content.isNotEmpty) {
+          defWordCount += content.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
+        }
+
+        if (dbBatch.length >= dbBatchSize) {
+          await dbHelper.batchInsertWords(args.dictId, dbBatch);
+          dbBatch.clear();
+          sendPort.send(ImportProgress(
             message: '${args.ifoParser.bookName}: $headwordCount headwords, $defWordCount words in definition',
-            value: 0.85 +
-                (headwordCount /
-                        (args.ifoParser.wordCount == 0
-                            ? 100000
-                            : args.ifoParser.wordCount) *
-                        0.05),
+            value: 0.85 + (headwordCount / (args.ifoParser.wordCount == 0 ? 100000 : args.ifoParser.wordCount) * 0.05),
             headwordCount: headwordCount,
             definitionWordCount: defWordCount,
             dictionaryName: args.ifoParser.bookName,
-          ),
-        );
+          ));
+        }
       }
     }
-    if (batch.isNotEmpty) await dbHelper.batchInsertWords(args.dictId, batch);
+    if (dbBatch.isNotEmpty) await dbHelper.batchInsertWords(args.dictId, dbBatch);
+    // Removed redundant batch check here as it was from previous Turn and likely duplicated or superseded by dbBatch logic
+
 
     if (args.synPath != null) {
       final synParser = SynParser();
@@ -357,41 +369,75 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
     final reader = SlobReader(args.slobPath);
     await reader.open();
 
-    List<Map<String, dynamic>> batch = [];
     int headwordCount = 0;
     int defWordCount = 0;
     final totalBlobs = reader.blobCount;
+    const int readBatchSize = 100;
+    const int dbBatchSize = 2000;
+    List<Map<String, dynamic>> dbBatch = [];
 
-    await for (final blob in reader.blobs) {
-      final content = utf8.decode(blob.content, allowMalformed: true);
+    // Slob indexing is usually by iterating all blobs
+    // We can fetch blobs in batches for efficiency
+    for (int i = 0; i < totalBlobs; i += readBatchSize) {
+      final end = (i + readBatchSize < totalBlobs) ? i + readBatchSize : totalBlobs;
       
-      batch.add({
-        'word': blob.key,
-        'content': args.indexDefinitions ? content : '',
-        'dict_id': args.dictId,
-        'offset': blob.id,
-        'length': blob.content.length,
-      });
-
-      headwordCount++;
-      if (content.isNotEmpty) {
-        defWordCount += content.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
+      // Unfortunately slob_reader getBlobs might only support List<(int, int)> i.e. (binIndex, itemIndex)
+      // If we want to iterate sequentially, we might need a different approach or just use getBlob
+      // But user said getBlobs is available. Let's assume it works with global indices or we use bin/item.
+      // Actually SlobReader.blobs was yielding lib.SlobBlob.
+      // Let's use getBlobs with binIndex/itemIndex if possible.
+      
+      // For now, let's stick to the most efficient batching we can do.
+      // If slob_reader v0.1.3 has getBlobs(List<(int, int)>), we need those pairs.
+      
+      // Wait, let's look at SlobReader.blobs again. It yields one by one.
+      // Let's optimize _indexSlobEntry by reading in batches.
+      
+      final List<SlobBlob> blobs = [];
+      for (int j = i; j < end; j++) {
+        final b = await reader.getBlob(j);
+        if (b != null) {
+          blobs.add(b);
+        }
       }
+      
+      final List<int> ids = blobs.map((b) => b.id).toList();
+      final List<String> contents = args.indexDefinitions 
+          ? await reader.getBlobsContentByIds(ids)
+          : List.filled(blobs.length, '');
 
-      if (batch.length >= 2000) {
-        await dbHelper.batchInsertWords(args.dictId, batch);
-        batch.clear();
-        sendPort.send(ImportProgress(
-          message: '${args.bookName}: $headwordCount headwords, $defWordCount words in definition',
-          value: 0.45 + (headwordCount / (totalBlobs == 0 ? 1 : totalBlobs)) * 0.45,
-          headwordCount: headwordCount,
-          definitionWordCount: defWordCount,
-          dictionaryName: args.bookName,
-        ));
+      for (int j = 0; j < blobs.length; j++) {
+        final blob = blobs[j];
+        final content = contents[j];
+        
+        dbBatch.add({
+          'word': blob.key,
+          'content': args.indexDefinitions ? content : '',
+          'dict_id': args.dictId,
+          'offset': blob.id,
+          'length': blob.content.length,
+        });
+
+        headwordCount++;
+        if (content.isNotEmpty) {
+          defWordCount += content.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
+        }
+
+        if (dbBatch.length >= dbBatchSize) {
+          await dbHelper.batchInsertWords(args.dictId, dbBatch);
+          dbBatch.clear();
+          sendPort.send(ImportProgress(
+            message: '${args.bookName}: $headwordCount headwords, $defWordCount words in definition',
+            value: 0.45 + (headwordCount / (totalBlobs == 0 ? 1 : totalBlobs)) * 0.45,
+            headwordCount: headwordCount,
+            definitionWordCount: defWordCount,
+            dictionaryName: args.bookName,
+          ));
+        }
       }
     }
 
-    if (batch.isNotEmpty) await dbHelper.batchInsertWords(args.dictId, batch);
+    if (dbBatch.isNotEmpty) await dbHelper.batchInsertWords(args.dictId, dbBatch);
     await reader.close();
     await dbHelper.updateDictionaryWordCount(args.dictId, headwordCount, defWordCount);
 
@@ -427,47 +473,65 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
     await dictdReader.open();
     final indexStream = dictdParser.parseIndex(args.indexPath);
 
-    List<Map<String, dynamic>> batch = [];
+    final List<Map<String, dynamic>> entriesList = [];
+    await for (final entry in indexStream) {
+      entriesList.add(entry);
+    }
+
     int headwordCount = 0;
     int defWordCount = 0;
+    const int readBatchSize = 100;
+    const int dbBatchSize = 2000;
+    List<Map<String, dynamic>> dbBatch = [];
 
-    await for (final entry in indexStream) {
-      final word = entry['word'] as String;
-      final offset = entry['offset'] as int;
-      final length = entry['length'] as int;
+    for (int i = 0; i < entriesList.length; i += readBatchSize) {
+      final end = (i + readBatchSize < entriesList.length) ? i + readBatchSize : entriesList.length;
+      final currentBatch = entriesList.sublist(i, end);
 
-      String content = '';
-      if (args.indexDefinitions) {
-        content = await dictdReader.readAtOffset(offset, length);
-      }
+      final List<({int offset, int length})> readEntries = currentBatch.map((e) => (
+        offset: e['offset'] as int,
+        length: e['length'] as int,
+      )).toList();
 
-      batch.add({
-        'word': word,
-        'content': content,
-        'dict_id': args.dictId,
-        'offset': offset,
-        'length': length,
-      });
-      headwordCount++;
+      final List<String> contents = args.indexDefinitions 
+          ? await dictdReader.readEntries(readEntries)
+          : List.filled(currentBatch.length, '');
 
-      if (content.isNotEmpty) {
-        defWordCount += content.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
-      }
+      for (int j = 0; j < currentBatch.length; j++) {
+        final entry = currentBatch[j];
+        final content = contents[j];
+        final word = entry['word'] as String;
+        final offset = entry['offset'] as int;
+        final length = entry['length'] as int;
 
-      if (batch.length >= 2000) {
-        await dbHelper.batchInsertWords(args.dictId, batch);
-        batch.clear();
-        sendPort.send(ImportProgress(
-          message: '${args.bookName}: $headwordCount headwords, $defWordCount words in definition',
-          value: 0.45 + (headwordCount / 100000) * 0.45,
-          headwordCount: headwordCount,
-          definitionWordCount: defWordCount,
-          dictionaryName: args.bookName,
-        ));
+        dbBatch.add({
+          'word': word,
+          'content': content,
+          'dict_id': args.dictId,
+          'offset': offset,
+          'length': length,
+        });
+        headwordCount++;
+
+        if (content.isNotEmpty) {
+          defWordCount += content.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
+        }
+
+        if (dbBatch.length >= dbBatchSize) {
+          await dbHelper.batchInsertWords(args.dictId, dbBatch);
+          dbBatch.clear();
+          sendPort.send(ImportProgress(
+            message: '${args.bookName}: $headwordCount headwords, $defWordCount words in definition',
+            value: 0.45 + (headwordCount / 100000) * 0.45,
+            headwordCount: headwordCount,
+            definitionWordCount: defWordCount,
+            dictionaryName: args.bookName,
+          ));
+        }
       }
     }
 
-    if (batch.isNotEmpty) await dbHelper.batchInsertWords(args.dictId, batch);
+    if (dbBatch.isNotEmpty) await dbHelper.batchInsertWords(args.dictId, dbBatch);
     await dictdReader.close();
     await dbHelper.updateDictionaryWordCount(args.dictId, headwordCount, defWordCount);
 

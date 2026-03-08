@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io';
 import 'dart:convert';
 import 'package:hdict/core/database/database_helper.dart';
-import 'package:hdict/core/parser/dictzip_local_reader.dart';
+import 'package:dictzip_reader/dictzip_reader.dart';
 import 'package:path/path.dart' as p;
 
 /// Reads definitions from a StarDict .dict or .dict.dz file at specified offsets and lengths.
@@ -21,7 +21,7 @@ class DictReader {
 
   DictReader(this.path, {this.dictId}) : file = kIsWeb ? null : File(path);
 
-  DictzipLocalReader? _dzReader;
+  DictzipReader? _dzReader;
 
   /// True for .dict.dz files; false for plain .dict.
   /// Exposed so callers can decide whether locking is needed.
@@ -33,7 +33,7 @@ class DictReader {
   Future<void> open() async {
     if (kIsWeb) return;
     if (isDz) {
-      _dzReader = DictzipLocalReader(path);
+      _dzReader = DictzipReader(path);
       await _dzReader!.open();
     }
     // Plain .dict: nothing to open — readAtIndex uses File.openRead per call.
@@ -65,6 +65,30 @@ class DictReader {
         .openRead(offset, offset + length)
         .fold<List<int>>([], (buf, chunk) => buf..addAll(chunk));
     return utf8.decode(bytes, allowMalformed: true);
+  }
+
+  /// Reads multiple definitions at the given offsets and lengths.
+  Future<List<String>> readBulk(List<({int offset, int length})> entries) async {
+    if (kIsWeb) {
+      // For Web, we can still do it sequentially or optimize DatabaseHelper if needed,
+      // but for now, let's keep it simple for the wrapper.
+      final List<String> results = [];
+      for (final entry in entries) {
+        results.add(await readAtIndex(entry.offset, entry.length));
+      }
+      return results;
+    }
+
+    if (isDz) {
+      if (_dzReader == null) await open();
+      final dzEntries = entries.map((e) => (e.offset, e.length)).toList();
+      final results = await _dzReader!.readBulk(dzEntries);
+      return results;
+    }
+
+    // For plain .dict, we can run them in parallel since File.openRead is stateless.
+    final futures = entries.map((e) => readAtIndex(e.offset, e.length));
+    return await Future.wait(futures);
   }
 
   /// Closes the file.

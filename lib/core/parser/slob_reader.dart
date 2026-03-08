@@ -1,4 +1,5 @@
 import 'package:slob_reader/slob_reader.dart' as lib;
+export 'package:slob_reader/slob_reader.dart' show SlobBlob;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:convert';
 
@@ -19,6 +20,13 @@ class SlobReader {
     if (_isInitialized) return;
     _reader = await lib.SlobReader.open(path);
     _isInitialized = true;
+  }
+
+  /// Returns the internal blob for a given index.
+  /// Primarily for internal use or bulk operations.
+  Future<lib.SlobBlob?> getBlob(int index) async {
+    if (!_isInitialized || _reader == null) return null;
+    return await _reader!.getBlob(index);
   }
 
   /// Returns the dictionary label from tags, or filename if unavailable.
@@ -84,6 +92,22 @@ class SlobReader {
     final itemIndex = id & 0xFFFF;
     final content = await _reader!.getBlobContent(binIndex, itemIndex);
     return utf8.decode(content, allowMalformed: true);
+  }
+
+  /// Returns the content of multiple blobs for given [ids].
+  /// This is faster than calling [getBlobContentById] multiple times.
+  Future<List<String>> getBlobsContentByIds(List<int> ids) async {
+    if (kIsWeb) throw UnsupportedError('Slob is not supported on Web.');
+    if (!_isInitialized) await open();
+    if (_reader == null) return [];
+
+    final List<(int, int)> blobIds = ids.map((id) => (
+      id >> 16,
+      id & 0xFFFF,
+    )).toList();
+
+    final blobs = await _reader!.getBlobs(blobIds);
+    return blobs.map((b) => utf8.decode(b.content, allowMalformed: true)).toList();
   }
 
   /// Closes the Slob file.
