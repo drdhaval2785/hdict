@@ -11,25 +11,11 @@ import 'package:hdict/features/settings/settings_provider.dart';
 import 'package:hdict/features/home/widgets/app_drawer.dart';
 import 'package:hdict/features/settings/dictionary_management_screen.dart';
 import 'dart:async';
-import 'package:flutter/foundation.dart' show compute;
+
 
 
 /// Arguments for HTML processing in a separate isolate.
-class _ProcessHtmlArgs {
-  final List<_EntryToProcess> entries;
-  final bool isTapOnMeaningEnabled;
-  final String headword;
-  final String definition;
-  final String highlightCol;
 
-  _ProcessHtmlArgs({
-    required this.entries,
-    required this.isTapOnMeaningEnabled,
-    required this.headword,
-    required this.definition,
-    required this.highlightCol,
-  });
-}
 
 class _EntryToProcess {
   final int index;
@@ -47,40 +33,7 @@ class _EntryToProcess {
   });
 }
 
-/// Processed result from the isolate.
-class _ProcessedResult {
-  final int index;
-  final String content;
-
-  _ProcessedResult(this.index, this.content);
-}
-
-/// Top-level function for isolate processing.
-Future<List<_ProcessedResult>> _processHtmlInIsolate(_ProcessHtmlArgs args) async {
-  final List<_ProcessedResult> results = [];
-  
-  for (final entry in args.entries) {
-    String content = entry.content;
-    
-    // Unified pass for performance: normalization, wrapping, highlighting, and underlining
-    content = HtmlLookupWrapper.processRecord(
-      html: content,
-      format: entry.format,
-      typeSequence: entry.typeSequence,
-      wrapWords: args.isTapOnMeaningEnabled,
-      highlightQuery: args.headword,
-      underlineQuery: args.definition,
-      highlightColor: args.highlightCol,
-    );
-    
-    // Add headword header (staying as is for structure)
-    content = '<div class="headword" style="font-weight:bold;margin-bottom:8px;">${entry.word}</div>$content';
-
-    results.add(_ProcessedResult(entry.index, content));
-  }
-  
-  return results;
-}
+/// Isolate processing completely removed in favor of Lazy processing directly in the ListView!
 
 
 /// The main search screen of the hdict app.
@@ -99,7 +52,7 @@ class HomeScreen extends StatefulWidget {
       String? format;
       String? typeSequence;
       final List<String> allHeadwords = [];
-      final List<String> definitionsList = [];
+      final List<Map<String, dynamic>> definitionsList = [];
       uniqueKeyMap.forEach((uniqueKey, entries) {
         if (entries.isEmpty) return;
         dictName ??= entries.first['dict_name'] as String;
@@ -110,10 +63,12 @@ class HomeScreen extends StatefulWidget {
         final headwordStr = headwords.join(' | ');
         allHeadwords.add(headwordStr);
 
-        final buffer = StringBuffer();
-        buffer.writeln('<div class="headword" style="font-weight:bold;margin-bottom:8px;">$headwordStr</div>');
-        buffer.writeln(normalizeWhitespace(entries.first['definition'] as String, format: format, typeSequence: typeSequence));
-        definitionsList.add(buffer.toString());
+        definitionsList.add({
+          'word': entries.first['word'] as String,
+          'headwordHtml': '<div class="headword" style="font-weight:bold;margin-bottom:8px;">$headwordStr</div>',
+          'rawContent': entries.first['raw_content'] as String,
+          'processedHtml': null,
+        });
       });
 
       consolidated.add({
@@ -278,8 +233,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       
       final enrichmentWatch = HPerf.start('Search_Enrichment');
 
-      final isDark = ThemeData.estimateBrightnessForColor(settings.backgroundColor) == Brightness.dark;
-      final highlightCol = isDark ? '#ff9900' : '#ffeb3b';
 
       // Pre-fetch unique dictionaries to avoid repeated SQL queries
       final uniqueDictIds = results.map((r) => r['dict_id'] as int).toSet();
@@ -336,58 +289,25 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         }
       }));
 
-      // Phase 2: HTML processing (CPU bound)
-      // For a small number of entries, doing this synchronously on the main thread
-      // is actually 50x faster (< 10ms) than paying the 200ms+ Isolate cold-start penalty.
+      // Phase 2: HTML Processing is now done LAZILY during ListView scrolling!
       if (entriesToProcess.isNotEmpty) {
-        final args = _ProcessHtmlArgs(
-          entries: entriesToProcess,
-          isTapOnMeaningEnabled: settings.isTapOnMeaningEnabled,
-          headword: headword,
-          definition: definition,
-          highlightCol: highlightCol,
-        );
-        
-        List<_ProcessedResult> isolateResults;
-        if (entriesToProcess.length > 50) {
-          hDebugPrint('--- ISOLATE_PROCESSING_START (${entriesToProcess.length} entries) ---');
-          isolateResults = await compute(_processHtmlInIsolate, args);
-        } else {
-          hDebugPrint('--- SYNC_PROCESSING_START (${entriesToProcess.length} entries) ---');
-          isolateResults = await _processHtmlInIsolate(args);
-        }
-
-        // Fix #3: O(1) Map lookups instead of O(N²) nested firstWhere.
-        // Build lookup maps once before the loop.
-        final processedByIndex = <int, _ProcessedResult>{
-          for (final r in isolateResults) r.index: r,
-        };
-        final metaByKey = <String, Map<String, dynamic>>{};
-        for (final m in resultsMetadata) {
-          final k = '${m['offset']}_${m['length']}_${m['dict_id']}';
-          metaByKey[k] = m;
-        }
-
         final Map<int, Map<String, List<Map<String, dynamic>>>> finalGrouped = {};
         int finalResultCount = 0;
 
-        for (final entry in entriesToProcess) {
-          final processed = processedByIndex[entry.index];
-          if (processed == null) continue;
+        for (int i = 0; i < entriesToProcess.length; i++) {
+          final entry = entriesToProcess[i];
           final original = results[entry.index];
-          final metaKey = '${original['offset']}_${original['length']}_${original['dict_id']}';
-          final meta = metaByKey[metaKey];
-          if (meta == null) continue;
-
-          final dictId = meta['dict_id'] as int;
-          final String uniqueKey = '${meta['offset']}_${meta['length']}';
+          final dictId = original['dict_id'] as int;
+          final String uniqueKey = '${original['offset']}_${original['length']}';
+          
+          final meta = resultsMetadata[i];
 
           finalResultCount++;
           finalGrouped.putIfAbsent(dictId, () => {});
           finalGrouped[dictId]!.putIfAbsent(uniqueKey, () => []);
           finalGrouped[dictId]![uniqueKey]!.add({
             ...meta,
-            'definition': processed.content,
+            'raw_content': entry.content,
           });
         }
 
@@ -888,7 +808,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       int? searchTotalMs,
       int? searchResultCount}) {
     final settings = context.watch<SettingsProvider>();
-    final List<String> rawDefinitions = defMap['definitions'];
+    final List<Map<String, dynamic>> rawDefinitions = List<Map<String, dynamic>>.from(defMap['definitions']);
     
     final isDark =
         ThemeData.estimateBrightnessForColor(settings.backgroundColor) ==
@@ -905,7 +825,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               icon: const Icon(Icons.copy_all, size: 18),
               label: const Text('Copy All'),
               onPressed: () {
-                final allText = rawDefinitions.map((d) => d.replaceAll(RegExp(r'<[^>]*>', multiLine: true, caseSensitive: true), '')).join('\n\n');
+                final allText = rawDefinitions.map((d) {
+                  final String html = d['processedHtml'] ?? '${d['headwordHtml']}\n${d['rawContent']}';
+                  return html.replaceAll(RegExp(r'<[^>]*>', multiLine: true, caseSensitive: true), '');
+                }).join('\n\n');
                 Clipboard.setData(ClipboardData(text: allText));
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Copied all definitions to clipboard'), duration: Duration(seconds: 2)),
@@ -939,9 +862,29 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   );
                 }
                 
-                // HTML is already pre-processed!
-                final String definitionHtml = rawDefinitions[index];
-
+                // HTML Processing is done LAZILY right as the item scrolls onto the screen!
+                final Map<String, dynamic> defData = rawDefinitions[index];
+                String? definitionHtml = defData['processedHtml'];
+                
+                if (definitionHtml == null) {
+                  final String rawContent = defData['rawContent'] as String;
+                  final String format = defMap['format'] as String? ?? 'stardict';
+                  final String? typeSequence = defMap['type_sequence'] as String?;
+                  
+                  // Wrap and Highlight
+                  final processed = HtmlLookupWrapper.processRecord(
+                    html: HomeScreen.normalizeWhitespace(rawContent, format: format, typeSequence: typeSequence),
+                    format: format,
+                    typeSequence: typeSequence,
+                    wrapWords: settings.isTapOnMeaningEnabled,
+                    highlightQuery: _lastHeadwordQuery,
+                    underlineQuery: _lastDefinitionQuery,
+                    highlightColor: highlightCol,
+                  );
+                  
+                  definitionHtml = '${defData['headwordHtml']}\n$processed';
+                  defData['processedHtml'] = definitionHtml; // Cache for subsequent scrolls
+                }
                 return Stack(
                   children: [
                     Column(
@@ -997,7 +940,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         color: Colors.grey,
                         tooltip: 'Copy this definition',
                         onPressed: () {
-                          final plainText = rawDefinitions[index].replaceAll(RegExp(r'<[^>]*>', multiLine: true, caseSensitive: true), '');
+                          final String copyHtml = rawDefinitions[index]['processedHtml'] ?? '${rawDefinitions[index]['headwordHtml']}\n${rawDefinitions[index]['rawContent']}';
+                          final plainText = copyHtml.replaceAll(RegExp(r'<[^>]*>', multiLine: true, caseSensitive: true), '');
                           Clipboard.setData(ClipboardData(text: plainText));
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Copied definition to clipboard'), duration: Duration(seconds: 2)),
@@ -1116,20 +1060,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         ) ??
                         '';
 
-                    // Pre-process HTML here to avoid main thread lag during build
-                    content = HtmlLookupWrapper.processRecord(
-                      html: content,
-                      format: dict['format'] ?? 'stardict',
-                      highlightQuery: word, // Highlighting the word tapped
-                      highlightColor: highlightColor,
-                      wrapWords: settings.isTapOnMeaningEnabled,
-                    );
-
                     return {
                       'id': dictId,
                       'word': wordValue,
                       'dict_name': dict['name'],
-                      'definition': content,
+                      'raw_content': content,
                       'format': dict['format'],
                       'type_sequence': dict['type_sequence'],
                     };
@@ -1214,6 +1149,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                       .map((def) => _buildDefinitionContent(
                                             theme,
                                             def,
+                                            highlightHeadword: word,
                                             searchSqliteMs: timing['sqliteMs'],
                                             searchOtherMs: timing['otherMs'],
                                             searchTotalMs: timing['totalMs'],
