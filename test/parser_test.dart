@@ -8,7 +8,7 @@ import 'package:hdict/core/parser/syn_parser.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
 import 'package:dictd_reader/dictd_reader.dart';
 import 'package:hdict/core/utils/html_lookup_wrapper.dart';
-import 'package:dictzip_reader/dictzip_reader.dart';
+import 'package:hdict/core/parser/dictzip_local_reader.dart';
 import 'package:archive/archive.dart';
 import 'package:path/path.dart' as p;
 
@@ -237,9 +237,9 @@ author=Tester
     });
   });
 
-  // ── DictzipReader Tests ───────────────────────────────────────────────────
+  // ── DictzipLocalReader Tests ───────────────────────────────────────────────────
 
-  group('DictzipReader Tests', () {
+  group('DictzipLocalReader Tests', () {
     late Directory tempDir;
     late String dzPath;
 
@@ -300,11 +300,11 @@ author=Tester
       await File(path).writeAsBytes(builder.toBytes());
     }
 
-    test('DictzipReader reads single chunk correctly', () async {
+    test('DictzipLocalReader reads single chunk correctly', () async {
       const data = 'hello world';
       await createDictZip(dzPath, data, 100);
 
-      final reader = DictzipReader(dzPath);
+      final reader = DictzipLocalReader(dzPath);
       await reader.open();
       final result = await reader.read(0, 5);
       expect(result, 'hello');
@@ -313,13 +313,13 @@ author=Tester
       await reader.close();
     });
 
-    test('DictzipReader reads across multiple chunks correctly', () async {
+    test('DictzipLocalReader reads across multiple chunks correctly', () async {
       // Create data that spans 3 chunks (chunk size 5)
       // "01234" "56789" "abcde"
       const data = '0123456789abcde';
       await createDictZip(dzPath, data, 5);
 
-      final reader = DictzipReader(dzPath);
+      final reader = DictzipLocalReader(dzPath);
       await reader.open();
 
       // Read middle of chunk 1 to middle of chunk 2
@@ -334,7 +334,7 @@ author=Tester
       await reader.close();
     });
 
-    test('DictReader delegates to DictzipReader for .dz files', () async {
+    test('DictReader delegates to DictzipLocalReader for .dz files', () async {
       const data = 'delegation test';
       await createDictZip(dzPath, data, 100);
 
