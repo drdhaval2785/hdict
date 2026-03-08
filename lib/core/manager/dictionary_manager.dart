@@ -1978,38 +1978,143 @@ class DictionaryManager {
     if (kIsWeb) return null;
     final format = (dictRecord['format'] as String?) ?? 'stardict';
 
-    final fetchWatch = Stopwatch()..start();
+    final fetchWatch = HPerf.start('fetchDef_Total[$format]');
     String? result;
     
     try {
       final int? dictId = dictRecord['id'] as int?;
       if (dictId == null) return null;
 
-      // Use a per-dictionary lock to prevent concurrent FileSystem access on the same handle
-      result = await _synchronized(dictId, () async {
-        final reader = await _getReader(dictRecord);
-        if (reader != null) {
-          if (reader is MdictReader) {
-            return await reader.lookup(word);
+      // Fast path: plain .dict readers use File.openRead — fully stateless, one
+      // fresh OS stream per call, no shared seek position. Concurrent reads are
+      // safe without any lock once the reader is cached.
+      final cached = _readerCache[dictId];
+      if (cached is DictReader && !cached.isDz) {
+        // Already cached and stateless — read directly, no lock.
+        final ioWatch = HPerf.start('fetchDef_IO[$format]');
+        result = await cached.readAtIndex(offset, length);
+        HPerf.end(ioWatch, 'fetchDef_IO[$format]');
+      } else if (cached == null) {
+        // First access for this dict: take the lock to create + cache the reader.
+        result = await _synchronized(dictId, () async {
+          final reader = await _getReader(dictRecord);
+          final ioWatch = HPerf.start('fetchDef_IO[$format]');
+          String? res;
+          if (reader is DictReader && !reader.isDz) {
+            res = await reader.readAtIndex(offset, length);
+          } else if (reader is MdictReader) {
+            res = await reader.lookup(word);
           } else if (reader is SlobReader) {
-            return await reader.getBlobContentById(offset);
+            res = await reader.getBlobContentById(offset);
           } else if (reader is DictdReader) {
-            return await reader.readAtOffset(offset, length);
+            res = await reader.readAtOffset(offset, length);
           } else if (reader is DictReader) {
-            return await reader.readAtIndex(offset, length);
+            res = await reader.readAtIndex(offset, length);
           }
-        }
-        return null;
-      });
+          HPerf.end(ioWatch, 'fetchDef_IO[$format]');
+          return res;
+        });
+      } else {
+        // Reader cached but stateful (MDict, Slob, DictD, or .dict.dz) — lock.
+        result = await _synchronized(dictId, () async {
+          final ioWatch = HPerf.start('fetchDef_IO[$format]');
+          String? res;
+          if (cached is MdictReader) {
+            res = await cached.lookup(word);
+          } else if (cached is SlobReader) {
+            res = await cached.getBlobContentById(offset);
+          } else if (cached is DictdReader) {
+            res = await cached.readAtOffset(offset, length);
+          } else if (cached is DictReader) {
+            res = await cached.readAtIndex(offset, length);
+          }
+          HPerf.end(ioWatch, 'fetchDef_IO[$format]');
+          return res;
+        });
+      }
     } catch (e) {
       hDebugPrint('Error fetching definition ($format): $e');
     }
 
-    fetchWatch.stop();
-    if (fetchWatch.elapsedMilliseconds > 5) {
-      hDebugPrint('fetchDefinition [$format] took ${fetchWatch.elapsedMilliseconds}ms');
-    }
+    HPerf.end(fetchWatch, 'fetchDef_Total[$format]');
+    
+    // We already recorded actual IO time inside the lock,
+    // so Queue time is just (Total - IO).
     return result;
+  }
+
+  /// Fetches multiple definitions from the SAME dictionary in a single batch.
+  ///
+  /// For stateful readers (.dz, .mdx, .slob), this acquires the lock ONCE and
+  /// performs all reads sequentially. This eliminates queue contention overhead
+  /// and maximizes the benefit of internal chunk caches (e.g. DictzipLocalReader).
+  ///
+  /// For stateless readers (plain .dict), it fires all reads in parallel since
+  /// they don't share state or need a lock.
+  Future<List<String?>> fetchDefinitionsBatch(
+    Map<String, dynamic> dictRecord,
+    List<Map<String, dynamic>> requests,
+  ) async {
+    if (kIsWeb || requests.isEmpty) return List.filled(requests.length, null);
+
+    final format = (dictRecord['format'] as String?) ?? 'stardict';
+    final int? dictId = dictRecord['id'] as int?;
+    if (dictId == null) return List.filled(requests.length, null);
+
+    final totalWatch = HPerf.start('fetchBatch_Total[$format]');
+
+    try {
+      // 1. Check cache for fast path (plain .dict)
+      final cached = _readerCache[dictId];
+      if (cached is DictReader && !cached.isDz) {
+        // FAST PATH: truly parallel, no locks
+        final ioWatch = HPerf.start('fetchBatch_IO_Parallel[$format]');
+        final results = await Future.wait(requests.map((req) {
+          return cached.readAtIndex(req['offset'] as int, req['length'] as int);
+        }));
+        HPerf.end(ioWatch, 'fetchBatch_IO_Parallel[$format]');
+        HPerf.end(totalWatch, 'fetchBatch_Total[$format]');
+        return results;
+      }
+
+      // 2. Stateful readers (or first access): acquire lock ONCE for the whole batch
+      final results = await _synchronized(dictId, () async {
+        final reader = await _getReader(dictRecord);
+        if (reader == null) return List<String?>.filled(requests.length, null);
+
+        final ioWatch = HPerf.start('fetchBatch_IO_Seq[$format]');
+        final batchResults = <String?>[];
+
+        // Perform all reads sequentially inside the lock
+        for (final req in requests) {
+          final word = req['word'] as String;
+          final offset = req['offset'] as int;
+          final length = req['length'] as int;
+
+          if (reader is MdictReader) {
+            batchResults.add(await reader.lookup(word));
+          } else if (reader is SlobReader) {
+            batchResults.add(await reader.getBlobContentById(offset));
+          } else if (reader is DictdReader) {
+            batchResults.add(await reader.readAtOffset(offset, length));
+          } else if (reader is DictReader) {
+            batchResults.add(await reader.readAtIndex(offset, length));
+          } else {
+            batchResults.add(null);
+          }
+        }
+        HPerf.end(ioWatch, 'fetchBatch_IO_Seq[$format]');
+        return batchResults;
+      });
+
+      HPerf.end(totalWatch, 'fetchBatch_Total[$format]');
+      return results;
+
+    } catch (e) {
+      hDebugPrint('Error in fetchDefinitionsBatch ($format): $e');
+      HPerf.end(totalWatch, 'fetchBatch_Total[$format]');
+      return List.filled(requests.length, null);
+    }
   }
 
   Stream<ImportProgress> reIndexDictionariesStream() async* {

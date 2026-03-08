@@ -7,9 +7,13 @@ import 'package:path/path.dart' as p;
 
 /// Reads definitions from a StarDict .dict or .dict.dz file at specified offsets and lengths.
 ///
-/// For plain `.dict` files, uses a [RandomAccessFile] for direct byte reads.
+/// For plain `.dict` files, uses [File.openRead] for fully stateless random-access
+/// reads — each call opens a fresh OS-level read stream, making concurrent calls safe
+/// with no locking required on the caller side.
+///
 /// For `.dict.dz` files, delegates to [DictzipLocalReader] which performs
-/// chunk-based random access without decompressing the file to disk.
+/// chunk-based random access; its internal chunk cache is mutable, so the caller
+/// must still serialize concurrent accesses.
 class DictReader {
   final File? file;
   final String path;
@@ -17,61 +21,68 @@ class DictReader {
 
   DictReader(this.path, {this.dictId}) : file = kIsWeb ? null : File(path);
 
-  RandomAccessFile? _raf;
   DictzipLocalReader? _dzReader;
 
-  bool get _isDz => path.toLowerCase().endsWith('.dz');
+  /// True for .dict.dz files; false for plain .dict.
+  /// Exposed so callers can decide whether locking is needed.
+  bool get isDz => path.toLowerCase().endsWith('.dz');
 
-  /// Opens the file for reading. Use with [readAtIndex] and [close].
+  /// Opens the file for reading.
+  /// For plain `.dict` files this is a no-op (reads use stateless [File.openRead]).
+  /// For `.dict.dz` files this initialises the [DictzipLocalReader].
   Future<void> open() async {
-    if (kIsWeb) return; // No-op on web
-    if (_isDz) {
+    if (kIsWeb) return;
+    if (isDz) {
       _dzReader = DictzipLocalReader(path);
       await _dzReader!.open();
-    } else {
-      _raf = await file!.open(mode: FileMode.read);
     }
+    // Plain .dict: nothing to open — readAtIndex uses File.openRead per call.
   }
 
-  /// Reads from the already opened file.
+  /// Reads [length] bytes starting at [offset].
+  ///
+  /// **Plain `.dict`:** uses [File.openRead] — fully stateless, safe to call
+  /// concurrently from multiple futures without any external lock.
+  ///
+  /// **`.dict.dz`:** delegates to [DictzipLocalReader] whose chunk cache is
+  /// shared mutable state; the caller must serialise concurrent accesses.
   Future<String> readAtIndex(int offset, int length) async {
     if (kIsWeb) {
       if (dictId == null) throw Exception('dictId required for Web reading');
-      // Use basename to match how files are stored in the 'files' table
       final bytes = await DatabaseHelper().getFilePart(dictId!, p.basename(path), offset, length);
       if (bytes == null) throw Exception('Failed to read from virtual FS: ${p.basename(path)}');
       return utf8.decode(bytes, allowMalformed: true);
     }
 
-    if (_isDz) {
+    if (isDz) {
       if (_dzReader == null) throw Exception('DictReader not opened. Call open() first.');
       return await _dzReader!.read(offset, length);
     }
 
-    if (_raf == null) {
-      throw Exception('DictReader not opened. Call open() first.');
-    }
-    await _raf!.setPosition(offset);
-    final bytes = await _raf!.read(length);
+    // Plain .dict: File.openRead(start, end) opens a fresh OS read-stream.
+    // No shared state → concurrent calls are safe and truly parallel.
+    final bytes = await file!
+        .openRead(offset, offset + length)
+        .fold<List<int>>([], (buf, chunk) => buf..addAll(chunk));
     return utf8.decode(bytes, allowMalformed: true);
   }
 
   /// Closes the file.
+  /// For plain `.dict` files this is a no-op (no persistent handle was opened).
   Future<void> close() async {
     if (kIsWeb) return;
-    if (_isDz) {
+    if (isDz) {
       await _dzReader?.close();
       _dzReader = null;
-    } else {
-      await _raf?.close();
-      _raf = null;
     }
+    // Plain .dict: nothing to close.
   }
 
   /// Reads the definition at the given offset and length.
-  /// Uses existing file handle if open, otherwise performs a one-off open/read/close.
+  /// For plain `.dict` files, [readAtIndex] is always safe to call directly.
+  /// For `.dict.dz` files, opens+reads+closes if the reader isn't already open.
   Future<String> readEntry(int offset, int length) async {
-    if (kIsWeb || _raf != null || _dzReader != null) {
+    if (kIsWeb || !isDz || _dzReader != null) {
       return await readAtIndex(offset, length);
     }
 

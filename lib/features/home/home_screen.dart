@@ -257,9 +257,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     });
 
     try {
+      HPerf.reset();
       final settings = context.read<SettingsProvider>();
-      final totalWatch = Stopwatch()..start();
-      final sqliteWatch = Stopwatch()..start();
+      final totalWatch = HPerf.start('Search_Total');
+      final sqliteWatch = HPerf.start('Search_SQLite');
       
       List<Map<String, dynamic>> results = await _dbHelper.searchWords(
         headwordQuery: headword.isNotEmpty ? headword : null,
@@ -269,18 +270,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         limit: settings.searchResultLimit,
       );
 
-      sqliteWatch.stop();
-      final sqliteMs = sqliteWatch.elapsedMilliseconds;
+      HPerf.end(sqliteWatch, 'Search_SQLite');
+      final sqliteMs = sqliteWatch?.elapsedMilliseconds ?? 0;
 
       final List<_EntryToProcess> entriesToProcess = [];
       final List<Map<String, dynamic>> resultsMetadata = [];
       
-      final enrichmentWatch = Stopwatch()..start();
+      final enrichmentWatch = HPerf.start('Search_Enrichment');
 
       final isDark = ThemeData.estimateBrightnessForColor(settings.backgroundColor) == Brightness.dark;
       final highlightCol = isDark ? '#ff9900' : '#ffeb3b';
 
-      // Pre-fetch unique dictionaries to avoid repeated SQL queries in the loop
+      // Pre-fetch unique dictionaries to avoid repeated SQL queries
       final uniqueDictIds = results.map((r) => r['dict_id'] as int).toSet();
       final Map<int, Map<String, dynamic>> dictCache = {};
       for (final id in uniqueDictIds) {
@@ -288,30 +289,46 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         if (dict != null) dictCache[id] = dict;
       }
 
-      // Phase 1: Parallel definition fetching (IO bound, on main thread due to readers)
-      await Future.wait(results.asMap().entries.map((entry) async {
-        final index = entry.key;
-        final result = entry.value;
-        final dictId = result['dict_id'] as int;
-        final dict = dictCache[dictId];
-        
-        if (dict != null && dict['is_enabled'] == 1) {
-          final word = result['word'] as String;
-          final offset = result['offset'] as int;
-          final length = result['length'] as int;
+      // Group results by dictionary for batch fetching
+      // This is critical for performance on stateful readers (.dz, .mdx)
+      final Map<int, List<Map<String, dynamic>>> resultsByDict = {};
+      final Map<int, List<int>> originalIndicesByDict = {};
+      
+      for (int i = 0; i < results.length; i++) {
+        final r = results[i];
+        final dictId = r['dict_id'] as int;
+        if (dictCache[dictId]?['is_enabled'] == 1) {
+          resultsByDict.putIfAbsent(dictId, () => []).add(r);
+          originalIndicesByDict.putIfAbsent(dictId, () => []).add(i);
+        }
+      }
 
-          final content = await _dictManager.fetchDefinition(dict, word, offset, length) ?? '';
-          
+      // Phase 1: Parallel definition fetching across dictionaries (IO bound)
+      // Within each dictionary, reads are sequential if the reader is stateful,
+      // or parallel if stateless (handled inside DictionaryManager).
+      await Future.wait(resultsByDict.entries.map((entry) async {
+        final dictId = entry.key;
+        final requests = entry.value;
+        final originalIndices = originalIndicesByDict[dictId]!;
+        final dict = dictCache[dictId]!;
+
+        final batchContents = await _dictManager.fetchDefinitionsBatch(dict, requests);
+
+        for (int i = 0; i < requests.length; i++) {
+          final content = batchContents[i] ?? '';
+          final req = requests[i];
+          final ogIndex = originalIndices[i];
+
           entriesToProcess.add(_EntryToProcess(
-            index: index,
+            index: ogIndex,
             content: content,
-            word: word,
+            word: req['word'] as String,
             format: dict['format'],
             typeSequence: dict['type_sequence'],
           ));
           
           resultsMetadata.add({
-            ...result,
+            ...req,
             'dict_name': dict['name'],
             'format': dict['format'],
             'type_sequence': dict['type_sequence'],
@@ -319,16 +336,26 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         }
       }));
 
-      // Phase 2: Isolate-based HTML processing (CPU bound)
+      // Phase 2: HTML processing (CPU bound)
+      // For a small number of entries, doing this synchronously on the main thread
+      // is actually 50x faster (< 10ms) than paying the 200ms+ Isolate cold-start penalty.
       if (entriesToProcess.isNotEmpty) {
-        hDebugPrint('--- ISOLATE_PROCESSING_START (${entriesToProcess.length} entries) ---');
-        final isolateResults = await compute(_processHtmlInIsolate, _ProcessHtmlArgs(
+        final args = _ProcessHtmlArgs(
           entries: entriesToProcess,
           isTapOnMeaningEnabled: settings.isTapOnMeaningEnabled,
           headword: headword,
           definition: definition,
           highlightCol: highlightCol,
-        ));
+        );
+        
+        List<_ProcessedResult> isolateResults;
+        if (entriesToProcess.length > 50) {
+          hDebugPrint('--- ISOLATE_PROCESSING_START (${entriesToProcess.length} entries) ---');
+          isolateResults = await compute(_processHtmlInIsolate, args);
+        } else {
+          hDebugPrint('--- SYNC_PROCESSING_START (${entriesToProcess.length} entries) ---');
+          isolateResults = await _processHtmlInIsolate(args);
+        }
 
         // Fix #3: O(1) Map lookups instead of O(N²) nested firstWhere.
         // Build lookup maps once before the loop.
@@ -364,18 +391,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           });
         }
 
-        enrichmentWatch.stop();
-        hDebugPrint('--- SEARCH_ENRICHMENT_DONE: ${enrichmentWatch.elapsedMilliseconds}ms ---');
+        HPerf.end(enrichmentWatch, 'Search_Enrichment');
 
         final consolidatedDefs = HomeScreen.consolidateDefinitions(finalGrouped);
         
-        totalWatch.stop();
+        HPerf.end(totalWatch, 'Search_Total');
+        HPerf.dump(prefix: '--- SEARCH RESULTS PERF ---');
 
         setState(() {
           _currentDefinitions = consolidatedDefs;
           _searchResultCount = finalResultCount;
           _searchSqliteMs = sqliteMs;
-          _searchTotalMs = totalWatch.elapsedMilliseconds;
+          _searchTotalMs = totalWatch?.elapsedMilliseconds ?? 0;
           _searchOtherMs = _searchTotalMs - _searchSqliteMs;
           _tabController?.dispose();
           if (consolidatedDefs.isNotEmpty) {
@@ -389,7 +416,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           _isLoading = false;
         });
       } else {
-        enrichmentWatch.stop();
+        HPerf.end(enrichmentWatch, 'Search_Enrichment');
+        HPerf.end(totalWatch, 'Search_Total');
+        HPerf.dump(prefix: '--- SEARCH RESULTS EMPTY ---');
         setState(() {
           _currentDefinitions = [];
           _searchResultCount = 0;

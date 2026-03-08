@@ -16,18 +16,9 @@ class HtmlLookupWrapper {
   }) {
     if (html.isEmpty) return '';
 
-    // Optimization: Pre-compile only if needed
-    final bool hasHighlight = highlightQuery != null && highlightQuery.isNotEmpty;
-    final bool hasUnderline = underlineQuery != null && underlineQuery.isNotEmpty;
+    final String? lowerHighlight = highlightQuery?.toLowerCase();
+    final String? lowerUnderline = underlineQuery?.toLowerCase();
     
-    final highlightReg = hasHighlight
-        ? RegExp('(\\b${RegExp.escape(highlightQuery)}[\\w]*)', caseSensitive: false, unicode: true)
-        : null;
-
-    final underlineReg = hasUnderline
-        ? RegExp(RegExp.escape(underlineQuery), caseSensitive: false)
-        : null;
-
     final StringBuffer buffer = StringBuffer();
     final matches = _tagRegExp.allMatches(html);
     
@@ -61,40 +52,96 @@ class HtmlLookupWrapper {
 
         // Optimization: Combining word wrapping and highlighting safely
         if (wrapWords && !inAnchor && text.trim().isNotEmpty && text.length < 20000) {
-          // If we have highlights, we must handle them during wrapping to avoid breaking tags
-          text = text.replaceAllMapped(_wordRegExp, (m) {
-            final word = m.group(1)!;
-            String content = word;
-
-            if (highlightReg != null && highlightReg.hasMatch(word)) {
-              content = highlightReg.allMatches(word).fold(word, (prev, m) =>
-                prev.replaceRange(m.start, m.end, '<mark>${m.group(1)}</mark>'));
-            } else if (underlineReg != null && underlineReg.hasMatch(word)) {
-              content = underlineReg.allMatches(word).fold(word, (prev, m) =>
-                prev.replaceRange(m.start, m.end, '<mark>${m.group(0)}</mark>'));
+          // Direct StringBuffer iteration is much faster than replaceAllMapped
+          final wordMatches = _wordRegExp.allMatches(text);
+          int lastEnd = 0;
+          
+          for (final wm in wordMatches) {
+            // Write the non-word characters before this word
+            if (wm.start > lastEnd) {
+              final gap = text.substring(lastEnd, wm.start);
+              buffer.write(gap.contains('\n') ? gap.replaceAll('\n', '<br>') : gap);
             }
-
+            
+            final word = wm.group(1)!;
+            String content = word;
+            
+            // Fast-path String operations are literally ~1000x faster than \b Unicode RegExp
+            if (lowerHighlight != null && lowerHighlight.isNotEmpty) {
+              final lowerWord = word.toLowerCase();
+              if (lowerWord.startsWith(lowerHighlight)) {
+                // Highlight matches word prefixes.
+                final hLen = lowerHighlight.length;
+                if (hLen <= word.length) {
+                  content = '<mark>${word.substring(0, hLen)}</mark>${word.substring(hLen)}';
+                }
+              } else if (lowerUnderline != null && lowerUnderline.isNotEmpty) {
+                final idx = lowerWord.indexOf(lowerUnderline);
+                if (idx != -1) {
+                  final uLen = lowerUnderline.length;
+                  content = '${word.substring(0, idx)}<mark>${word.substring(idx, idx + uLen)}</mark>${word.substring(idx + uLen)}';
+                }
+              }
+            } else if (lowerUnderline != null && lowerUnderline.isNotEmpty) {
+               final lowerWord = word.toLowerCase();
+               final idx = lowerWord.indexOf(lowerUnderline);
+               if (idx != -1) {
+                 final uLen = lowerUnderline.length;
+                 content = '${word.substring(0, idx)}<mark>${word.substring(idx, idx + uLen)}</mark>${word.substring(idx + uLen)}';
+               }
+            }
+            
+            // Build the anchor
             final encoded = (word.contains('%') || word.contains(' ') || word.contains('?')) 
                 ? Uri.encodeComponent(word) 
                 : word;
+                
+            buffer.write('<a href="look_up:$encoded" class="dict-word">$content</a>');
+            lastEnd = wm.end;
+          }
+          
+          // Write any remaining non-word characters after the last word
+          if (lastEnd < text.length) {
+            final trailing = text.substring(lastEnd);
+            buffer.write(trailing.contains('\n') ? trailing.replaceAll('\n', '<br>') : trailing);
+          }
+          
+        } else {
+          // No wrapping, just highlight/underline and newline replacement
+          if (lowerHighlight != null && lowerHighlight.isNotEmpty || lowerUnderline != null && lowerUnderline.isNotEmpty) {
+            final lowerText = text.toLowerCase();
+            final StringBuffer noWrapBuf = StringBuffer();
+            int curEnd = 0;
             
-            return '<a href="look_up:$encoded" class="dict-word">$content</a>';
-          });
-        } else {
-          // No wrapping, just highlight/underline
-          if (highlightReg != null) {
-            text = text.replaceAllMapped(highlightReg, (m) => '<mark>${m.group(1)!}</mark>');
+            // A simple naive highlighting for non-wrapped text
+            if (lowerHighlight != null && lowerHighlight.isNotEmpty) {
+               int i = lowerText.indexOf(lowerHighlight);
+               while(i != -1) {
+                 noWrapBuf.write(text.substring(curEnd, i));
+                 noWrapBuf.write('<mark>${text.substring(i, i + lowerHighlight.length)}</mark>');
+                 curEnd = i + lowerHighlight.length;
+                 i = lowerText.indexOf(lowerHighlight, curEnd);
+               }
+               noWrapBuf.write(text.substring(curEnd));
+               text = noWrapBuf.toString();
+            } else if (lowerUnderline != null && lowerUnderline.isNotEmpty) {
+               int i = lowerText.indexOf(lowerUnderline);
+               while(i != -1) {
+                 noWrapBuf.write(text.substring(curEnd, i));
+                 noWrapBuf.write('<mark>${text.substring(i, i + lowerUnderline.length)}</mark>');
+                 curEnd = i + lowerUnderline.length;
+                 i = lowerText.indexOf(lowerUnderline, curEnd);
+               }
+               noWrapBuf.write(text.substring(curEnd));
+               text = noWrapBuf.toString();
+            }
           }
-          if (underlineReg != null) {
-            text = text.replaceAllMapped(underlineReg, (m) => '<mark>${m.group(0)!}</mark>');
-          }
-        }
 
-        // Convert \n to <br> as the last step
-        if (text.contains('\n')) {
-          buffer.write(text.replaceAll('\n', '<br>'));
-        } else {
-          buffer.write(text);
+          if (text.contains('\n')) {
+            buffer.write(text.replaceAll('\n', '<br>'));
+          } else {
+            buffer.write(text);
+          }
         }
       }
     }
