@@ -997,8 +997,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               Expanded(
                 child: FutureBuilder<Map<String, dynamic>>(
                   future: () async {
-                    final totalWatch = Stopwatch()..start();
-                    final sqliteWatch = Stopwatch()..start();
+                    HPerf.reset();
+                    final totalWatch = HPerf.start('Pop-up_Total');
+                    final sqliteWatch = HPerf.start('Pop-up_SQLite');
 
                   // 1. Try exact match first for popups
                   List<Map<String, dynamic>> candidates =
@@ -1028,13 +1029,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     }
                   }
 
-                  sqliteWatch.stop();
+                  HPerf.end(sqliteWatch, 'Pop-up_SQLite');
+
+                  final enrichmentWatch = HPerf.start('Pop-up_Enrichment');
 
                   // Parallelize definition fetching and HTML pre-processing
                   final isDark = ThemeData.estimateBrightnessForColor(
                           settings.backgroundColor) ==
-                      Brightness.dark;
-                  final highlightColor = isDark ? '#ff9800' : '#ffeb3b';
+                       Brightness.dark;
 
                   // Fix #2: Pre-fetch unique dicts in one pass to avoid N SQL
                   // queries inside Future.wait (one per result, not per dict).
@@ -1082,24 +1084,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     groupedResults[dictId]!.putIfAbsent(wordValue, () => []);
                     groupedResults[dictId]![wordValue]!.add(res);
                   }
-                  totalWatch.stop();
 
                   final consolidated =
                       HomeScreen.consolidateDefinitions(groupedResults);
 
-                    final timing = {
-                      'sqliteMs': sqliteWatch.elapsedMilliseconds,
-                      'totalMs': totalWatch.elapsedMilliseconds,
-                      'otherMs': totalWatch.elapsedMilliseconds -
-                          sqliteWatch.elapsedMilliseconds,
-                      'resultCount': resultCount,
-                    };
+                  HPerf.end(enrichmentWatch, 'Pop-up_Enrichment');
+                  HPerf.end(totalWatch, 'Pop-up_Total');
+                  HPerf.dump(prefix: '--- POP-UP SEARCH PERF ---');
 
-                    return {
-                      'definitions': consolidated,
-                      'timing': timing,
-                    };
-                  }(),
+                  final timing = {
+                    'sqliteMs': sqliteWatch?.elapsedMilliseconds ?? 0,
+                    'totalMs': totalWatch?.elapsedMilliseconds ?? 0,
+                    'otherMs': (totalWatch?.elapsedMilliseconds ?? 0) -
+                        (sqliteWatch?.elapsedMilliseconds ?? 0),
+                    'resultCount': resultCount,
+                  };
+
+                  return {
+                    'definitions': consolidated,
+                    'timing': timing,
+                  };
+                }(),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(child: CircularProgressIndicator());
