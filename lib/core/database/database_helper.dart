@@ -894,6 +894,20 @@ class DatabaseHelper {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getEnabledDictionaries() async {
+    try {
+      final db = await database;
+      return await db.query(
+        'dictionaries',
+        where: 'is_enabled = 1',
+        orderBy: 'display_order ASC',
+      );
+    } catch (e) {
+      hDebugPrint('Error getting enabled dictionaries: $e');
+      return [];
+    }
+  }
+
   Future<void> reorderDictionaries(List<int> sortedIds) async {
     final db = await database;
     await db.transaction((txn) async {
@@ -1053,7 +1067,7 @@ class DatabaseHelper {
       // OPTIMIZATION: If this is a simple headword search (no multi-dictionary definition search),
       // we can iterate through dictionaries sequentially to avoid the expensive cross-table SQLite sort.
       if (definitionQuery == null && (headwordMode == SearchMode.prefix || headwordMode == SearchMode.exact)) {
-        return _searchWordsSequential(
+        return await _searchWordsSequential(
           headwordQuery: headwordQuery,
           headwordMode: headwordMode,
           dictId: dictId,
@@ -1214,9 +1228,9 @@ class DatabaseHelper {
     final List<Map<String, dynamic>> dicts;
     if (dictId != null) {
       final d = await getDictionaryById(dictId);
-      dicts = d != null ? [d] : [];
+      dicts = (d != null && d['is_enabled'] == 1) ? [d] : [];
     } else {
-      dicts = await getDictionaries();
+      dicts = await getEnabledDictionaries();
     }
 
     final List<Map<String, dynamic>> finalResults = [];
@@ -1227,7 +1241,7 @@ class DatabaseHelper {
     // Because we have idx_metadata_dict_word(dict_id, word), 
     // SQLite can satisfy the WHERE and the ORDER BY word ASC entirely from the index.
     for (final dict in dicts) {
-      if (dict['is_enabled'] != 1) continue;
+      // dicts already filtered by is_enabled in getEnabledDictionaries()
       
       final int currentLimit = limit - finalResults.length;
       if (currentLimit <= 0) break;
@@ -1266,11 +1280,11 @@ class DatabaseHelper {
 
       // Use sequential search for standard prefix suggestions to leverage idx_metadata_dict_word
       if (!fuzzy && !cleanPrefix.contains(' ')) {
-        final List<Map<String, dynamic>> dicts = await getDictionaries();
+        final List<Map<String, dynamic>> dicts = await getEnabledDictionaries();
         final List<String> suggestions = [];
         
         for (final dict in dicts) {
-          if (dict['is_enabled'] != 1) continue;
+          // dicts already filtered by is_enabled
           
           final int currentLimit = limit - suggestions.length;
           if (currentLimit <= 0) break;
