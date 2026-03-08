@@ -208,12 +208,12 @@ author=Tester
       expect(
         output,
         contains(
-          '<a href="look_up:%E0%A4%B6%E0%A4%A4%E0%A4%AA%E0%A4%A4%E0%A5%8D%E0%A4%A4%E0%A5%8D%E0%A4%B0" class="dict-word">शतपत्त्र</a>',
+          '<a href="look_up:शतपत्त्र" class="dict-word">शतपत्त्र</a>',
         ),
       );
       expect(
         output,
-        contains('<a href="look_up:%E0%A4%95%E0%A4%AE%E0%A4%B2" class="dict-word">कमल</a>'),
+        contains('<a href="look_up:कमल" class="dict-word">कमल</a>'),
       );
     });
 

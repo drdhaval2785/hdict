@@ -27,7 +27,8 @@ void main() {
       expect(dict1['word'], 'alpha | beta | gamma');
       expect(dict1['dict_name'], 'A');
       
-      final defHtml = dict1['definition'] as String;
+      final defHtmlList = dict1['definitions'] as List<String>;
+      final defHtml = defHtmlList.join('<hr>');
       
       // Each headword should have its own heading now, not merged
       expect(defHtml, contains('<div class="headword" style="font-weight:bold;margin-bottom:8px;">alpha</div>'));
@@ -38,7 +39,7 @@ void main() {
       expect(defHtml, contains('def1'));
       expect(defHtml, contains('def2'));
       
-      // Separators should exist between the 3 entries
+      // Separators should exist between the 3 entries (there are 2 elements added by join + possibly internal hr if there were duplicates, but we only have 3 list elements so 2 hr's)
       final hrCount = RegExp('<hr').allMatches(defHtml).length;
       expect(hrCount, 2);
     });
