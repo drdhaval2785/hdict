@@ -453,7 +453,12 @@ class DatabaseHelper {
         hDebugPrint('Migration to version 19: Pre-tokenized keyword indexing');
         // Re-index is required because content storage format has changed.
         await db.execute('DROP TABLE IF EXISTS word_index');
-        await db.execute('DELETE FROM word_metadata');
+        // Safely clear metadata if it exists
+        try {
+          await db.execute('DELETE FROM word_metadata');
+        } catch (_) {
+          // Table might have been dropped in v18 and not yet recreated
+        }
         await db.execute(
           'UPDATE dictionaries SET word_count = 0, definition_word_count = 0, index_definitions = 0',
         );
@@ -467,7 +472,9 @@ class DatabaseHelper {
         hDebugPrint('Migration to version 20: Full language-agnostic FTS5 indexing');
         // Re-index is required because content storage format has changed (removed English tokenization).
         await db.execute('DROP TABLE IF EXISTS word_index');
-        await db.execute('DELETE FROM word_metadata');
+        try {
+          await db.execute('DELETE FROM word_metadata');
+        } catch (_) {}
         await db.execute(
           'UPDATE dictionaries SET word_count = 0, definition_word_count = 0, index_definitions = 0',
         );
@@ -499,13 +506,45 @@ class DatabaseHelper {
     if (oldVersion < 22) {
       try {
         hDebugPrint('Migrating database to v22: Adding COLLATE NOCASE to word_metadata...');
-        await db.transaction((txn) async {
-          // 1. Rename existing table
-          await txn.execute('ALTER TABLE word_metadata RENAME TO word_metadata_old');
-          
-          // 2. Create new table with COLLATE NOCASE
-          await txn.execute('''
-            CREATE TABLE word_metadata(
+        
+        // Check if word_metadata exists before trying to rename it
+        final tableExists = (await db.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='word_metadata'",
+        )).isNotEmpty;
+
+        if (tableExists) {
+          await db.transaction((txn) async {
+            // 1. Rename existing table
+            await txn.execute('ALTER TABLE word_metadata RENAME TO word_metadata_old');
+            
+            // 2. Create new table with COLLATE NOCASE
+            await txn.execute('''
+              CREATE TABLE word_metadata(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                word TEXT COLLATE NOCASE,
+                dict_id INTEGER,
+                offset INTEGER,
+                length INTEGER
+              )
+            ''');
+            
+            // 3. Copy data
+            await txn.execute('''
+              INSERT INTO word_metadata (id, word, dict_id, offset, length)
+              SELECT id, word, dict_id, offset, length FROM word_metadata_old
+            ''');
+            
+            // 4. Drop old table
+            await txn.execute('DROP TABLE word_metadata_old');
+            
+            // 5. Recreate indexes
+            await txn.execute('CREATE INDEX idx_metadata_dict_id ON word_metadata(dict_id)');
+            await txn.execute('CREATE INDEX idx_metadata_word ON word_metadata(word)');
+          });
+        } else {
+          // If table doesn't exist, just create it fresh
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS word_metadata(
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               word TEXT COLLATE NOCASE,
               dict_id INTEGER,
@@ -513,20 +552,9 @@ class DatabaseHelper {
               length INTEGER
             )
           ''');
-          
-          // 3. Copy data
-          await txn.execute('''
-            INSERT INTO word_metadata (id, word, dict_id, offset, length)
-            SELECT id, word, dict_id, offset, length FROM word_metadata_old
-          ''');
-          
-          // 4. Drop old table
-          await txn.execute('DROP TABLE word_metadata_old');
-          
-          // 5. Recreate indexes
-          await txn.execute('CREATE INDEX idx_metadata_dict_id ON word_metadata(dict_id)');
-          await txn.execute('CREATE INDEX idx_metadata_word ON word_metadata(word)');
-        });
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_metadata_dict_id ON word_metadata(dict_id)');
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_metadata_word ON word_metadata(word)');
+        }
         hDebugPrint('Database migration to v22 complete.');
       } catch (e) {
         hDebugPrint('Migration error (version 22): $e');
@@ -536,9 +564,16 @@ class DatabaseHelper {
     if (oldVersion < 23) {
       try {
         hDebugPrint('Migration to version 23: Adding composite index for search speed');
-        await db.execute(
-          'CREATE INDEX IF NOT EXISTS idx_metadata_dict_word ON word_metadata(dict_id, word COLLATE NOCASE)',
-        );
+        // Ensure table exists before creating index
+        final tableExists = (await db.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='word_metadata'",
+        )).isNotEmpty;
+        
+        if (tableExists) {
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_metadata_dict_word ON word_metadata(dict_id, word COLLATE NOCASE)',
+          );
+        }
       } catch (e) {
         hDebugPrint('Migration error (version 23): $e');
       }
