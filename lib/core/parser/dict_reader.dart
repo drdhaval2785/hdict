@@ -68,28 +68,18 @@ class DictReader {
     }
   }
 
-  /// Reads the definition at the given offset and length in a one-off operation.
+  /// Reads the definition at the given offset and length.
+  /// Uses existing file handle if open, otherwise performs a one-off open/read/close.
   Future<String> readEntry(int offset, int length) async {
-    if (kIsWeb) {
+    if (kIsWeb || _raf != null || _dzReader != null) {
       return await readAtIndex(offset, length);
     }
-    if (_isDz) {
-      // One-shot: open, read, close.
-      final dz = DictzipReader(path);
-      await dz.open();
-      try {
-        return await dz.read(offset, length);
-      } finally {
-        await dz.close();
-      }
-    }
-    final raf = await file!.open(mode: FileMode.read);
+
+    await open();
     try {
-      await raf.setPosition(offset);
-      final bytes = await raf.read(length);
-      return utf8.decode(bytes, allowMalformed: true);
+      return await readAtIndex(offset, length);
     } finally {
-      await raf.close();
+      await close();
     }
   }
 }

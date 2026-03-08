@@ -339,18 +339,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           highlightCol: highlightCol,
         ));
 
-        // Map back to grouped results
-        final Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults = {};
-        for (final processed in isolateResults) {
-          final meta = resultsMetadata.firstWhere((m) => results.indexOf(m) == processed.index || (m['offset'] == results[processed.index]['offset'] && m['length'] == results[processed.index]['length']));
-          // Actually, using the index from ProcessedResult is safer if we align our metadata.
-          // Let's just Re-construct metadata to be safe.
-        }
-        
         // Simplified mapping back
-        final Map<int, List<_ProcessedResult>> resultsByIndexMap = {
-          for (var r in isolateResults) r.index: [r]
-        };
 
         final Map<int, Map<String, List<Map<String, dynamic>>>> finalGrouped = {};
         int finalResultCount = 0;
@@ -868,11 +857,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       int? searchTotalMs,
       int? searchResultCount}) {
     hDebugPrint('--- BUILD_DEFINITION_CONTENT_START (dict: ${defMap['dict_name']}) ---');
-    final buildWatch = Stopwatch()..start();
     final settings = context.watch<SettingsProvider>();
     final List<String> rawDefinitions = defMap['definitions'];
-    final String? format = defMap['format'];
-    final String? typeSequence = defMap['type_sequence'];
     
     final isDark =
         ThemeData.estimateBrightnessForColor(settings.backgroundColor) ==

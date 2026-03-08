@@ -1991,7 +1991,7 @@ class DictionaryManager {
           } else if (reader is SlobReader) {
             return await reader.getBlobContentById(offset);
           } else if (reader is DictdReader) {
-            return await reader.readEntry(offset, length);
+            return await reader.readAtOffset(offset, length);
           } else if (reader is DictReader) {
             return await reader.readAtIndex(offset, length);
           }

@@ -96,7 +96,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 21, // Version 21: Added missing type_sequence column
+      version: 22, // Version 22: Added COLLATE NOCASE to word_metadata.word
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onOpen: _onOpen,
@@ -155,7 +155,7 @@ class DatabaseHelper {
         await db.execute('''
           CREATE TABLE IF NOT EXISTS word_metadata(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            word TEXT,
+            word TEXT COLLATE NOCASE,
             dict_id INTEGER,
             offset INTEGER,
             length INTEGER
@@ -489,6 +489,43 @@ class DatabaseHelper {
         }
       } catch (e) {
         hDebugPrint('Migration error (version 21): $e');
+      }
+    }
+
+    if (oldVersion < 22) {
+      try {
+        hDebugPrint('Migrating database to v22: Adding COLLATE NOCASE to word_metadata...');
+        await db.transaction((txn) async {
+          // 1. Rename existing table
+          await txn.execute('ALTER TABLE word_metadata RENAME TO word_metadata_old');
+          
+          // 2. Create new table with COLLATE NOCASE
+          await txn.execute('''
+            CREATE TABLE word_metadata(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              word TEXT COLLATE NOCASE,
+              dict_id INTEGER,
+              offset INTEGER,
+              length INTEGER
+            )
+          ''');
+          
+          // 3. Copy data
+          await txn.execute('''
+            INSERT INTO word_metadata (id, word, dict_id, offset, length)
+            SELECT id, word, dict_id, offset, length FROM word_metadata_old
+          ''');
+          
+          // 4. Drop old table
+          await txn.execute('DROP TABLE word_metadata_old');
+          
+          // 5. Recreate indexes
+          await txn.execute('CREATE INDEX idx_metadata_dict_id ON word_metadata(dict_id)');
+          await txn.execute('CREATE INDEX idx_metadata_word ON word_metadata(word)');
+        });
+        hDebugPrint('Database migration to v22 complete.');
+      } catch (e) {
+        hDebugPrint('Migration error (version 22): $e');
       }
     }
   }
@@ -1006,24 +1043,25 @@ class DatabaseHelper {
               if (ftsQuery.isNotEmpty) {
                 whereClauses.add('i.word MATCH ?');
                 whereArgs.add(ftsQuery);
-                // Augment with SQL LIKE to ensure precise prefix matching
-                whereClauses.add('LOWER(m.word) LIKE LOWER(?)');
+                // Augment with SQL LIKE to ensure precise prefix matching.
+                // With NOCASE collation, LIKE is now index-optimized.
+                whereClauses.add('m.word LIKE ?');
                 whereArgs.add('$hq%');
                 needsFts5Join = true;
               }
             } else {
-              whereClauses.add('LOWER(m.word) LIKE LOWER(?)');
+              whereClauses.add('m.word LIKE ?');
               whereArgs.add('$hq%');
             }
             break;
           case SearchMode.suffix:
             // FTS5 does not support suffix wildcards - always use LIKE on metadata
-            whereClauses.add('LOWER(m.word) LIKE LOWER(?)');
+            whereClauses.add('m.word LIKE ?');
             whereArgs.add('%$hq');
             break;
           case SearchMode.substring:
             // FTS5 does not support leading wildcards - always use LIKE on metadata
-            whereClauses.add('LOWER(m.word) LIKE LOWER(?)');
+            whereClauses.add('m.word LIKE ?');
             whereArgs.add('%$hq%');
             break;
         }
@@ -1080,7 +1118,7 @@ class DatabaseHelper {
         WHERE ${whereClauses.join(' AND ')}
         ORDER BY 
           d.display_order ASC,
-          ${headwordQuery != null ? "(LOWER(m.word) = LOWER(?)) DESC," : ""}
+          ${headwordQuery != null ? "(m.word = ?) DESC," : ""}
           m.word ASC
         LIMIT ?
       ''';
@@ -1118,7 +1156,7 @@ class DatabaseHelper {
           SELECT DISTINCT word 
           FROM $fallbackTable 
           WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
-          AND LOWER(word) LIKE LOWER(?)
+          AND word LIKE ?
           ORDER BY word ASC
           LIMIT ?
         ''';
