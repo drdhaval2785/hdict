@@ -5,6 +5,7 @@ import 'package:file_selector/file_selector.dart';
 
 import 'package:hdict/core/manager/dictionary_manager.dart';
 import 'package:hdict/features/home/widgets/app_drawer.dart';
+import 'package:hdict/features/settings/widgets/freedict_download_dialog.dart';
 
 /// A screen for managing installed dictionaries.
 class DictionaryManagementScreen extends StatefulWidget {
@@ -105,6 +106,85 @@ class _DictionaryManagementScreenState
         (urlString['url'] as String).isNotEmpty) {
       final String url = urlString['url'];
       final bool index = urlString['index'] ?? false;
+      if (!mounted) return;
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return PopScope(
+            canPop: false,
+            child: AlertDialog(
+              title: const Text('Downloading & Importing'),
+              content: ValueListenableBuilder<ImportProgress>(
+                valueListenable: _progressNotifier,
+                builder: (context, progress, child) {
+                  return _buildProgressContent(progress);
+                },
+              ),
+            ),
+          );
+        },
+      );
+
+      try {
+        final stream = _dictionaryManager.downloadAndImportDictionaryStream(
+          url,
+          indexDefinitions: index,
+        );
+        await for (final progress in stream) {
+          _progressNotifier.value = progress;
+          if (progress.isCompleted) {
+            if (progress.error != null) {
+              throw Exception(progress.error);
+            }
+          }
+        }
+
+        if (mounted) {
+          Navigator.pop(context); // Close progress dialog
+          final lastProgress = _progressNotifier.value;
+          final String sampleWordsText = lastProgress.sampleWords != null
+              ? '\n\nSample words: ${lastProgress.sampleWords!.join(', ')}'
+              : '';
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Dictionary downloaded and imported successfully$sampleWordsText',
+              ),
+              duration: const Duration(seconds: 5),
+            ),
+          );
+          await _loadDictionaries();
+        }
+      } catch (e) {
+        if (mounted) {
+          Navigator.pop(context); // Close progress dialog
+          final String errorStr = e.toString();
+          String message;
+          if (errorStr.contains('ALREADY_EXISTS:')) {
+            message = errorStr.split('ALREADY_EXISTS:').last.trim();
+          } else if (errorStr.contains('already in your library')) {
+            message = errorStr.replaceAll('Exception: ', '').trim();
+          } else {
+            message = 'Download/Import failed: $e';
+          }
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+        }
+      }
+    }
+  }
+
+  Future<void> _downloadFreedictDictionary() async {
+    final dynamic result = await showDialog<dynamic>(
+      context: context,
+      builder: (context) => const FreedictDownloadDialog(),
+    );
+
+    if (result != null && result is Map && result['url'] != null) {
+      final String url = result['url'];
+      final bool index = result['index'] ?? false;
       if (!mounted) return;
 
       showDialog(
@@ -390,37 +470,41 @@ class _DictionaryManagementScreenState
       ),
       drawer: const AppDrawer(),
       persistentFooterButtons: [
-        Row(
+        Wrap(
+          spacing: 8.0,
+          runSpacing: 8.0,
+          alignment: WrapAlignment.center,
           children: [
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                child: OutlinedButton.icon(
-                  onPressed: _isLoading ? null : _importDictionary,
-                  icon: const Icon(Icons.file_open_outlined),
-                  label: const Text('Import File'),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
+            OutlinedButton.icon(
+              onPressed: _isLoading ? null : _importDictionary,
+              icon: const Icon(Icons.file_open_outlined),
+              label: const Text('Import File'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
             ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                child: FilledButton.icon(
-                  onPressed: _isLoading ? null : _downloadDictionary,
-                  icon: const Icon(Icons.public),
-                  label: const Text('Download Web'),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
+            OutlinedButton.icon(
+              onPressed: _isLoading ? null : _downloadFreedictDictionary,
+              icon: const Icon(Icons.language),
+              label: const Text('Select by Language'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+            FilledButton.icon(
+              onPressed: _isLoading ? null : _downloadDictionary,
+              icon: const Icon(Icons.public),
+              label: const Text('Download Web'),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
             ),
