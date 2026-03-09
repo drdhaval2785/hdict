@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.1] - 2026-03-09
+
+### Added
+- **Performance Optimizations**: 
+  - Switched `dictzip`, `dictd`, and `slob` readers to batch mode using updated Dart packages for faster data retrieval.
+  - Improved SQLite query performance and handling for headword queries.
+  - Implemented lazy loading and optimized screen loading for a smoother user experience.
+  - Reduced redundant calls to `dict.dz` and optimized dictionary locking during reads.
+- **Improved Re-indexing**:
+  - Corrected indexing logic to strictly respect "Headwords Only" vs "Headwords & Definitions" selection.
+  - Enhanced re-indexing progress UI to conditionally display definition word counts.
+- **Performance Monitoring**: Added performance statistics for pop-up calls.
+
+### Fixed
+- **Database**: Improved database upgrade error handling and schema consistency (v22).
+- **Maintenance**: Audited and updated dependencies to latest versions and removed unused packages.
+
 ## [1.3.0] - 2026-03-06
 
 ### Added
