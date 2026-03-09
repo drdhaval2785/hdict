@@ -777,7 +777,8 @@ class _DictionaryManagementScreenState
         if (progress.headwordCount > 0) ...[
           const SizedBox(height: 8),
           Text(
-            '${progress.headwordCount} headwords, ${progress.definitionWordCount} definition words indexed',
+            '${progress.headwordCount} headwords'
+            '${(progress.definitionWordCount > 0) ? ', ${progress.definitionWordCount} definition words indexed' : ' indexed'}',
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
           ),
         ],

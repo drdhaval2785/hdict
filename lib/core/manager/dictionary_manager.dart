@@ -211,7 +211,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
         });
 
         headwordCount++;
-        if (content.isNotEmpty) {
+        if (args.indexDefinitions && content.isNotEmpty) {
           defWordCount += content.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
         }
 
@@ -219,7 +219,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
           await dbHelper.batchInsertWords(args.dictId, dbBatch);
           dbBatch.clear();
           sendPort.send(ImportProgress(
-            message: '${args.ifoParser.bookName}: $headwordCount headwords, $defWordCount words in definition',
+            message: '${args.ifoParser.bookName}: $headwordCount headwords${args.indexDefinitions ? ", $defWordCount words in definition" : ""}',
             value: 0.85 + (headwordCount / (args.ifoParser.wordCount == 0 ? 100000 : args.ifoParser.wordCount) * 0.05),
             headwordCount: headwordCount,
             definitionWordCount: defWordCount,
@@ -318,7 +318,7 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
         'length': 0,
       });
       indexed++;
-      if (content.isNotEmpty) {
+      if (args.indexDefinitions && content.isNotEmpty) {
         defWordCount += content.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
       }
 
@@ -419,7 +419,7 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
         });
 
         headwordCount++;
-        if (content.isNotEmpty) {
+        if (args.indexDefinitions && content.isNotEmpty) {
           defWordCount += content.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
         }
 
@@ -427,7 +427,7 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
           await dbHelper.batchInsertWords(args.dictId, dbBatch);
           dbBatch.clear();
           sendPort.send(ImportProgress(
-            message: '${args.bookName}: $headwordCount headwords, $defWordCount words in definition',
+            message: '${args.bookName}: $headwordCount headwords${args.indexDefinitions ? ", $defWordCount words in definition" : ""}',
             value: 0.45 + (headwordCount / (totalBlobs == 0 ? 1 : totalBlobs)) * 0.45,
             headwordCount: headwordCount,
             definitionWordCount: defWordCount,
@@ -512,8 +512,7 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
           'length': length,
         });
         headwordCount++;
-
-        if (content.isNotEmpty) {
+        if (args.indexDefinitions && content.isNotEmpty) {
           defWordCount += content.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
         }
 
@@ -521,7 +520,7 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
           await dbHelper.batchInsertWords(args.dictId, dbBatch);
           dbBatch.clear();
           sendPort.send(ImportProgress(
-            message: '${args.bookName}: $headwordCount headwords, $defWordCount words in definition',
+            message: '${args.bookName}: $headwordCount headwords${args.indexDefinitions ? ", $defWordCount words in definition" : ""}',
             value: 0.45 + (headwordCount / 100000) * 0.45,
             headwordCount: headwordCount,
             definitionWordCount: defWordCount,
@@ -2287,7 +2286,7 @@ class DictionaryManager {
               idxPath,
               dictPath,
               synPath,
-              true, // indexDefinitions
+              indexDefinitions,
               ifoParser,
               receivePort.sendPort,
               rootIsolateToken,
