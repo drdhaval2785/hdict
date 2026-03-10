@@ -175,14 +175,18 @@ Future<void> _indexEntry(_IndexArgs args) async {
       entriesList.add(entry);
     }
 
+    final int totalHeadwords = entriesList.length;
+    // synWordCount comes from the .ifo file — known before opening the .syn file
+    final int totalSyns = args.ifoParser.synWordCount;
+    final int totalAll = totalHeadwords + totalSyns; // unified denominator
     int headwordCount = 0;
     int defWordCount = 0;
     const int readBatchSize = 100;
     const int dbBatchSize = 10000;
     List<Map<String, dynamic>> dbBatch = [];
 
-    for (int i = 0; i < entriesList.length; i += readBatchSize) {
-      final end = (i + readBatchSize < entriesList.length) ? i + readBatchSize : entriesList.length;
+    for (int i = 0; i < totalHeadwords; i += readBatchSize) {
+      final end = (i + readBatchSize < totalHeadwords) ? i + readBatchSize : totalHeadwords;
       final currentBatch = entriesList.sublist(i, end);
       
       final List<({int offset, int length})> readEntries = currentBatch.map((e) => (
@@ -220,8 +224,8 @@ Future<void> _indexEntry(_IndexArgs args) async {
           await dbHelper.batchInsertWords(args.dictId, dbBatch);
           dbBatch.clear();
           sendPort.send(ImportProgress(
-            message: '${args.ifoParser.bookName}: $headwordCount headwords${args.indexDefinitions ? ", $defWordCount words in definition" : ""}',
-            value: 0.85 + (headwordCount / (args.ifoParser.wordCount == 0 ? 100000 : args.ifoParser.wordCount) * 0.05),
+            message: '${args.ifoParser.bookName}: $headwordCount / $totalAll indexed',
+            value: 0.5 + (headwordCount / (totalAll == 0 ? 1 : totalAll)) * 0.45,
             headwordCount: headwordCount,
             definitionWordCount: defWordCount,
             dictionaryName: args.ifoParser.bookName,
@@ -230,14 +234,11 @@ Future<void> _indexEntry(_IndexArgs args) async {
       }
     }
     if (dbBatch.isNotEmpty) await dbHelper.batchInsertWords(args.dictId, dbBatch);
-    // Removed redundant batch check here as it was from previous Turn and likely duplicated or superseded by dbBatch logic
-
 
     if (args.synPath != null) {
       final synParser = SynParser();
-      final synStream = synParser.parse(args.synPath!);
       List<Map<String, dynamic>> synBatch = [];
-      await for (final syn in synStream) {
+      await for (final syn in synParser.parse(args.synPath!)) {
         final originalIndex = syn['original_word_index'] as int;
         if (originalIndex < wordOffsets.length) {
           final originalInfo = wordOffsets[originalIndex];
@@ -253,6 +254,13 @@ Future<void> _indexEntry(_IndexArgs args) async {
         if (synBatch.length >= 10000) {
           await dbHelper.batchInsertWords(args.dictId, synBatch);
           synBatch.clear();
+          sendPort.send(ImportProgress(
+            message: '${args.ifoParser.bookName}: $headwordCount / $totalAll indexed',
+            value: 0.5 + (headwordCount / (totalAll == 0 ? 1 : totalAll)) * 0.45,
+            headwordCount: headwordCount,
+            definitionWordCount: defWordCount,
+            dictionaryName: args.ifoParser.bookName,
+          ));
         }
       }
       if (synBatch.isNotEmpty) {
@@ -327,8 +335,8 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
         await dbHelper.batchInsertWords(args.dictId, batch);
         batch.clear();
         sendPort.send(ImportProgress(
-          message: 'Indexed $indexed headwords and $defWordCount words in definition',
-          value: 0.5 + (indexed / (totalKeys == 0 ? 1 : totalKeys)) * 0.4,
+          message: '${args.bookName}: $indexed / $totalKeys headwords indexed',
+          value: 0.5 + (indexed / (totalKeys == 0 ? 1 : totalKeys)) * 0.45,
           headwordCount: indexed,
           definitionWordCount: defWordCount,
           dictionaryName: args.bookName,
@@ -428,8 +436,8 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
           await dbHelper.batchInsertWords(args.dictId, dbBatch);
           dbBatch.clear();
           sendPort.send(ImportProgress(
-            message: '${args.bookName}: $headwordCount headwords${args.indexDefinitions ? ", $defWordCount words in definition" : ""}',
-            value: 0.45 + (headwordCount / (totalBlobs == 0 ? 1 : totalBlobs)) * 0.45,
+            message: '${args.bookName}: $headwordCount / $totalBlobs headwords indexed',
+            value: 0.45 + (headwordCount / (totalBlobs == 0 ? 1 : totalBlobs)) * 0.5,
             headwordCount: headwordCount,
             definitionWordCount: defWordCount,
             dictionaryName: args.bookName,
@@ -479,14 +487,15 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
       entriesList.add(entry);
     }
 
+    final int totalHeadwords = entriesList.length;
     int headwordCount = 0;
     int defWordCount = 0;
     const int readBatchSize = 100;
     const int dbBatchSize = 10000;
     List<Map<String, dynamic>> dbBatch = [];
 
-    for (int i = 0; i < entriesList.length; i += readBatchSize) {
-      final end = (i + readBatchSize < entriesList.length) ? i + readBatchSize : entriesList.length;
+    for (int i = 0; i < totalHeadwords; i += readBatchSize) {
+      final end = (i + readBatchSize < totalHeadwords) ? i + readBatchSize : totalHeadwords;
       final currentBatch = entriesList.sublist(i, end);
 
       final List<({int offset, int length})> readEntries = currentBatch.map((e) => (
@@ -521,8 +530,8 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
           await dbHelper.batchInsertWords(args.dictId, dbBatch);
           dbBatch.clear();
           sendPort.send(ImportProgress(
-            message: '${args.bookName}: $headwordCount headwords${args.indexDefinitions ? ", $defWordCount words in definition" : ""}',
-            value: 0.45 + (headwordCount / 100000) * 0.45,
+            message: '${args.bookName}: $headwordCount / $totalHeadwords headwords indexed',
+            value: 0.45 + (headwordCount / (totalHeadwords == 0 ? 1 : totalHeadwords)) * 0.5,
             headwordCount: headwordCount,
             definitionWordCount: defWordCount,
             dictionaryName: args.bookName,
