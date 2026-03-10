@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.2] - 2026-03-10
+
+### Added
+- **Indexing Progress Display**: Progress bar now shows `X / Total indexed` using the true total headword count for all dictionary formats (StarDict, MDict, Slob, DICTD).
+- **Unified Headword + Synonym Counter**: For StarDict dictionaries, the progress denominator combines base headwords and synonyms (`synwordcount` from the `.ifo` file), so a single counter advances continuously from the first headword to the last synonym without freezing.
+- **7-Zip Support**: Added support for importing dictionaries compressed as `.7z` archives.
+- **FreeDict Integration**: 
+  - Added FreeDict list-of-dictionaries browser with language-based filtering.
+  - FreeDict metadata/JSON is now stored in the database for instant loading without repeated network requests.
+- **Batch Database Inserts**: Switched dictionary import to use batch inserts for significantly faster indexing.
+
+### Fixed
+- **Progress Bar Freeze**: Synonym indexing phase of StarDict dictionaries no longer shows a frozen bar; progress updates are emitted per batch throughout the synonym phase.
+- **DICTD Progress Accuracy**: DICTD progress was previously calculated against a hardcoded denominator of 100,000; it now uses the actual entry count from the parsed index.
+
 ## [1.3.1] - 2026-03-09
 
 ### Added
