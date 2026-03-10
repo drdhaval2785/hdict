@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:hdict/core/constants/iso_639_2_languages.dart';
 
 class FreedictRelease {
@@ -67,12 +69,12 @@ class FreedictDictionary {
   }
   
   FreedictRelease? getPreferredRelease() {
-    // prefer slob, then stardict, then dictd.
-    try {
-      return releases.firstWhere((r) => r.format == 'slob');
-    } catch (_) {}
+    // prefer stardict, then slob, then dictd.
     try {
       return releases.firstWhere((r) => r.format == 'stardict');
+    } catch (_) {}
+    try {
+      return releases.firstWhere((r) => r.format == 'slob');
     } catch (_) {}
     try {
       return releases.firstWhere((r) => r.format == 'dictd');
@@ -84,17 +86,49 @@ class FreedictDictionary {
 class FreedictService {
   static const String _databaseUrl =
       'https://freedict.org/freedict-database.json';
+  static const String _cacheFileName = 'freedict-database.json';
 
   Future<List<FreedictDictionary>> fetchDictionaries() async {
-    final response = await http.get(Uri.parse(_databaseUrl));
-    if (response.statusCode == 200) {
-      final List<dynamic> data = json.decode(response.body);
-      return data
-          .map((json) => FreedictDictionary.fromJson(json as Map<String, dynamic>))
-          .where((d) => d.getPreferredRelease() != null)
-          .toList();
-    } else {
-      throw Exception('Failed to load FreeDict database');
+    // 1. Try to load from cache first for immediate response
+    final cacheFile = await _getCacheFile();
+    List<FreedictDictionary>? cachedDicts;
+    
+    if (await cacheFile.exists()) {
+      try {
+        final content = await cacheFile.readAsString();
+        cachedDicts = _parseJson(content);
+      } catch (e) {
+        // Silently ignore cache errors, we'll try to fetch anyway
+      }
     }
+
+    // 2. Fetch from network in background or as fallback
+    try {
+      final response = await http.get(Uri.parse(_databaseUrl)).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        // Update cache
+        await cacheFile.writeAsString(response.body);
+        return _parseJson(response.body);
+      }
+    } catch (e) {
+      // If network fails, return cached data if we have it
+      if (cachedDicts != null) return cachedDicts;
+      throw Exception('Failed to load FreeDict database and no cache available');
+    }
+
+    return cachedDicts ?? (throw Exception('Failed to load FreeDict database'));
+  }
+
+  List<FreedictDictionary> _parseJson(String jsonContent) {
+    final List<dynamic> data = json.decode(jsonContent);
+    return data
+        .map((json) => FreedictDictionary.fromJson(json as Map<String, dynamic>))
+        .where((d) => d.getPreferredRelease() != null)
+        .toList();
+  }
+
+  Future<File> _getCacheFile() async {
+    final cacheDir = await getTemporaryDirectory();
+    return File('${cacheDir.path}/$_cacheFileName');
   }
 }

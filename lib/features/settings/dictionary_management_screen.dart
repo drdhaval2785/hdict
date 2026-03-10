@@ -470,46 +470,75 @@ class _DictionaryManagementScreenState
       ),
       drawer: const AppDrawer(),
       persistentFooterButtons: [
-        Wrap(
-          spacing: 8.0,
-          runSpacing: 8.0,
-          alignment: WrapAlignment.center,
-          children: [
-            OutlinedButton.icon(
-              onPressed: _isLoading ? null : _importDictionary,
-              icon: const Icon(Icons.file_open_outlined),
-              label: const Text('Import File'),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+        () {
+          final double screenWidth = MediaQuery.sizeOf(context).width;
+          final bool isWide = screenWidth > 580; // slightly wider for 3 buttons
+          
+          if (isWide) {
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildFooterButton(
+                  onPressed: _isLoading ? null : _importDictionary,
+                  icon: Icons.file_open_outlined,
+                  label: 'Import File',
+                  isPrimary: false,
                 ),
-              ),
-            ),
-            OutlinedButton.icon(
-              onPressed: _isLoading ? null : _downloadFreedictDictionary,
-              icon: const Icon(Icons.language),
-              label: const Text('Select by Language'),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                const SizedBox(width: 8),
+                _buildFooterButton(
+                  onPressed: _isLoading ? null : _downloadDictionary,
+                  icon: Icons.public,
+                  label: 'Download Web',
+                  isPrimary: false,
                 ),
-              ),
-            ),
-            FilledButton.icon(
-              onPressed: _isLoading ? null : _downloadDictionary,
-              icon: const Icon(Icons.public),
-              label: const Text('Download Web'),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                const SizedBox(width: 8),
+                _buildFooterButton(
+                  onPressed: _isLoading ? null : _downloadFreedictDictionary,
+                  icon: Icons.language,
+                  label: 'Select by Language',
+                  isPrimary: true,
                 ),
-              ),
-            ),
-          ],
-        ),
+              ],
+            );
+          } else {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildFooterButton(
+                        onPressed: _isLoading ? null : _importDictionary,
+                        icon: Icons.file_open_outlined,
+                        label: 'Import File',
+                        isPrimary: false,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildFooterButton(
+                        onPressed: _isLoading ? null : _downloadDictionary,
+                        icon: Icons.public,
+                        label: 'Download Web',
+                        isPrimary: false,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: _buildFooterButton(
+                    onPressed: _isLoading ? null : _downloadFreedictDictionary,
+                    icon: Icons.language,
+                    label: 'Select by Language',
+                    isPrimary: true,
+                  ),
+                ),
+              ],
+            );
+          }
+        }(),
       ],
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -769,6 +798,36 @@ class _DictionaryManagementScreenState
     if (confirm == true) {
       await _dictionaryManager.deleteDictionary(dict['id']);
       _loadDictionaries();
+    }
+  }
+
+  Widget _buildFooterButton({
+    required VoidCallback? onPressed,
+    required IconData icon,
+    required String label,
+    required bool isPrimary,
+  }) {
+    final style = (isPrimary ? FilledButton.styleFrom : OutlinedButton.styleFrom)(
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+    );
+
+    if (isPrimary) {
+      return FilledButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        label: Text(label),
+        style: style,
+      );
+    } else {
+      return OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        label: Text(label),
+        style: style,
+      );
     }
   }
 
