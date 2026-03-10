@@ -19,6 +19,7 @@ import 'package:hdict/core/parser/mdict_reader.dart';
 import 'package:hdict/core/parser/slob_reader.dart';
 import 'package:dictd_reader/dictd_reader.dart';
 import 'package:crypto/crypto.dart';
+import 'package:flutter_7zip/flutter_7zip.dart';
 
 // Top-level functions for compute
 List<int> _decompressGzip(List<int> bytes) {
@@ -592,6 +593,9 @@ Future<void> _extractToWorkspaceSync(_ExtractArgs args) async {
           rethrow;
         }
       }
+    } else if (lowerPath.endsWith('.7z')) {
+      SZArchive.extract(filePath, workspacePath);
+      return;
     } else {
       // Not an archive, just copy it
       final fileName = p.basename(filePath);

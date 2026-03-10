@@ -42,6 +42,7 @@ post_install do |installer|
     # Ensure dSYM generation for all pods to fix objective_c.framework error
     target.build_configurations.each do |config|
       config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf-with-dsym'
+      config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
     end
   end
 end

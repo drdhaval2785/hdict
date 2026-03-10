@@ -1,6 +1,8 @@
 PODS:
   - file_selector_macos (0.0.1):
     - FlutterMacOS
+  - flutter_7zip (0.0.1):
+    - FlutterMacOS
   - FlutterMacOS (1.0.0)
   - shared_preferences_foundation (0.0.1):
     - Flutter
@@ -13,6 +15,7 @@ PODS:
 
 DEPENDENCIES:
   - file_selector_macos (from `Flutter/ephemeral/.symlinks/plugins/file_selector_macos/macos`)
+  - flutter_7zip (from `Flutter/ephemeral/.symlinks/plugins/flutter_7zip/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
   - shared_preferences_foundation (from `Flutter/ephemeral/.symlinks/plugins/shared_preferences_foundation/darwin`)
   - sqflite_darwin (from `Flutter/ephemeral/.symlinks/plugins/sqflite_darwin/darwin`)
@@ -21,6 +24,8 @@ DEPENDENCIES:
 EXTERNAL SOURCES:
   file_selector_macos:
     :path: Flutter/ephemeral/.symlinks/plugins/file_selector_macos/macos
+  flutter_7zip:
+    :path: Flutter/ephemeral/.symlinks/plugins/flutter_7zip/macos
   FlutterMacOS:
     :path: Flutter/ephemeral
   shared_preferences_foundation:
@@ -32,11 +37,12 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   file_selector_macos: 9e9e068e90ebee155097d00e89ae91edb2374db7
+  flutter_7zip: 9779d5e44d0b6092a94acf5981e876bf41b91d0b
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
   shared_preferences_foundation: 7036424c3d8ec98dfe75ff1667cb0cd531ec82bb
   sqflite_darwin: 20b2a3a3b70e43edae938624ce550a3cbf66a3d0
   url_launcher_macos: f87a979182d112f911de6820aefddaf56ee9fbfd
 
-PODFILE CHECKSUM: f613cf30ce609a065a2a03463beecdbf92f954d9
+PODFILE CHECKSUM: 4e217b33899333684abe2885b0015b64f654a182
 
 COCOAPODS: 1.16.2

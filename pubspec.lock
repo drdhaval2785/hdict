@@ -246,6 +246,15 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_7zip:
+    dependency: "direct main"
+    description:
+      path: "."
+      ref: HEAD
+      resolved-ref: b33344797f1d2469339e0e1b75f5f954f1da224c
+      url: "https://github.com/wgh136/flutter_7zip.git"
+    source: git
+    version: "0.0.1"
   flutter_colorpicker:
     dependency: "direct main"
     description:
