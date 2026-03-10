@@ -178,7 +178,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
     int headwordCount = 0;
     int defWordCount = 0;
     const int readBatchSize = 100;
-    const int dbBatchSize = 2000;
+    const int dbBatchSize = 10000;
     List<Map<String, dynamic>> dbBatch = [];
 
     for (int i = 0; i < entriesList.length; i += readBatchSize) {
@@ -250,7 +250,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
           });
           headwordCount++;
         }
-        if (synBatch.length >= 2000) {
+        if (synBatch.length >= 10000) {
           await dbHelper.batchInsertWords(args.dictId, synBatch);
           synBatch.clear();
         }
@@ -323,7 +323,7 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
         defWordCount += content.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
       }
 
-      if (batch.length >= 2000) {
+      if (batch.length >= 10000) {
         await dbHelper.batchInsertWords(args.dictId, batch);
         batch.clear();
         sendPort.send(ImportProgress(
@@ -374,7 +374,7 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
     int defWordCount = 0;
     final totalBlobs = reader.blobCount;
     const int readBatchSize = 100;
-    const int dbBatchSize = 2000;
+    const int dbBatchSize = 10000;
     List<Map<String, dynamic>> dbBatch = [];
 
     // Slob indexing is usually by iterating all blobs
@@ -482,7 +482,7 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
     int headwordCount = 0;
     int defWordCount = 0;
     const int readBatchSize = 100;
-    const int dbBatchSize = 2000;
+    const int dbBatchSize = 10000;
     List<Map<String, dynamic>> dbBatch = [];
 
     for (int i = 0; i < entriesList.length; i += readBatchSize) {

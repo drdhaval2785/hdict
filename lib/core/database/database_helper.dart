@@ -1044,31 +1044,49 @@ class DatabaseHelper {
     int dictId,
     List<Map<String, dynamic>> words,
   ) async {
+    if (words.isEmpty) return;
     final db = await database;
     await db.transaction((txn) async {
       final bool useFts5 = _fts5Available ?? true;
-      
+
       if (useFts5) {
-        for (var word in words) {
-          // 1. Insert into metadata first to get the rowid
-          final int id = await txn.insert('word_metadata', {
+        // Predict the IDs that SQLite AUTOINCREMENT will assign.
+        // sqlite_sequence stores the last used rowid for each AUTOINCREMENT table.
+        // If the table has never been written to, there is no row yet — default to 0.
+        final seqResult = await txn.rawQuery(
+          "SELECT seq FROM sqlite_sequence WHERE name='word_metadata'",
+        );
+        final int startId = seqResult.isNotEmpty
+            ? (seqResult.first['seq'] as int)
+            : 0;
+
+        // --- Pass 1: insert all word_metadata rows in a single batch ---
+        final metaBatch = txn.batch();
+        for (final word in words) {
+          metaBatch.insert('word_metadata', {
             'word': word['word'],
             'dict_id': dictId,
             'offset': word['offset'],
             'length': word['length'],
           });
+        }
+        await metaBatch.commit(noResult: true);
 
-          // 2. Insert into FTS5 index using the metadata ID as rowid
-          // Pre-tokenize content: deduplicate, remove stopwords, lowercase
-          final String keywords = _tokenizeContent(word['content'] as String?);
-          await txn.execute(
+        // --- Pass 2: insert all word_index rows in a single batch ---
+        // SQLite AUTOINCREMENT guarantees IDs are startId+1, startId+2, …
+        final idxBatch = txn.batch();
+        for (int i = 0; i < words.length; i++) {
+          final int predictedId = startId + i + 1;
+          final String keywords = _tokenizeContent(words[i]['content'] as String?);
+          idxBatch.rawInsert(
             'INSERT INTO word_index(rowid, word, content) VALUES (?, ?, ?)',
-            [id, word['word'], keywords],
+            [predictedId, words[i]['word'], keywords],
           );
         }
+        await idxBatch.commit(noResult: true);
       } else {
         final batch = txn.batch();
-        for (var word in words) {
+        for (final word in words) {
           batch.insert('word_index', {
             'word': word['word'],
             'content': word['content'],
