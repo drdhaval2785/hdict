@@ -99,7 +99,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 23, // Version 23: Added idx_metadata_dict_word composite index
+      version: 24, // Version 24: Added freedict_dictionaries table
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onOpen: _onOpen,
@@ -260,6 +260,18 @@ class DatabaseHelper {
         file_name TEXT NOT NULL,
         content BLOB NOT NULL,
         UNIQUE(dict_id, file_name)
+      )
+    ''');
+
+    // 6. Create freedict_dictionaries table
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS freedict_dictionaries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        source_lang TEXT NOT NULL,
+        target_lang TEXT NOT NULL,
+        headwords TEXT,
+        releases_json TEXT NOT NULL
       )
     ''');
   }
@@ -576,6 +588,24 @@ class DatabaseHelper {
         }
       } catch (e) {
         hDebugPrint('Migration error (version 23): $e');
+      }
+    }
+
+    if (oldVersion < 24) {
+      try {
+        hDebugPrint('Migration to version 24: Adding freedict_dictionaries table');
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS freedict_dictionaries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            source_lang TEXT NOT NULL,
+            target_lang TEXT NOT NULL,
+            headwords TEXT,
+            releases_json TEXT NOT NULL
+          )
+        ''');
+      } catch (e) {
+        hDebugPrint('Migration error (version 24): $e');
       }
     }
   }
@@ -1323,5 +1353,29 @@ class DatabaseHelper {
       hDebugPrint('Error getting prefix suggestions: $e');
       return [];
     }
+  }
+
+  // --- FreeDict Cache ---
+
+  Future<void> insertFreedictDictionaries(List<Map<String, dynamic>> dictionaries) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('freedict_dictionaries');
+      final batch = txn.batch();
+      for (final dict in dictionaries) {
+        batch.insert('freedict_dictionaries', dict);
+      }
+      await batch.commit(noResult: true);
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getFreedictDictionaries() async {
+    final db = await database;
+    return await db.query('freedict_dictionaries');
+  }
+
+  Future<void> clearFreedictDictionaries() async {
+    final db = await database;
+    await db.delete('freedict_dictionaries');
   }
 }

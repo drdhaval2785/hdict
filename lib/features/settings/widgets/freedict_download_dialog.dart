@@ -13,6 +13,7 @@ class _FreedictDownloadDialogState extends State<FreedictDownloadDialog> {
   
   List<FreedictDictionary> _allDictionaries = [];
   bool _isLoading = true;
+  bool _isRefreshing = false;
   String? _error;
 
   String? _selectedSourceLanguage;
@@ -27,18 +28,49 @@ class _FreedictDownloadDialogState extends State<FreedictDownloadDialog> {
 
   Future<void> _loadData() async {
     try {
-      final dicts = await _service.fetchDictionaries();
+      final cachedDicts = await _service.fetchDictionaries();
       if (mounted) {
         setState(() {
-          _allDictionaries = dicts;
+          _allDictionaries = cachedDicts;
           _isLoading = false;
         });
+      }
+      
+      // If no cache, auto-refresh
+      if (cachedDicts.isEmpty) {
+        _refresh();
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _error = e.toString();
           _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _refresh() async {
+    if (_isRefreshing) return;
+    
+    setState(() {
+      _isRefreshing = true;
+      _error = null;
+    });
+
+    try {
+      final dicts = await _service.refreshDictionaries();
+      if (mounted) {
+        setState(() {
+          _allDictionaries = dicts;
+          _isRefreshing = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isRefreshing = false;
         });
       }
     }
@@ -93,7 +125,23 @@ class _FreedictDownloadDialogState extends State<FreedictDownloadDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Download from FreeDict'),
+      title: Row(
+        children: [
+          const Expanded(child: Text('Download from FreeDict')),
+          if (_isRefreshing)
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.refresh, size: 20),
+              onPressed: _refresh,
+              tooltip: 'Refresh dictionary list',
+            ),
+        ],
+      ),
       content: SizedBox(
         width: double.maxFinite,
         child: _buildContent(),
