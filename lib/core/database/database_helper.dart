@@ -99,7 +99,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 26, // Version 26: Added source_url column to dictionaries table
+      version: 28, // Version 28: Migrated FTS5 to contentful to fix deletion leaks
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onOpen: _onOpen,
@@ -178,7 +178,6 @@ class DatabaseHelper {
           CREATE VIRTUAL TABLE word_index USING fts5(
             word,
             content,
-            content = '',
             tokenize = 'unicode61'
           )
         ''');
@@ -230,7 +229,8 @@ class DatabaseHelper {
         type_sequence TEXT,
         css TEXT,
         definition_word_count INTEGER DEFAULT 0,
-        checksum TEXT
+        checksum TEXT,
+        source_url TEXT
       )
     ''');
 
@@ -681,6 +681,50 @@ class DatabaseHelper {
         hDebugPrint('Migration error (version 26): $e');
       }
     }
+
+    if (oldVersion < 27) {
+      try {
+        hDebugPrint(
+          'Migration to version 27: Ensuring source_url column exists in dictionaries',
+        );
+        final tableInfo = await db.rawQuery(
+          "PRAGMA table_info('dictionaries')",
+        );
+        bool hasSourceUrl = false;
+        for (final row in tableInfo) {
+          if (row['name'] == 'source_url') {
+            hasSourceUrl = true;
+            break;
+          }
+        }
+        if (!hasSourceUrl) {
+          await db.execute(
+            'ALTER TABLE dictionaries ADD COLUMN source_url TEXT',
+          );
+        }
+      } catch (e) {
+        hDebugPrint('Migration error (version 27): $e');
+      }
+    }
+
+    if (oldVersion < 28) {
+      try {
+        hDebugPrint(
+          'Migration to version 28: Making word_index a standard FTS5 table to allow deletions',
+        );
+        // Drastically simplifies things by just dropping the old index and forcing a background re-index
+        await db.execute('DROP TABLE IF EXISTS word_index');
+        try {
+          await db.execute('DELETE FROM word_metadata');
+        } catch (_) {}
+        await db.execute(
+          'UPDATE dictionaries SET word_count = 0, definition_word_count = 0, index_definitions = 0',
+        );
+        // word_index will be recreated without content='' in _onOpen -> _ensureWordIndexTable
+      } catch (e) {
+        hDebugPrint('Migration error (version 28): $e');
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -951,10 +995,12 @@ class DatabaseHelper {
     await db.transaction((txn) async {
       final bool useFts5 = _fts5Available ?? true;
       if (useFts5) {
-        // LAZY DELETION: We only delete from word_metadata.
-        // FTS5 contentless tables don't support selective deletes on many versions.
-        // Because search queries INNER JOIN metadata and index, orphaned FTS5 rows
-        // are naturally excluded from results.
+        // Delete FTS5 index first, using the metadata row mapping
+        await txn.delete(
+          'word_index',
+          where: 'rowid IN (SELECT id FROM word_metadata WHERE dict_id = ?)',
+          whereArgs: [dictId],
+        );
         await txn.delete(
           'word_metadata',
           where: 'dict_id = ?',
@@ -977,7 +1023,12 @@ class DatabaseHelper {
 
       final bool useFts5 = _fts5Available ?? true;
       if (useFts5) {
-        // LAZY DELETION: Delete from metadata only. JOIN handles the rest.
+        // Delete FTS5 index first, using the metadata row mapping
+        await txn.delete(
+          'word_index',
+          where: 'rowid IN (SELECT id FROM word_metadata WHERE dict_id = ?)',
+          whereArgs: [id],
+        );
         await txn.delete(
           'word_metadata',
           where: 'dict_id = ?',
