@@ -7,6 +7,7 @@ import 'package:hdict/features/home/home_screen.dart';
 import 'package:hdict/features/settings/dictionary_management_screen.dart';
 import 'package:hdict/features/settings/search_history_screen.dart';
 import 'package:hdict/features/settings/settings_screen.dart';
+import 'package:hdict/features/support/support_screen.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
@@ -20,7 +21,9 @@ class AppDrawer extends StatelessWidget {
         padding: EdgeInsets.zero,
         children: [
           DrawerHeader(
-            decoration: BoxDecoration(color: theme.colorScheme.primaryContainer),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer,
+            ),
             child: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -48,7 +51,9 @@ class AppDrawer extends StatelessWidget {
                 Navigator.pop(context);
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const SearchHistoryScreen()),
+                  MaterialPageRoute(
+                    builder: (context) => const SearchHistoryScreen(),
+                  ),
                 );
               },
             ),
@@ -70,7 +75,9 @@ class AppDrawer extends StatelessWidget {
                 Navigator.pop(context);
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const ScoreHistoryScreen()),
+                  MaterialPageRoute(
+                    builder: (context) => const ScoreHistoryScreen(),
+                  ),
                 );
               },
             ),
@@ -78,7 +85,9 @@ class AppDrawer extends StatelessWidget {
               Navigator.pop(context);
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const FlashCardsScreen()),
+                MaterialPageRoute(
+                  builder: (context) => const FlashCardsScreen(),
+                ),
               );
             },
           ),
@@ -89,7 +98,9 @@ class AppDrawer extends StatelessWidget {
               Navigator.pop(context);
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const DictionaryManagementScreen()),
+                MaterialPageRoute(
+                  builder: (context) => const DictionaryManagementScreen(),
+                ),
               );
             },
           ),
@@ -126,7 +137,7 @@ class AppDrawer extends StatelessWidget {
               );
             },
           ),
-          /* ListTile(
+          ListTile(
             leading: const Icon(Icons.favorite_outline),
             title: const Text('Support Us'),
             onTap: () {
@@ -136,7 +147,7 @@ class AppDrawer extends StatelessWidget {
                 MaterialPageRoute(builder: (context) => const SupportScreen()),
               );
             },
-          ), */
+          ),
           const SizedBox(height: 16),
         ],
       ),

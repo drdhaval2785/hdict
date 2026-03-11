@@ -9,7 +9,8 @@ import 'package:hdict/features/settings/widgets/stardict_download_dialog.dart';
 
 /// A screen for managing installed dictionaries.
 class DictionaryManagementScreen extends StatefulWidget {
-  const DictionaryManagementScreen({super.key});
+  final bool triggerSelectByLanguage;
+  const DictionaryManagementScreen({super.key, this.triggerSelectByLanguage = false});
 
   @override
   State<DictionaryManagementScreen> createState() =>
@@ -26,6 +27,11 @@ class _DictionaryManagementScreenState
   void initState() {
     super.initState();
     _loadDictionaries();
+    if (widget.triggerSelectByLanguage) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _downloadFreedictDictionary();
+      });
+    }
   }
 
   Future<void> _loadDictionaries() async {
@@ -725,74 +731,71 @@ class _DictionaryManagementScreenState
   Widget _buildGuidanceCard(ThemeData theme) {
     return Card(
       elevation: 0,
-      color: theme.colorScheme.primaryContainer.withValues(alpha: 0.2),
+      color: theme.colorScheme.primaryContainer.withValues(alpha: 0.1),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         side: BorderSide(
           color: theme.colorScheme.primary.withValues(alpha: 0.1),
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(20.0),
+        padding: const EdgeInsets.all(24.0),
         child: Column(
           children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.language, color: theme.colorScheme.primary, size: 32),
+            ),
+            const SizedBox(height: 16),
             Text(
-              'Looking for a dictionary?',
+              'Select Dictionaries by selecting your desired languages',
+              textAlign: TextAlign.center,
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
                 color: theme.colorScheme.primary,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             const Text(
-              'Copy the URL below and paste it into "Download Web" below:',
+              'Quickly download high-quality dictionaries for dozens of languages directly within the app.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14),
+              style: TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _downloadFreedictDictionary,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: theme.colorScheme.primary,
+                foregroundColor: theme.colorScheme.onPrimary,
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 2,
+              ),
+              child: const Text(
+                'Select by Language',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(child: Divider(color: Colors.grey.withValues(alpha: 0.2))),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text('OR', style: TextStyle(fontSize: 12, color: Colors.grey.withValues(alpha: 0.5))),
+                ),
+                Expanded(child: Divider(color: Colors.grey.withValues(alpha: 0.2))),
+              ],
             ),
             const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.2),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: SelectableText(
-                      'http://tovotu.de/data/stardict/gcide.zip',
-                      style: TextStyle(
-                        color: theme.colorScheme.primary,
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'monospace',
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.copy, size: 18),
-                    onPressed: () {
-                      Clipboard.setData(
-                        const ClipboardData(
-                          text: 'http://tovotu.de/data/stardict/gcide.zip',
-                        ),
-                      );
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('URL copied to clipboard'),
-                          duration: Duration(seconds: 2),
-                        ),
-                      );
-                    },
-                    tooltip: 'Copy URL',
-                  ),
-                ],
-              ),
+            Text(
+              'You can also use "Import File" or "Download Web" below if you have a specific file or URL.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: Colors.grey.withValues(alpha: 0.6)),
             ),
           ],
         ),
