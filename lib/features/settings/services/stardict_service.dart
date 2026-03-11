@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:hdict/core/database/database_helper.dart';
 import 'package:hdict/core/constants/iso_639_2_languages.dart';
+import 'package:hdict/core/utils/logger.dart';
 
 class StardictRelease {
   final String url;
@@ -202,6 +203,24 @@ class StardictService {
       throw Exception(
         'Failed to refresh Stardict database (HTTP ${response.statusCode})',
       );
+    }
+  }
+
+  Future<Set<String>> getDownloadedUrls() async {
+    try {
+      final db = await _dbHelper.database;
+      final result = await db.query(
+        'dictionaries',
+        columns: ['source_url'],
+        where: 'source_url IS NOT NULL AND source_url != ""',
+      );
+      return result
+          .map((row) => row['source_url'] as String)
+          .where((url) => url.isNotEmpty)
+          .toSet();
+    } catch (e) {
+      hDebugPrint('Error getting downloaded URLs: $e');
+      return {};
     }
   }
 }

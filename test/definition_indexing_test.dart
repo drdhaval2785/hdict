@@ -18,13 +18,14 @@ void main() {
 
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockMethodCallHandler(
-          const MethodChannel('plugins.flutter.io/path_provider'),
-          (MethodCall methodCall) async {
-    if (methodCall.method == 'getApplicationDocumentsDirectory') {
-      return '.';
-    }
-    return null;
-  });
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        (MethodCall methodCall) async {
+          if (methodCall.method == 'getApplicationDocumentsDirectory') {
+            return '.';
+          }
+          return null;
+        },
+      );
 
   group('Definition Indexing Tests', () {
     late Directory tempDir;
@@ -33,9 +34,11 @@ void main() {
     setUp(() async {
       tempDir = await Directory.systemTemp.createTemp('hdict_indexing_test_');
       dbHelper = DatabaseHelper();
-      final db = await openDatabase(inMemoryDatabasePath, version: 13,
-          onCreate: (db, version) async {
-        await db.execute('''
+      final db = await openDatabase(
+        inMemoryDatabasePath,
+        version: 13,
+        onCreate: (db, version) async {
+          await db.execute('''
           CREATE TABLE dictionaries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -50,10 +53,11 @@ void main() {
             type_sequence TEXT,
             css TEXT,
             definition_word_count INTEGER DEFAULT 0,
-            checksum TEXT
+            checksum TEXT,
+            source_url TEXT
           )
         ''');
-        await db.execute('''
+          await db.execute('''
           CREATE TABLE word_index (
             word TEXT,
             content TEXT,
@@ -62,7 +66,8 @@ void main() {
             length INTEGER
           )
         ''');
-      });
+        },
+      );
       DatabaseHelper.setDatabase(db);
     });
 
@@ -74,11 +79,17 @@ void main() {
     test('Word counting logic works correctly for all formats', () {
       // This is the core logic used in all _indexXXXEntry functions
       String content = "hello world  \n  this is a test  ";
-      int count = content.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
+      int count = content
+          .split(RegExp(r'\s+'))
+          .where((s) => s.isNotEmpty)
+          .length;
       expect(count, 6);
 
       String devanagari = "शतपत्त्र कमल";
-      int devCount = devanagari.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
+      int devCount = devanagari
+          .split(RegExp(r'\s+'))
+          .where((s) => s.isNotEmpty)
+          .length;
       expect(devCount, 2);
     });
 
@@ -92,13 +103,19 @@ void main() {
       await reader.open();
       final parser = DictdParser();
       final entries = await parser.parseIndex(indexPath).toList();
-      
+
       int headwordCount = 0;
       int defWordCount = 0;
       for (final entry in entries) {
         headwordCount++;
-        final content = await reader.readAtOffset(entry['offset'] as int, entry['length'] as int);
-        defWordCount += content.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
+        final content = await reader.readAtOffset(
+          entry['offset'] as int,
+          entry['length'] as int,
+        );
+        defWordCount += content
+            .split(RegExp(r'\s+'))
+            .where((s) => s.isNotEmpty)
+            .length;
       }
       expect(headwordCount, 2);
       expect(defWordCount, 5);
@@ -110,14 +127,20 @@ void main() {
       final idxPath = p.join(tempDir.path, 'test.idx');
       final dictPath = p.join(tempDir.path, 'test.dict');
 
-      await File(ifoPath).writeAsString("StarDict's dict ifo file\nversion=2.4.2\nwordcount=2\nidxfilesize=100\nbookname=Test\nidxoffsetbits=32\n");
+      await File(ifoPath).writeAsString(
+        "StarDict's dict ifo file\nversion=2.4.2\nwordcount=2\nidxfilesize=100\nbookname=Test\nidxoffsetbits=32\n",
+      );
       await File(dictPath).writeAsString('hello worlddefinition of test');
 
       final bytes = BytesBuilder();
-      bytes.add('hello'.codeUnits); bytes.addByte(0);
-      bytes.add([0, 0, 0, 0]); bytes.add([0, 0, 0, 11]);
-      bytes.add('test'.codeUnits); bytes.addByte(0);
-      bytes.add([0, 0, 0, 11]); bytes.add([0, 0, 0, 18]);
+      bytes.add('hello'.codeUnits);
+      bytes.addByte(0);
+      bytes.add([0, 0, 0, 0]);
+      bytes.add([0, 0, 0, 11]);
+      bytes.add('test'.codeUnits);
+      bytes.addByte(0);
+      bytes.add([0, 0, 0, 11]);
+      bytes.add([0, 0, 0, 18]);
       await File(idxPath).writeAsBytes(bytes.toBytes());
 
       final ifo = IfoParser();
@@ -130,8 +153,14 @@ void main() {
       int defWordCount = 0;
       for (final entry in entries) {
         headwordCount++;
-        final content = await reader.readEntry(entry['offset'] as int, entry['length'] as int);
-        defWordCount += content.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
+        final content = await reader.readEntry(
+          entry['offset'] as int,
+          entry['length'] as int,
+        );
+        defWordCount += content
+            .split(RegExp(r'\s+'))
+            .where((s) => s.isNotEmpty)
+            .length;
       }
 
       expect(headwordCount, 2);

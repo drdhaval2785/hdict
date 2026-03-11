@@ -99,8 +99,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version:
-          25, // Version 25: Added url, version, date columns to freedict_dictionaries
+      version: 26, // Version 26: Added source_url column to dictionaries table
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onOpen: _onOpen,
@@ -671,6 +670,17 @@ class DatabaseHelper {
         hDebugPrint('Migration error (version 25): $e');
       }
     }
+
+    if (oldVersion < 26) {
+      try {
+        hDebugPrint(
+          'Migration to version 26: Adding source_url column to dictionaries',
+        );
+        await db.execute('ALTER TABLE dictionaries ADD COLUMN source_url TEXT');
+      } catch (e) {
+        hDebugPrint('Migration error (version 26): $e');
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -775,6 +785,7 @@ class DatabaseHelper {
     String format = 'stardict',
     String? typeSequence,
     String? checksum,
+    String? sourceUrl,
   }) async {
     final db = await database;
 
@@ -793,6 +804,7 @@ class DatabaseHelper {
       'type_sequence': typeSequence,
       'css': null,
       'checksum': checksum,
+      'source_url': sourceUrl,
     });
   }
 
@@ -1011,6 +1023,22 @@ class DatabaseHelper {
     } catch (e) {
       hDebugPrint('Error getting enabled dictionaries: $e');
       return [];
+    }
+  }
+
+  Future<bool> isDictionaryUrlDownloaded(String url) async {
+    try {
+      final db = await database;
+      final result = await db.query(
+        'dictionaries',
+        where: 'source_url = ?',
+        whereArgs: [url],
+        limit: 1,
+      );
+      return result.isNotEmpty;
+    } catch (e) {
+      hDebugPrint('Error checking dictionary URL: $e');
+      return false;
     }
   }
 

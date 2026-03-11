@@ -817,6 +817,8 @@ class DictionaryManager {
   static DictionaryManager? _instance;
   static DictionaryManager get instance => _instance ??= DictionaryManager();
 
+  String? _currentImportSourceUrl;
+
   DictionaryManager({DatabaseHelper? dbHelper, http.Client? client})
     : _dbHelper = dbHelper ?? DatabaseHelper(),
       _client = client ?? http.Client();
@@ -1594,6 +1596,7 @@ class DictionaryManager {
         indexDefinitions: indexDefinitions,
         typeSequence: ifoParser.sameTypeSequence,
         checksum: checksum,
+        sourceUrl: _currentImportSourceUrl,
       );
 
       yield ImportProgress(
@@ -1772,6 +1775,7 @@ class DictionaryManager {
         finalDictName,
         indexDefinitions: indexDefinitions,
         typeSequence: ifoParser.sameTypeSequence,
+        sourceUrl: _currentImportSourceUrl,
       );
 
       // Save files to virtual filesystem (SQLite 'files' table)
@@ -2061,6 +2065,7 @@ class DictionaryManager {
         format: 'mdict',
         typeSequence: null,
         checksum: checksum,
+        sourceUrl: _currentImportSourceUrl,
       );
 
       yield ImportProgress(message: 'Indexing headwords...', value: 0.5);
@@ -2186,6 +2191,7 @@ class DictionaryManager {
         format: 'dictd',
         typeSequence: null,
         checksum: checksum,
+        sourceUrl: _currentImportSourceUrl,
       );
 
       yield ImportProgress(message: 'Indexing DICTD words...', value: 0.45);
@@ -2314,6 +2320,7 @@ class DictionaryManager {
         format: 'slob',
         typeSequence: null,
         checksum: checksum,
+        sourceUrl: _currentImportSourceUrl,
       );
 
       yield ImportProgress(message: 'Indexing Slob blobs...', value: 0.45);
@@ -2766,6 +2773,8 @@ class DictionaryManager {
           .replaceFirst('/blob/', '/')
           .replaceFirst('/raw/', '/');
     }
+
+    _currentImportSourceUrl = effectiveUrl;
 
     if (kIsWeb) {
       // On Web, we must use byte-based download and import

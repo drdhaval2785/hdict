@@ -16,6 +16,7 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
   bool _isLoading = true;
   bool _isRefreshing = false;
   String? _error;
+  Set<String> _downloadedUrls = {};
 
   String? _selectedSourceLanguage;
   String? _selectedTargetLanguage;
@@ -30,9 +31,12 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
   Future<void> _loadData() async {
     try {
       final cachedDicts = await _service.fetchDictionaries();
+      final downloadedUrls = await _service.getDownloadedUrls();
+
       if (mounted) {
         setState(() {
           _allDictionaries = cachedDicts;
+          _downloadedUrls = downloadedUrls;
           _isLoading = false;
         });
       }
@@ -276,6 +280,8 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
                 final release = dict.getPreferredRelease();
                 if (release == null) return const SizedBox.shrink();
 
+                final isDownloaded = _downloadedUrls.contains(release.url);
+
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
@@ -283,16 +289,25 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
                     subtitle: Text(
                       'Version: ${dict.version.isEmpty ? "N/A" : dict.version} • Headwords: ${dict.headwords.isEmpty ? "N/A" : dict.headwords}',
                     ),
-                    trailing: FilledButton.icon(
-                      icon: const Icon(Icons.download, size: 18),
-                      label: const Text('Download'),
-                      onPressed: () {
-                        Navigator.pop(context, {
-                          'url': release.url,
-                          'index': _indexDefinitions,
-                        });
-                      },
-                    ),
+                    trailing: isDownloaded
+                        ? FilledButton.icon(
+                            icon: const Icon(Icons.check, size: 18),
+                            label: const Text('Downloaded'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Colors.green,
+                            ),
+                            onPressed: null,
+                          )
+                        : FilledButton.icon(
+                            icon: const Icon(Icons.download, size: 18),
+                            label: const Text('Download'),
+                            onPressed: () {
+                              Navigator.pop(context, {
+                                'url': release.url,
+                                'index': _indexDefinitions,
+                              });
+                            },
+                          ),
                   ),
                 );
               },

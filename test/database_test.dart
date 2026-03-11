@@ -32,7 +32,8 @@ void main() {
           type_sequence TEXT,
           css TEXT,
           definition_word_count INTEGER DEFAULT 0,
-          checksum TEXT
+          checksum TEXT,
+          source_url TEXT
         )
       ''');
 
@@ -45,7 +46,9 @@ void main() {
           length INTEGER
         )
       ''');
-      await db.execute('CREATE INDEX idx_metadata_dict_id ON word_metadata(dict_id)');
+      await db.execute(
+        'CREATE INDEX idx_metadata_dict_id ON word_metadata(dict_id)',
+      );
 
       await db.execute('''
         CREATE VIRTUAL TABLE word_index USING fts5(
