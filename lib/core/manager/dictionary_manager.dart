@@ -2763,6 +2763,7 @@ class DictionaryManager {
   Stream<ImportProgress> downloadAndImportDictionaryStream(
     String url, {
     bool indexDefinitions = false,
+    String? sourceUrl,
   }) async* {
     yield ImportProgress(message: 'Connecting...', value: 0.0);
 
@@ -2774,7 +2775,7 @@ class DictionaryManager {
           .replaceFirst('/raw/', '/');
     }
 
-    _currentImportSourceUrl = effectiveUrl;
+    _currentImportSourceUrl = sourceUrl ?? url;
 
     if (kIsWeb) {
       // On Web, we must use byte-based download and import

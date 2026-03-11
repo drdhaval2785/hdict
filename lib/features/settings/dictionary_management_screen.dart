@@ -214,6 +214,7 @@ class _DictionaryManagementScreenState
         final stream = _dictionaryManager.downloadAndImportDictionaryStream(
           url,
           indexDefinitions: index,
+          sourceUrl: url,
         );
         await for (final progress in stream) {
           _progressNotifier.value = progress;

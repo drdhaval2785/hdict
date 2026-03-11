@@ -64,9 +64,11 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
 
     try {
       final dicts = await _service.refreshDictionaries();
+      final downloadedUrls = await _service.getDownloadedUrls();
       if (mounted) {
         setState(() {
           _allDictionaries = dicts;
+          _downloadedUrls = downloadedUrls;
           _isRefreshing = false;
         });
       }
