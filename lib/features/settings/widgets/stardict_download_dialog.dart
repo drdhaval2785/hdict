@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hdict/core/constants/iso_639_2_languages.dart';
 import 'package:hdict/features/settings/services/stardict_service.dart';
 
 class StardictDownloadDialog extends StatefulWidget {
@@ -80,8 +81,16 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
         .map((d) => d.sourceLanguageCode)
         .toSet()
         .toList();
-    sources.sort();
+    sources.sort((a, b) {
+      final nameA = iso639_2Languages[a] ?? a;
+      final nameB = iso639_2Languages[b] ?? b;
+      return nameA.toLowerCase().compareTo(nameB.toLowerCase());
+    });
     return sources;
+  }
+
+  int _getSourceLanguageCount(String code) {
+    return _allDictionaries.where((d) => d.sourceLanguageCode == code).length;
   }
 
   List<String> get _targetLanguages {
@@ -91,8 +100,23 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
         .map((d) => d.targetLanguageCode)
         .toSet()
         .toList();
-    targets.sort();
+    targets.sort((a, b) {
+      final nameA = iso639_2Languages[a] ?? a;
+      final nameB = iso639_2Languages[b] ?? b;
+      return nameA.toLowerCase().compareTo(nameB.toLowerCase());
+    });
     return targets;
+  }
+
+  int _getTargetLanguageCount(String code) {
+    if (_selectedSourceLanguage == null) return 0;
+    return _allDictionaries
+        .where(
+          (d) =>
+              d.sourceLanguageCode == _selectedSourceLanguage &&
+              d.targetLanguageCode == code,
+        )
+        .length;
   }
 
   List<StardictDictionary> get _filteredDictionaries {
@@ -109,22 +133,7 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
   }
 
   String _getLanguageName(String code) {
-    if (_allDictionaries.isEmpty) return code;
-    return _allDictionaries
-                .firstWhere(
-                  (d) =>
-                      d.sourceLanguageCode == code ||
-                      d.targetLanguageCode == code,
-                  orElse: () => _allDictionaries.first,
-                )
-                .sourceLanguageCode ==
-            code
-        ? _allDictionaries
-              .firstWhere((d) => d.sourceLanguageCode == code)
-              .sourceLanguageName
-        : _allDictionaries
-              .firstWhere((d) => d.targetLanguageCode == code)
-              .targetLanguageName;
+    return iso639_2Languages[code] ?? code;
   }
 
   @override
@@ -190,7 +199,13 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
           isExpanded: true,
           items: _sourceLanguages.map((code) {
             final name = _getLanguageName(code);
-            return DropdownMenuItem(value: code, child: Text('$name ($code)'));
+            final count = _getSourceLanguageCount(code);
+            return DropdownMenuItem(
+              value: code,
+              child: Text(
+                '$name ($code) - $count ${count == 1 ? 'dictionary' : 'dictionaries'}',
+              ),
+            );
           }).toList(),
           onChanged: (val) {
             setState(() {
@@ -209,7 +224,13 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
           isExpanded: true,
           items: _targetLanguages.map((code) {
             final name = _getLanguageName(code);
-            return DropdownMenuItem(value: code, child: Text('$name ($code)'));
+            final count = _getTargetLanguageCount(code);
+            return DropdownMenuItem(
+              value: code,
+              child: Text(
+                '$name ($code) - $count ${count == 1 ? 'dictionary' : 'dictionaries'}',
+              ),
+            );
           }).toList(),
           onChanged: _selectedSourceLanguage == null
               ? null

@@ -819,8 +819,56 @@ class _DictionaryManagementScreenState
     );
 
     if (confirm == true) {
-      await _dictionaryManager.deleteDictionary(dict['id']);
-      _loadDictionaries();
+      final progressNotifier = ValueNotifier<DeletionProgress>(
+        DeletionProgress(message: 'Starting deletion...', value: 0.0),
+      );
+
+      if (!mounted) return;
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return PopScope(
+            canPop: false,
+            child: AlertDialog(
+              title: const Text('Deleting Dictionary'),
+              content: ValueListenableBuilder<DeletionProgress>(
+                valueListenable: progressNotifier,
+                builder: (context, progress, child) {
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      LinearProgressIndicator(value: progress.value),
+                      const SizedBox(height: 16),
+                      Text(progress.message, textAlign: TextAlign.center),
+                    ],
+                  );
+                },
+              ),
+            ),
+          );
+        },
+      );
+
+      try {
+        final stream = _dictionaryManager.deleteDictionaryStream(dict['id']);
+        await for (final progress in stream) {
+          progressNotifier.value = progress;
+        }
+
+        if (mounted) {
+          Navigator.pop(context);
+          _loadDictionaries();
+        }
+      } catch (e) {
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Deletion failed: $e')));
+        }
+      }
     }
   }
 
