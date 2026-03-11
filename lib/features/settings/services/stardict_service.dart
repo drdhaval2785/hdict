@@ -61,10 +61,10 @@ class StardictDictionary {
     final sourceCode = values[0].trim();
     final targetCode = values[1].trim();
     final name = values[2].trim();
-    final url = values[3].trim();
-    final headwords = values[4].trim();
-    final version = values[5].trim();
-    final date = values[6].trim();
+    final url = values.length > 3 ? values[3].trim() : '';
+    final headwords = values.length > 4 ? values[4].trim() : '';
+    final version = values.length > 5 ? values[5].trim() : '';
+    final date = values.length > 6 ? values[6].trim() : '';
 
     final release = StardictRelease(
       url: url,
@@ -181,7 +181,8 @@ class StardictService {
         if (line.isEmpty) continue;
 
         final values = line.split('\t');
-        if (values.length >= 7) {
+
+        if (values.length >= 4) {
           try {
             final dict = StardictDictionary.fromTsvRow(values);
             if (dict.url.isNotEmpty) {
