@@ -1,24 +1,24 @@
 import 'package:flutter/material.dart';
-import 'package:hdict/features/settings/services/freedict_service.dart';
+import 'package:hdict/features/settings/services/stardict_service.dart';
 
-class FreedictDownloadDialog extends StatefulWidget {
-  const FreedictDownloadDialog({super.key});
+class StardictDownloadDialog extends StatefulWidget {
+  const StardictDownloadDialog({super.key});
 
   @override
-  State<FreedictDownloadDialog> createState() => _FreedictDownloadDialogState();
+  State<StardictDownloadDialog> createState() => _StardictDownloadDialogState();
 }
 
-class _FreedictDownloadDialogState extends State<FreedictDownloadDialog> {
-  final FreedictService _service = FreedictService();
-  
-  List<FreedictDictionary> _allDictionaries = [];
+class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
+  final StardictService _service = StardictService();
+
+  List<StardictDictionary> _allDictionaries = [];
   bool _isLoading = true;
   bool _isRefreshing = false;
   String? _error;
 
   String? _selectedSourceLanguage;
   String? _selectedTargetLanguage;
-  bool _indexDefinitions = false; // Add index definitions option
+  bool _indexDefinitions = false;
 
   @override
   void initState() {
@@ -35,8 +35,7 @@ class _FreedictDownloadDialogState extends State<FreedictDownloadDialog> {
           _isLoading = false;
         });
       }
-      
-      // If no cache, auto-refresh
+
       if (cachedDicts.isEmpty) {
         _refresh();
       }
@@ -52,7 +51,7 @@ class _FreedictDownloadDialogState extends State<FreedictDownloadDialog> {
 
   Future<void> _refresh() async {
     if (_isRefreshing) return;
-    
+
     setState(() {
       _isRefreshing = true;
       _error = null;
@@ -77,7 +76,10 @@ class _FreedictDownloadDialogState extends State<FreedictDownloadDialog> {
   }
 
   List<String> get _sourceLanguages {
-    final sources = _allDictionaries.map((d) => d.sourceLanguageCode).toSet().toList();
+    final sources = _allDictionaries
+        .map((d) => d.sourceLanguageCode)
+        .toSet()
+        .toList();
     sources.sort();
     return sources;
   }
@@ -93,33 +95,36 @@ class _FreedictDownloadDialogState extends State<FreedictDownloadDialog> {
     return targets;
   }
 
-  List<FreedictDictionary> get _filteredDictionaries {
+  List<StardictDictionary> get _filteredDictionaries {
     if (_selectedSourceLanguage == null || _selectedTargetLanguage == null) {
       return [];
     }
     return _allDictionaries
-        .where((d) =>
-            d.sourceLanguageCode == _selectedSourceLanguage &&
-            d.targetLanguageCode == _selectedTargetLanguage)
+        .where(
+          (d) =>
+              d.sourceLanguageCode == _selectedSourceLanguage &&
+              d.targetLanguageCode == _selectedTargetLanguage,
+        )
         .toList();
   }
 
   String _getLanguageName(String code) {
     if (_allDictionaries.isEmpty) return code;
-    return _allDictionaries.firstWhere(
-        (d) => d.sourceLanguageCode == code || d.targetLanguageCode == code,
-        orElse: () => _allDictionaries.first,
-    ).sourceLanguageCode == code 
-    ? _allDictionaries.firstWhere((d) => d.sourceLanguageCode == code).sourceLanguageName
-    : _allDictionaries.firstWhere((d) => d.targetLanguageCode == code).targetLanguageName;
-  }
-
-  String _formatSize(String byteSize) {
-    final size = int.tryParse(byteSize);
-    if (size == null) return '$byteSize bytes';
-    if (size < 1024) return '$size B';
-    if (size < 1024 * 1024) return '${(size / 1024).toStringAsFixed(1)} KB';
-    return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return _allDictionaries
+                .firstWhere(
+                  (d) =>
+                      d.sourceLanguageCode == code ||
+                      d.targetLanguageCode == code,
+                  orElse: () => _allDictionaries.first,
+                )
+                .sourceLanguageCode ==
+            code
+        ? _allDictionaries
+              .firstWhere((d) => d.sourceLanguageCode == code)
+              .sourceLanguageName
+        : _allDictionaries
+              .firstWhere((d) => d.targetLanguageCode == code)
+              .targetLanguageName;
   }
 
   @override
@@ -127,7 +132,7 @@ class _FreedictDownloadDialogState extends State<FreedictDownloadDialog> {
     return AlertDialog(
       title: Row(
         children: [
-          const Expanded(child: Text('Download from FreeDict')),
+          const Expanded(child: Text('Download Stardict Dictionaries')),
           if (_isRefreshing)
             const SizedBox(
               width: 20,
@@ -142,10 +147,7 @@ class _FreedictDownloadDialogState extends State<FreedictDownloadDialog> {
             ),
         ],
       ),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: _buildContent(),
-      ),
+      content: SizedBox(width: double.maxFinite, child: _buildContent()),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
@@ -188,10 +190,7 @@ class _FreedictDownloadDialogState extends State<FreedictDownloadDialog> {
           isExpanded: true,
           items: _sourceLanguages.map((code) {
             final name = _getLanguageName(code);
-            return DropdownMenuItem(
-              value: code,
-              child: Text('$name ($code)'),
-            );
+            return DropdownMenuItem(value: code, child: Text('$name ($code)'));
           }).toList(),
           onChanged: (val) {
             setState(() {
@@ -210,10 +209,7 @@ class _FreedictDownloadDialogState extends State<FreedictDownloadDialog> {
           isExpanded: true,
           items: _targetLanguages.map((code) {
             final name = _getLanguageName(code);
-            return DropdownMenuItem(
-              value: code,
-              child: Text('$name ($code)'),
-            );
+            return DropdownMenuItem(value: code, child: Text('$name ($code)'));
           }).toList(),
           onChanged: _selectedSourceLanguage == null
               ? null
@@ -226,7 +222,9 @@ class _FreedictDownloadDialogState extends State<FreedictDownloadDialog> {
         const SizedBox(height: 16),
         CheckboxListTile(
           title: const Text('Index words in definitions'),
-          subtitle: const Text('Enables searching inside meanings (takes more time/space)'),
+          subtitle: const Text(
+            'Enables searching inside meanings (takes more time/space)',
+          ),
           value: _indexDefinitions,
           onChanged: (val) {
             setState(() {
@@ -262,7 +260,7 @@ class _FreedictDownloadDialogState extends State<FreedictDownloadDialog> {
                   child: ListTile(
                     title: Text(dict.name),
                     subtitle: Text(
-                      'Format: ${release.format} • Size: ${_formatSize(release.size)} • Headwords: ${dict.headwords}',
+                      'Version: ${dict.version.isEmpty ? "N/A" : dict.version} • Headwords: ${dict.headwords.isEmpty ? "N/A" : dict.headwords}',
                     ),
                     trailing: FilledButton.icon(
                       icon: const Icon(Icons.download, size: 18),

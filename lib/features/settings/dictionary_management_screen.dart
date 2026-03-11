@@ -5,7 +5,7 @@ import 'package:file_selector/file_selector.dart';
 
 import 'package:hdict/core/manager/dictionary_manager.dart';
 import 'package:hdict/features/home/widgets/app_drawer.dart';
-import 'package:hdict/features/settings/widgets/freedict_download_dialog.dart';
+import 'package:hdict/features/settings/widgets/stardict_download_dialog.dart';
 
 /// A screen for managing installed dictionaries.
 class DictionaryManagementScreen extends StatefulWidget {
@@ -69,7 +69,9 @@ class _DictionaryManagementScreenState
                   const SizedBox(height: 16),
                   CheckboxListTile(
                     title: const Text('Index words in definitions'),
-                    subtitle: const Text('Enables searching inside meanings (takes more time/space)'),
+                    subtitle: const Text(
+                      'Enables searching inside meanings (takes more time/space)',
+                    ),
                     value: indexDefinitions,
                     onChanged: (val) {
                       setDialogState(() {
@@ -170,7 +172,9 @@ class _DictionaryManagementScreenState
           } else {
             message = 'Download/Import failed: $e';
           }
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(message)));
         }
       }
     }
@@ -179,7 +183,7 @@ class _DictionaryManagementScreenState
   Future<void> _downloadFreedictDictionary() async {
     final dynamic result = await showDialog<dynamic>(
       context: context,
-      builder: (context) => const FreedictDownloadDialog(),
+      builder: (context) => const StardictDownloadDialog(),
     );
 
     if (result != null && result is Map && result['url'] != null) {
@@ -249,7 +253,9 @@ class _DictionaryManagementScreenState
           } else {
             message = 'Download/Import failed: $e';
           }
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(message)));
         }
       }
     }
@@ -287,9 +293,9 @@ class _DictionaryManagementScreenState
         'public.data',
       ],
     );
-    final List<XFile> files = await openFiles(acceptedTypeGroups: <XTypeGroup>[
-      typeGroup,
-    ]);
+    final List<XFile> files = await openFiles(
+      acceptedTypeGroups: <XTypeGroup>[typeGroup],
+    );
 
     if (files.isNotEmpty) {
       if (!mounted) return;
@@ -309,7 +315,9 @@ class _DictionaryManagementScreenState
                     const SizedBox(height: 16),
                     CheckboxListTile(
                       title: const Text('Index words in definitions'),
-                      subtitle: const Text('Enables searching inside meanings (takes more time/space)'),
+                      subtitle: const Text(
+                        'Enables searching inside meanings (takes more time/space)',
+                      ),
                       value: indexDefinitions,
                       onChanged: (val) {
                         setDialogState(() {
@@ -367,11 +375,18 @@ class _DictionaryManagementScreenState
 
         if (files.length > 1 ||
             files.any(
-              (f) => f.name.endsWith('.ifo') || f.name.endsWith('.idx') ||
-                     f.name.endsWith('.index') || f.name.endsWith('.mdd'),
+              (f) =>
+                  f.name.endsWith('.ifo') ||
+                  f.name.endsWith('.idx') ||
+                  f.name.endsWith('.index') ||
+                  f.name.endsWith('.mdd'),
             )) {
           if (kIsWeb) {
-            final fileData = await Future.wait(files.map((f) async => (name: f.name, bytes: await f.readAsBytes())));
+            final fileData = await Future.wait(
+              files.map(
+                (f) async => (name: f.name, bytes: await f.readAsBytes()),
+              ),
+            );
             stream = _dictionaryManager.importMultipleFilesWebStream(
               fileData,
               indexDefinitions: indexDefinitions,
@@ -391,15 +406,13 @@ class _DictionaryManagementScreenState
           if (lowerName.endsWith('.mdx')) {
             // These are self-contained — use multi-file stream which handles detection
             if (kIsWeb) {
-              stream = _dictionaryManager.importMultipleFilesWebStream(
-                [(name: singleFile.name, bytes: await singleFile.readAsBytes())],
-                indexDefinitions: indexDefinitions,
-              );
+              stream = _dictionaryManager.importMultipleFilesWebStream([
+                (name: singleFile.name, bytes: await singleFile.readAsBytes()),
+              ], indexDefinitions: indexDefinitions);
             } else {
-              stream = _dictionaryManager.importMultipleFilesStream(
-                [singleFile.path],
-                indexDefinitions: indexDefinitions,
-              );
+              stream = _dictionaryManager.importMultipleFilesStream([
+                singleFile.path,
+              ], indexDefinitions: indexDefinitions);
             }
           } else if (kIsWeb) {
             stream = _dictionaryManager.importDictionaryWebStream(
@@ -449,7 +462,9 @@ class _DictionaryManagementScreenState
           } else {
             message = 'Import failed: $e';
           }
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(message)));
         }
       }
     }
@@ -473,7 +488,7 @@ class _DictionaryManagementScreenState
         () {
           final double screenWidth = MediaQuery.sizeOf(context).width;
           final bool isWide = screenWidth > 580; // slightly wider for 3 buttons
-          
+
           if (isWide) {
             return Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -676,8 +691,11 @@ class _DictionaryManagementScreenState
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.library_books_outlined,
-                  size: 64, color: Colors.grey.withValues(alpha: 0.5)),
+              Icon(
+                Icons.library_books_outlined,
+                size: 64,
+                color: Colors.grey.withValues(alpha: 0.5),
+              ),
               const SizedBox(height: 16),
               const Text(
                 'No dictionaries installed.',
@@ -709,7 +727,9 @@ class _DictionaryManagementScreenState
       color: theme.colorScheme.primaryContainer.withValues(alpha: 0.2),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: theme.colorScheme.primary.withValues(alpha: 0.1)),
+        side: BorderSide(
+          color: theme.colorScheme.primary.withValues(alpha: 0.1),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20.0),
@@ -756,8 +776,11 @@ class _DictionaryManagementScreenState
                   IconButton(
                     icon: const Icon(Icons.copy, size: 18),
                     onPressed: () {
-                      Clipboard.setData(const ClipboardData(
-                          text: 'http://tovotu.de/data/stardict/gcide.zip'));
+                      Clipboard.setData(
+                        const ClipboardData(
+                          text: 'http://tovotu.de/data/stardict/gcide.zip',
+                        ),
+                      );
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('URL copied to clipboard'),
@@ -807,12 +830,13 @@ class _DictionaryManagementScreenState
     required String label,
     required bool isPrimary,
   }) {
-    final style = (isPrimary ? FilledButton.styleFrom : OutlinedButton.styleFrom)(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-    );
+    final style =
+        (isPrimary ? FilledButton.styleFrom : OutlinedButton.styleFrom)(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        );
 
     if (isPrimary) {
       return FilledButton.icon(
@@ -836,9 +860,7 @@ class _DictionaryManagementScreenState
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Re-index Dictionary'),
-        content: const Text(
-          'How would you like to re-index this dictionary?',
-        ),
+        content: const Text('How would you like to re-index this dictionary?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, true),
@@ -887,16 +909,18 @@ class _DictionaryManagementScreenState
         if (mounted) {
           Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Re-indexing of "${dict['name']}" complete.')),
+            SnackBar(
+              content: Text('Re-indexing of "${dict['name']}" complete.'),
+            ),
           );
           _loadDictionaries();
         }
       } catch (e) {
         if (mounted) {
           Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Re-indexing failed: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Re-indexing failed: $e')));
         }
       }
     }

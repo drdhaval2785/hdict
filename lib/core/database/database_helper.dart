@@ -16,7 +16,7 @@ class DatabaseHelper {
   /// Cached result of whether FTS5 is available on this device's SQLite.
   /// Set during [_onOpen]; null means not yet determined.
   static bool? _fts5Available;
-  
+
   /// Cached app documents directory to avoid redundant platform channel calls.
   static Directory? _appDocDir;
 
@@ -99,7 +99,8 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 24, // Version 24: Added freedict_dictionaries table
+      version:
+          25, // Version 25: Added url, version, date columns to freedict_dictionaries
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onOpen: _onOpen,
@@ -110,9 +111,7 @@ class DatabaseHelper {
   /// Creates a temporary test table, then drops it.
   static Future<bool> _checkFts5Available(Database db) async {
     try {
-      await db.execute(
-        'CREATE VIRTUAL TABLE _fts5_probe USING fts5(x)',
-      );
+      await db.execute('CREATE VIRTUAL TABLE _fts5_probe USING fts5(x)');
       await db.execute('DROP TABLE IF EXISTS _fts5_probe');
       return true;
     } catch (_) {
@@ -133,10 +132,12 @@ class DatabaseHelper {
     );
     final bool tableExists = existing.isNotEmpty;
     // FTS5 virtual tables contain 'fts5' in their DDL sql stored in sqlite_master.
-    final bool tableIsFts5 = tableExists &&
+    final bool tableIsFts5 =
+        tableExists &&
         (await db.rawQuery(
-          "SELECT sql FROM sqlite_master WHERE name = 'word_index'",
-        )).firstOrNull?['sql']?.toString().contains('fts5') == true;
+              "SELECT sql FROM sqlite_master WHERE name = 'word_index'",
+            )).firstOrNull?['sql']?.toString().contains('fts5') ==
+            true;
 
     if (tableExists && tableIsFts5 && !fts5Available) {
       // The stored table is FTS5 but the runtime doesn't support it.
@@ -164,9 +165,15 @@ class DatabaseHelper {
             length INTEGER
           )
         ''');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_metadata_dict_id ON word_metadata(dict_id)');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_metadata_word ON word_metadata(word)');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_metadata_dict_word ON word_metadata(dict_id, word COLLATE NOCASE)');
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_metadata_dict_id ON word_metadata(dict_id)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_metadata_word ON word_metadata(word)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_metadata_dict_word ON word_metadata(dict_id, word COLLATE NOCASE)',
+        );
 
         await db.execute('''
           CREATE VIRTUAL TABLE word_index USING fts5(
@@ -271,6 +278,9 @@ class DatabaseHelper {
         source_lang TEXT NOT NULL,
         target_lang TEXT NOT NULL,
         headwords TEXT,
+        url TEXT,
+        version TEXT,
+        date TEXT,
         releases_json TEXT NOT NULL
       )
     ''');
@@ -302,7 +312,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 9) {
       try {
-        final tableInfo = await db.rawQuery("PRAGMA table_info('dictionaries')");
+        final tableInfo = await db.rawQuery(
+          "PRAGMA table_info('dictionaries')",
+        );
         bool hasIndexDefinitions = false;
         for (final row in tableInfo) {
           if (row['name'] == 'index_definitions') {
@@ -321,7 +333,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 10) {
       try {
-        final tableInfo = await db.rawQuery("PRAGMA table_info('dictionaries')");
+        final tableInfo = await db.rawQuery(
+          "PRAGMA table_info('dictionaries')",
+        );
         bool hasFormat = false;
         for (final row in tableInfo) {
           if (row['name'] == 'format') {
@@ -349,7 +363,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 12) {
       try {
-        final tableInfo = await db.rawQuery("PRAGMA table_info('dictionaries')");
+        final tableInfo = await db.rawQuery(
+          "PRAGMA table_info('dictionaries')",
+        );
         bool hasTypeSequence = false;
         for (final row in tableInfo) {
           if (row['name'] == 'type_sequence') {
@@ -368,7 +384,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 13) {
       try {
-        final tableInfo = await db.rawQuery("PRAGMA table_info('dictionaries')");
+        final tableInfo = await db.rawQuery(
+          "PRAGMA table_info('dictionaries')",
+        );
         bool hasCss = false;
         for (final row in tableInfo) {
           if (row['name'] == 'css') {
@@ -377,9 +395,7 @@ class DatabaseHelper {
           }
         }
         if (!hasCss) {
-          await db.execute(
-            'ALTER TABLE dictionaries ADD COLUMN css TEXT',
-          );
+          await db.execute('ALTER TABLE dictionaries ADD COLUMN css TEXT');
         }
       } catch (e) {
         hDebugPrint('Migration error (version 13): $e');
@@ -387,7 +403,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 14) {
       try {
-        final tableInfo = await db.rawQuery("PRAGMA table_info('dictionaries')");
+        final tableInfo = await db.rawQuery(
+          "PRAGMA table_info('dictionaries')",
+        );
         bool hasDefWordCount = false;
         for (final row in tableInfo) {
           if (row['name'] == 'definition_word_count') {
@@ -406,7 +424,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 15) {
       try {
-        final tableInfo = await db.rawQuery("PRAGMA table_info('search_history')");
+        final tableInfo = await db.rawQuery(
+          "PRAGMA table_info('search_history')",
+        );
         bool hasSearchType = false;
         for (final row in tableInfo) {
           if (row['name'] == 'search_type') {
@@ -425,7 +445,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 16) {
       try {
-        final tableInfo = await db.rawQuery("PRAGMA table_info('dictionaries')");
+        final tableInfo = await db.rawQuery(
+          "PRAGMA table_info('dictionaries')",
+        );
         bool hasChecksum = false;
         for (final row in tableInfo) {
           if (row['name'] == 'checksum') {
@@ -434,9 +456,7 @@ class DatabaseHelper {
           }
         }
         if (!hasChecksum) {
-          await db.execute(
-            'ALTER TABLE dictionaries ADD COLUMN checksum TEXT',
-          );
+          await db.execute('ALTER TABLE dictionaries ADD COLUMN checksum TEXT');
         }
       } catch (e) {
         hDebugPrint('Migration error (version 16): $e');
@@ -481,7 +501,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 20) {
       try {
-        hDebugPrint('Migration to version 20: Full language-agnostic FTS5 indexing');
+        hDebugPrint(
+          'Migration to version 20: Full language-agnostic FTS5 indexing',
+        );
         // Re-index is required because content storage format has changed (removed English tokenization).
         await db.execute('DROP TABLE IF EXISTS word_index');
         try {
@@ -490,14 +512,20 @@ class DatabaseHelper {
         await db.execute(
           'UPDATE dictionaries SET word_count = 0, definition_word_count = 0, index_definitions = 0',
         );
-        try { await db.execute('CREATE INDEX IF NOT EXISTS idx_metadata_word ON word_metadata(word)'); } catch (_) {}
+        try {
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_metadata_word ON word_metadata(word)',
+          );
+        } catch (_) {}
       } catch (e) {
         hDebugPrint('Migration error (version 20): $e');
       }
     }
     if (oldVersion < 21) {
       try {
-        final tableInfo = await db.rawQuery("PRAGMA table_info('dictionaries')");
+        final tableInfo = await db.rawQuery(
+          "PRAGMA table_info('dictionaries')",
+        );
         bool hasTypeSequence = false;
         for (final row in tableInfo) {
           if (row['name'] == 'type_sequence') {
@@ -517,8 +545,10 @@ class DatabaseHelper {
 
     if (oldVersion < 22) {
       try {
-        hDebugPrint('Migrating database to v22: Adding COLLATE NOCASE to word_metadata...');
-        
+        hDebugPrint(
+          'Migrating database to v22: Adding COLLATE NOCASE to word_metadata...',
+        );
+
         // Check if word_metadata exists before trying to rename it
         final tableExists = (await db.rawQuery(
           "SELECT name FROM sqlite_master WHERE type='table' AND name='word_metadata'",
@@ -527,8 +557,10 @@ class DatabaseHelper {
         if (tableExists) {
           await db.transaction((txn) async {
             // 1. Rename existing table
-            await txn.execute('ALTER TABLE word_metadata RENAME TO word_metadata_old');
-            
+            await txn.execute(
+              'ALTER TABLE word_metadata RENAME TO word_metadata_old',
+            );
+
             // 2. Create new table with COLLATE NOCASE
             await txn.execute('''
               CREATE TABLE word_metadata(
@@ -539,19 +571,23 @@ class DatabaseHelper {
                 length INTEGER
               )
             ''');
-            
+
             // 3. Copy data
             await txn.execute('''
               INSERT INTO word_metadata (id, word, dict_id, offset, length)
               SELECT id, word, dict_id, offset, length FROM word_metadata_old
             ''');
-            
+
             // 4. Drop old table
             await txn.execute('DROP TABLE word_metadata_old');
-            
+
             // 5. Recreate indexes
-            await txn.execute('CREATE INDEX idx_metadata_dict_id ON word_metadata(dict_id)');
-            await txn.execute('CREATE INDEX idx_metadata_word ON word_metadata(word)');
+            await txn.execute(
+              'CREATE INDEX idx_metadata_dict_id ON word_metadata(dict_id)',
+            );
+            await txn.execute(
+              'CREATE INDEX idx_metadata_word ON word_metadata(word)',
+            );
           });
         } else {
           // If table doesn't exist, just create it fresh
@@ -564,8 +600,12 @@ class DatabaseHelper {
               length INTEGER
             )
           ''');
-          await db.execute('CREATE INDEX IF NOT EXISTS idx_metadata_dict_id ON word_metadata(dict_id)');
-          await db.execute('CREATE INDEX IF NOT EXISTS idx_metadata_word ON word_metadata(word)');
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_metadata_dict_id ON word_metadata(dict_id)',
+          );
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_metadata_word ON word_metadata(word)',
+          );
         }
         hDebugPrint('Database migration to v22 complete.');
       } catch (e) {
@@ -575,12 +615,14 @@ class DatabaseHelper {
 
     if (oldVersion < 23) {
       try {
-        hDebugPrint('Migration to version 23: Adding composite index for search speed');
+        hDebugPrint(
+          'Migration to version 23: Adding composite index for search speed',
+        );
         // Ensure table exists before creating index
         final tableExists = (await db.rawQuery(
           "SELECT name FROM sqlite_master WHERE type='table' AND name='word_metadata'",
         )).isNotEmpty;
-        
+
         if (tableExists) {
           await db.execute(
             'CREATE INDEX IF NOT EXISTS idx_metadata_dict_word ON word_metadata(dict_id, word COLLATE NOCASE)',
@@ -593,7 +635,9 @@ class DatabaseHelper {
 
     if (oldVersion < 24) {
       try {
-        hDebugPrint('Migration to version 24: Adding freedict_dictionaries table');
+        hDebugPrint(
+          'Migration to version 24: Adding freedict_dictionaries table',
+        );
         await db.execute('''
           CREATE TABLE IF NOT EXISTS freedict_dictionaries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -606,6 +650,25 @@ class DatabaseHelper {
         ''');
       } catch (e) {
         hDebugPrint('Migration error (version 24): $e');
+      }
+    }
+
+    if (oldVersion < 25) {
+      try {
+        hDebugPrint(
+          'Migration to version 25: Adding url, version, date columns to freedict_dictionaries',
+        );
+        await db.execute(
+          'ALTER TABLE freedict_dictionaries ADD COLUMN url TEXT',
+        );
+        await db.execute(
+          'ALTER TABLE freedict_dictionaries ADD COLUMN version TEXT',
+        );
+        await db.execute(
+          'ALTER TABLE freedict_dictionaries ADD COLUMN date TEXT',
+        );
+      } catch (e) {
+        hDebugPrint('Migration error (version 25): $e');
       }
     }
   }
@@ -634,7 +697,6 @@ class DatabaseHelper {
     return text.toLowerCase();
   }
 
-
   /// Resolves a stored path to an absolute path.
   /// Handles relative paths (stored relative to Documents) for iOS compatibility.
   Future<String> resolvePath(String storedPath) async {
@@ -660,15 +722,11 @@ class DatabaseHelper {
 
   Future<void> saveFile(int dictId, String fileName, Uint8List bytes) async {
     final db = await database;
-    await db.insert(
-      'files',
-      {
-        'dict_id': dictId,
-        'file_name': fileName,
-        'content': bytes,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('files', {
+      'dict_id': dictId,
+      'file_name': fileName,
+      'content': bytes,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<Uint8List?> getFile(int dictId, String fileName) async {
@@ -695,10 +753,12 @@ class DatabaseHelper {
     // SQLite SUBSTR is 1-indexed.
     final sql =
         'SELECT SUBSTR(content, ?, ?) as part FROM files WHERE dict_id = ? AND file_name = ?';
-    final results = await db.rawQuery(
-      sql,
-      [offset + 1, length, dictId, fileName],
-    );
+    final results = await db.rawQuery(sql, [
+      offset + 1,
+      length,
+      dictId,
+      fileName,
+    ]);
     _log('RAW_QUERY', sql, [offset + 1, length, dictId, fileName], results);
     if (results.isNotEmpty) {
       return results.first['part'] as Uint8List;
@@ -736,7 +796,11 @@ class DatabaseHelper {
     });
   }
 
-  Future<void> updateDictionaryWordCount(int id, int wordCount, [int? definitionWordCount]) async {
+  Future<void> updateDictionaryWordCount(
+    int id,
+    int wordCount, [
+    int? definitionWordCount,
+  ]) async {
     final db = await database;
     final Map<String, dynamic> updateData = {'word_count': wordCount};
     if (definitionWordCount != null) {
@@ -879,9 +943,17 @@ class DatabaseHelper {
         // FTS5 contentless tables don't support selective deletes on many versions.
         // Because search queries INNER JOIN metadata and index, orphaned FTS5 rows
         // are naturally excluded from results.
-        await txn.delete('word_metadata', where: 'dict_id = ?', whereArgs: [dictId]);
+        await txn.delete(
+          'word_metadata',
+          where: 'dict_id = ?',
+          whereArgs: [dictId],
+        );
       } else {
-        await txn.delete('word_index', where: 'dict_id = ?', whereArgs: [dictId]);
+        await txn.delete(
+          'word_index',
+          where: 'dict_id = ?',
+          whereArgs: [dictId],
+        );
       }
     });
   }
@@ -890,18 +962,22 @@ class DatabaseHelper {
     final db = await database;
     await db.transaction((txn) async {
       await txn.delete('dictionaries', where: 'id = ?', whereArgs: [id]);
-      
+
       final bool useFts5 = _fts5Available ?? true;
       if (useFts5) {
         // LAZY DELETION: Delete from metadata only. JOIN handles the rest.
-        await txn.delete('word_metadata', where: 'dict_id = ?', whereArgs: [id]);
+        await txn.delete(
+          'word_metadata',
+          where: 'dict_id = ?',
+          whereArgs: [id],
+        );
       } else {
         await txn.delete('word_index', where: 'dict_id = ?', whereArgs: [id]);
       }
-      
+
       await txn.delete('files', where: 'dict_id = ?', whereArgs: [id]);
     });
-    
+
     // Physically reclaim storage space by rewriting the database file
     try {
       // Force FTS5 to merge its internal b-trees and drop orphaned shadow table rows
@@ -976,7 +1052,10 @@ class DatabaseHelper {
 
   // --- Search History ---
 
-  Future<void> addSearchHistory(String word, {String searchType = 'Headword Search'}) async {
+  Future<void> addSearchHistory(
+    String word, {
+    String searchType = 'Headword Search',
+  }) async {
     try {
       final db = await database;
       await db.delete('search_history', where: 'word = ?', whereArgs: [word]);
@@ -1077,7 +1156,9 @@ class DatabaseHelper {
         final idxBatch = txn.batch();
         for (int i = 0; i < words.length; i++) {
           final int predictedId = startId + i + 1;
-          final String keywords = _tokenizeContent(words[i]['content'] as String?);
+          final String keywords = _tokenizeContent(
+            words[i]['content'] as String?,
+          );
           idxBatch.rawInsert(
             'INSERT INTO word_index(rowid, word, content) VALUES (?, ?, ?)',
             [predictedId, words[i]['word'], keywords],
@@ -1114,7 +1195,9 @@ class DatabaseHelper {
 
       // OPTIMIZATION: If this is a simple headword search (no multi-dictionary definition search),
       // we can iterate through dictionaries sequentially to avoid the expensive cross-table SQLite sort.
-      if (definitionQuery == null && (headwordMode == SearchMode.prefix || headwordMode == SearchMode.exact)) {
+      if (definitionQuery == null &&
+          (headwordMode == SearchMode.prefix ||
+              headwordMode == SearchMode.exact)) {
         return await _searchWordsSequential(
           headwordQuery: headwordQuery,
           headwordMode: headwordMode,
@@ -1128,20 +1211,23 @@ class DatabaseHelper {
       bool needsFts5Join = false; // only JOIN word_index when MATCH is used
 
       whereClauses.add(
-          'm.dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1)');
+        'm.dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1)',
+      );
 
       // 1. Process Headword Query
       if (headwordQuery != null && headwordQuery.trim().isNotEmpty) {
         final String hq = headwordQuery.trim();
-        
+
         // Helper to safely convert user query to FTS5 AND query avoiding phrase query issues
         String toFts5Query(String query, bool isPrefix) {
           final terms = query.split(RegExp(r'\s+')).where((s) => s.isNotEmpty);
           if (terms.isEmpty) return '';
-          return terms.map((t) {
-            String clean = t.replaceAll(RegExp(r'["*\(\)]'), '');
-            return isPrefix ? '$clean*' : clean;
-          }).join(' AND ');
+          return terms
+              .map((t) {
+                String clean = t.replaceAll(RegExp(r'["*\(\)]'), '');
+                return isPrefix ? '$clean*' : clean;
+              })
+              .join(' AND ');
         }
 
         switch (headwordMode) {
@@ -1200,16 +1286,19 @@ class DatabaseHelper {
         // FTS5 contentless tables ONLY support MATCH - no LIKE on content.
         final String dq = definitionQuery.trim();
         final terms = dq.split(RegExp(r'\s+')).where((s) => s.isNotEmpty);
-        
+
         if (terms.isNotEmpty) {
-          final bool isPrefixSearch = definitionMode == SearchMode.substring ||
+          final bool isPrefixSearch =
+              definitionMode == SearchMode.substring ||
               definitionMode == SearchMode.prefix;
-              
-          final ftsQuery = terms.map((t) {
-            String clean = t.replaceAll(RegExp(r'["*\(\)]'), '');
-            return isPrefixSearch ? '$clean*' : clean;
-          }).join(' AND ');
-          
+
+          final ftsQuery = terms
+              .map((t) {
+                String clean = t.replaceAll(RegExp(r'["*\(\)]'), '');
+                return isPrefixSearch ? '$clean*' : clean;
+              })
+              .join(' AND ');
+
           if (ftsQuery.isNotEmpty) {
             whereClauses.add('i.content MATCH ?');
             whereArgs.add(ftsQuery);
@@ -1226,7 +1315,8 @@ class DatabaseHelper {
       final String fromClause;
       if (!useFts5) {
         // FTS5 unavailable: word_index is a plain table with all columns
-        fromClause = 'FROM word_index m JOIN dictionaries d ON m.dict_id = d.id';
+        fromClause =
+            'FROM word_index m JOIN dictionaries d ON m.dict_id = d.id';
       } else if (needsFts5Join) {
         fromClause =
             'FROM word_metadata m JOIN word_index i ON m.id = i.rowid JOIN dictionaries d ON m.dict_id = d.id';
@@ -1236,7 +1326,8 @@ class DatabaseHelper {
             'FROM word_metadata m JOIN dictionaries d ON m.dict_id = d.id';
       }
 
-      final String sql = '''
+      final String sql =
+          '''
         SELECT m.word, m.dict_id, m.offset, m.length 
         $fromClause
         WHERE ${whereClauses.join(' AND ')}
@@ -1286,11 +1377,11 @@ class DatabaseHelper {
     final String operator = headwordMode == SearchMode.prefix ? 'LIKE' : '=';
 
     // 2. Query each dictionary
-    // Because we have idx_metadata_dict_word(dict_id, word), 
+    // Because we have idx_metadata_dict_word(dict_id, word),
     // SQLite can satisfy the WHERE and the ORDER BY word ASC entirely from the index.
     for (final dict in dicts) {
       // dicts already filtered by is_enabled in getEnabledDictionaries()
-      
+
       final int currentLimit = limit - finalResults.length;
       if (currentLimit <= 0) break;
 
@@ -1306,11 +1397,16 @@ class DatabaseHelper {
       finalResults.addAll(results);
     }
 
-    // 3. Optional: Move exact matches to the top of the combined result set 
+    // 3. Optional: Move exact matches to the top of the combined result set
     // if the user expects "apple" to be first even if it's not the first dict.
     // However, original logic sorts by dict_id first.
-    
-    _log('SEQUENTIAL_QUERY (Headword Only)', 'Iterated ${dicts.length} dicts', [likePattern, limit], finalResults);
+
+    _log(
+      'SEQUENTIAL_QUERY (Headword Only)',
+      'Iterated ${dicts.length} dicts',
+      [likePattern, limit],
+      finalResults,
+    );
     return finalResults;
   }
 
@@ -1322,7 +1418,9 @@ class DatabaseHelper {
     try {
       final db = await database;
       // prefix may have quotes, clean them
-      final String cleanPrefix = prefix.replaceAll(RegExp(r'["*\(\)]'), '').trim();
+      final String cleanPrefix = prefix
+          .replaceAll(RegExp(r'["*\(\)]'), '')
+          .trim();
       final bool useFts5 = _fts5Available ?? true;
       final String fallbackTable = useFts5 ? 'word_metadata' : 'word_index';
 
@@ -1330,10 +1428,10 @@ class DatabaseHelper {
       if (!fuzzy && !cleanPrefix.contains(' ')) {
         final List<Map<String, dynamic>> dicts = await getEnabledDictionaries();
         final List<String> suggestions = [];
-        
+
         for (final dict in dicts) {
           // dicts already filtered by is_enabled
-          
+
           final int currentLimit = limit - suggestions.length;
           if (currentLimit <= 0) break;
 
@@ -1345,18 +1443,24 @@ class DatabaseHelper {
             orderBy: 'word ASC',
             limit: currentLimit,
           );
-          
+
           for (var r in results) {
             String w = r['word'] as String;
             if (!suggestions.contains(w)) suggestions.add(w);
           }
         }
-        _log('SEQUENTIAL_SUGGEST (Prefix)', 'Iterated ${dicts.length} dicts', [cleanPrefix, limit], suggestions);
+        _log(
+          'SEQUENTIAL_SUGGEST (Prefix)',
+          'Iterated ${dicts.length} dicts',
+          [cleanPrefix, limit],
+          suggestions,
+        );
         return suggestions;
       }
 
       // Fallback for fuzzy/multi-word/no-FTS suggestions
-      final String sql = '''
+      final String sql =
+          '''
         SELECT DISTINCT word 
         FROM $fallbackTable 
         WHERE dict_id IN (SELECT id FROM dictionaries WHERE is_enabled = 1) 
@@ -1364,7 +1468,10 @@ class DatabaseHelper {
         ORDER BY word ASC
         LIMIT ?
       ''';
-      final results = await db.rawQuery(sql, [fuzzy ? '%$cleanPrefix%' : '$cleanPrefix%', limit]);
+      final results = await db.rawQuery(sql, [
+        fuzzy ? '%$cleanPrefix%' : '$cleanPrefix%',
+        limit,
+      ]);
       _log('RAW_QUERY (Suggest Fallback)', sql, [cleanPrefix, limit], results);
       return results.map((r) => r['word'] as String).toList();
     } catch (e) {
@@ -1375,7 +1482,9 @@ class DatabaseHelper {
 
   // --- FreeDict Cache ---
 
-  Future<void> insertFreedictDictionaries(List<Map<String, dynamic>> dictionaries) async {
+  Future<void> insertFreedictDictionaries(
+    List<Map<String, dynamic>> dictionaries,
+  ) async {
     final db = await database;
     await db.transaction((txn) async {
       await txn.delete('freedict_dictionaries');
