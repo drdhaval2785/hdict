@@ -1033,6 +1033,7 @@ class DictionaryManager {
     }
 
     final tempBaseDir = await getTemporaryDirectory();
+    await tempBaseDir.create(recursive: true);
     final tempDir = await tempBaseDir.createTemp('import_');
     final receivePort = ReceivePort();
     final rootIsolateToken = RootIsolateToken.instance!;
@@ -1251,6 +1252,7 @@ class DictionaryManager {
     yield ImportProgress(message: 'Preparing workspace...', value: 0.0);
 
     final tempBaseDir = await getTemporaryDirectory();
+    await tempBaseDir.create(recursive: true);
     final workspaceDir = await tempBaseDir.createTemp('workspace_');
 
     try {
@@ -2812,6 +2814,7 @@ class DictionaryManager {
     }
 
     final tempBaseDir = await getTemporaryDirectory();
+    await tempBaseDir.create(recursive: true);
     final tempDir = await tempBaseDir.createTemp('download_');
 
     try {
