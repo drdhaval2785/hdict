@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2026-03-11
+
+### Added
+- **Select Dictionaries by Language**: 
+    - Browse and download around 1900 dictionaries organized by their origin and target languages.
+- **Deletion Progress Monitoring**: Added a dedicated progress bar for dictionary deletion.
+
+
 ## [1.3.2] - 2026-03-10
 
 ### Added
