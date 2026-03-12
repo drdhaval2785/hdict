@@ -48,6 +48,7 @@ parts:
       - pkg-config
       - libgtk-3-dev
       - liblzma-dev
+      - llvm
       - libstdc++-12-dev # Helps with modern Flutter engine requirements
     override-pull: |
       craftctl default
