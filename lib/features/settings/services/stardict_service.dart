@@ -213,7 +213,7 @@ class StardictService {
       final result = await db.query(
         'dictionaries',
         columns: ['source_url'],
-        where: 'source_url IS NOT NULL AND source_url != ""',
+        where: "source_url IS NOT NULL AND source_url != ''",
       );
       return result
           .map((row) => row['source_url'] as String)
