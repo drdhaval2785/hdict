@@ -18,11 +18,6 @@ confinement: strict
 base: core22
 grade: stable
 
-slots:
-  dbus-hdict:
-    interface: dbus
-    bus: session
-    name: com.example.hdict
 
 apps:
   hdict:
@@ -31,8 +26,6 @@ apps:
     plugs:
     - network
     - home
-    slots:
-      - dbus-hdict
     desktop: snap/gui/hdict.desktop
 
 parts:
