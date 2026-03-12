@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=hdict
+Comment=High-performance dictionary reader
+Exec=hdict
+Icon=${SNAP}/meta/gui/hdict.png
+Terminal=false
+Type=Application
+Categories=Education;

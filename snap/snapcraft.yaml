@@ -25,6 +25,7 @@ apps:
     - home
     slots:
       - dbus-hdict
+    desktop: snap/gui/hdict.desktop
 
 parts:
   hdict:
