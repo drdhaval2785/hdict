@@ -146,11 +146,6 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
     return '$name ($code) - $count ${count == 1 ? 'dictionary' : 'dictionaries'}';
   }
 
-  String _formatTargetLanguageOption(String code) {
-    final name = _getLanguageName(code);
-    final count = _getTargetLanguageCount(code);
-    return '$name ($code) - $count ${count == 1 ? 'dictionary' : 'dictionaries'}';
-  }
 
   String _parseCodeFromOption(String option) {
     final match = RegExp(r'\(([a-z]{3})\)').firstMatch(option);
@@ -285,85 +280,38 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
               _selectedSourceLanguage = code;
               _selectedTargetLanguage = null;
             });
+            // Hide keyboard if it was open from the Autocomplete
+            FocusManager.instance.primaryFocus?.unfocus();
           },
         ),
         const SizedBox(height: 16),
-        Autocomplete<String>(
-          initialValue: TextEditingValue(
-            text: _selectedTargetLanguage != null
-                ? '${_getLanguageName(_selectedTargetLanguage!)} ($_selectedTargetLanguage)'
-                : '',
+        DropdownButtonFormField<String>(
+          initialValue: _selectedTargetLanguage,
+          decoration: InputDecoration(
+            labelText: 'Target Language',
+            border: const OutlineInputBorder(),
+            hintText: _selectedSourceLanguage == null
+                ? 'Select source first'
+                : 'Choose a language...',
+            enabled: _selectedSourceLanguage != null,
           ),
-          optionsBuilder: (textEditingValue) {
-            if (_selectedSourceLanguage == null) {
-              return const Iterable<String>.empty();
-            }
-            if (textEditingValue.text.isEmpty) {
-              return _targetLanguages.map(
-                (code) => _formatTargetLanguageOption(code),
-              );
-            }
-            final query = textEditingValue.text.toLowerCase();
-            return _targetLanguages
-                .where((code) {
-                  final name = _getLanguageName(code).toLowerCase();
-                  return name.contains(query) ||
-                      code.toLowerCase().contains(query);
-                })
-                .map((code) => _formatTargetLanguageOption(code));
-          },
-          displayStringForOption: (code) => _formatTargetLanguageOption(code),
-          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-            return TextField(
-              controller: controller,
-              focusNode: focusNode,
-              enabled: _selectedSourceLanguage != null,
-              decoration: InputDecoration(
-                labelText: 'Target Language',
-                border: const OutlineInputBorder(),
-                hintText: _selectedSourceLanguage == null
-                    ? 'Select source first'
-                    : 'Type to search...',
-              ),
-              onSubmitted: (_) => onFieldSubmitted(),
-            );
-          },
-          optionsViewBuilder: (context, onSelected, options) {
-            return Align(
-              alignment: Alignment.topLeft,
-              child: Material(
-                elevation: 4.0,
-                borderRadius: BorderRadius.circular(4),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    maxHeight: 300,
-                    maxWidth: 400,
-                  ),
-                  child: ListView.builder(
-                    padding: EdgeInsets.zero,
-                    shrinkWrap: true,
-                    itemCount: options.length,
-                    itemBuilder: (context, index) {
-                      final option = options.elementAt(index);
-                      final code = _parseCodeFromOption(option);
-                      return ListTile(
-                        title: Text(option),
-                        subtitle: Text(
-                          '${_getTargetLanguageCount(code)} ${_getTargetLanguageCount(code) == 1 ? 'dictionary' : 'dictionaries'}',
-                        ),
-                        onTap: () => onSelected(code),
-                      );
-                    },
-                  ),
-                ),
+          items: _targetLanguages.map((code) {
+            final count = _getTargetLanguageCount(code);
+            return DropdownMenuItem<String>(
+              value: code,
+              child: Text(
+                '${_getLanguageName(code)} ($code) - $count ${count == 1 ? 'dictionary' : 'dictionaries'}',
+                overflow: TextOverflow.ellipsis,
               ),
             );
-          },
-          onSelected: (code) {
-            setState(() {
-              _selectedTargetLanguage = code;
-            });
-          },
+          }).toList(),
+          onChanged: _selectedSourceLanguage == null
+              ? null
+              : (String? value) {
+                  setState(() {
+                    _selectedTargetLanguage = value;
+                  });
+                },
         ),
         const SizedBox(height: 16),
         CheckboxListTile(
