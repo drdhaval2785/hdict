@@ -18,7 +18,6 @@ confinement: strict
 base: core22
 grade: stable
 
-
 apps:
   hdict:
     command: hdict
