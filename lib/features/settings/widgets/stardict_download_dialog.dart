@@ -143,7 +143,7 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
   String _formatSourceLanguageOption(String code) {
     final name = _getLanguageName(code);
     final count = _getSourceLanguageCount(code);
-    return '$name ($code) - $count ${count == 1 ? 'dictionary' : 'dictionaries'}';
+    return '$name ($code) ($count)';
   }
 
 
@@ -206,10 +206,11 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
       );
     }
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
         Autocomplete<String>(
           initialValue: TextEditingValue(
             text: _selectedSourceLanguage != null
@@ -245,34 +246,36 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
             );
           },
           optionsViewBuilder: (context, onSelected, options) {
-            return Align(
-              alignment: Alignment.topLeft,
-              child: Material(
-                elevation: 4.0,
-                borderRadius: BorderRadius.circular(4),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    maxHeight: 300,
-                    maxWidth: 400,
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                return Align(
+                  alignment: Alignment.topLeft,
+                  child: Material(
+                    elevation: 4.0,
+                    borderRadius: BorderRadius.circular(4),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: 300,
+                        // Match the width of the main content column minus some padding
+                        maxWidth: MediaQuery.of(context).size.width - 64,
+                      ),
+                      child: ListView.builder(
+                        padding: EdgeInsets.zero,
+                        shrinkWrap: true,
+                        itemCount: options.length,
+                        itemBuilder: (context, index) {
+                          final option = options.elementAt(index);
+                          final code = _parseCodeFromOption(option);
+                          return ListTile(
+                            title: Text(option),
+                            onTap: () => onSelected(code),
+                          );
+                        },
+                      ),
+                    ),
                   ),
-                  child: ListView.builder(
-                    padding: EdgeInsets.zero,
-                    shrinkWrap: true,
-                    itemCount: options.length,
-                    itemBuilder: (context, index) {
-                      final option = options.elementAt(index);
-                      final code = _parseCodeFromOption(option);
-                      return ListTile(
-                        title: Text(option),
-                        subtitle: Text(
-                          '${_getSourceLanguageCount(code)} ${_getSourceLanguageCount(code) == 1 ? 'dictionary' : 'dictionaries'}',
-                        ),
-                        onTap: () => onSelected(code),
-                      );
-                    },
-                  ),
-                ),
-              ),
+                );
+              }
             );
           },
           onSelected: (code) {
@@ -300,7 +303,7 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
             return DropdownMenuItem<String>(
               value: code,
               child: Text(
-                '${_getLanguageName(code)} ($code) - $count ${count == 1 ? 'dictionary' : 'dictionaries'}',
+                '${_getLanguageName(code)} ($code) ($count)',
                 overflow: TextOverflow.ellipsis,
               ),
             );
@@ -382,7 +385,8 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
               },
             ),
           ),
-      ],
+        ],
+      ),
     );
   }
 }

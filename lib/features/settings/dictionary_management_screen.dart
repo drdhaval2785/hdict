@@ -55,38 +55,40 @@ class _DictionaryManagementScreenState
           builder: (context, setDialogState) {
             return AlertDialog(
               title: const Text('Download Dictionary'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Enter the URL of the dictionary file (.zip, .tar.gz):',
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: urlController,
-                    decoration: const InputDecoration(
-                      labelText: 'URL',
-                      border: OutlineInputBorder(),
-                      hintText: 'http://example.com/dict.zip',
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Enter the URL of the dictionary file (.zip, .tar.gz):',
                     ),
-                    keyboardType: TextInputType.url,
-                  ),
-                  const SizedBox(height: 16),
-                  CheckboxListTile(
-                    title: const Text('Index words in definitions'),
-                    subtitle: const Text(
-                      'Enables searching inside meanings (takes more time/space)',
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: urlController,
+                      decoration: const InputDecoration(
+                        labelText: 'URL',
+                        border: OutlineInputBorder(),
+                        hintText: 'http://example.com/dict.zip',
+                      ),
+                      keyboardType: TextInputType.url,
                     ),
-                    value: indexDefinitions,
-                    onChanged: (val) {
-                      setDialogState(() {
-                        indexDefinitions = val ?? false;
-                      });
-                    },
-                    controlAffinity: ListTileControlAffinity.leading,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    CheckboxListTile(
+                      title: const Text('Index words in definitions'),
+                      subtitle: const Text(
+                        'Enables searching inside meanings (takes more time/space)',
+                      ),
+                      value: indexDefinitions,
+                      onChanged: (val) {
+                        setDialogState(() {
+                          indexDefinitions = val ?? false;
+                        });
+                      },
+                      controlAffinity: ListTileControlAffinity.leading,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
@@ -314,26 +316,28 @@ class _DictionaryManagementScreenState
             builder: (context, setDialogState) {
               return AlertDialog(
                 title: const Text('Import Dictionary'),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('Importing ${files.length} file(s).'),
-                    const SizedBox(height: 16),
-                    CheckboxListTile(
-                      title: const Text('Index words in definitions'),
-                      subtitle: const Text(
-                        'Enables searching inside meanings (takes more time/space)',
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Importing ${files.length} file(s).'),
+                      const SizedBox(height: 16),
+                      CheckboxListTile(
+                        title: const Text('Index words in definitions'),
+                        subtitle: const Text(
+                          'Enables searching inside meanings (takes more time/space)',
+                        ),
+                        value: indexDefinitions,
+                        onChanged: (val) {
+                          setDialogState(() {
+                            indexDefinitions = val ?? false;
+                          });
+                        },
+                        controlAffinity: ListTileControlAffinity.leading,
+                        contentPadding: EdgeInsets.zero,
                       ),
-                      value: indexDefinitions,
-                      onChanged: (val) {
-                        setDialogState(() {
-                          indexDefinitions = val ?? false;
-                        });
-                      },
-                      controlAffinity: ListTileControlAffinity.leading,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 actions: [
                   TextButton(
@@ -639,7 +643,9 @@ class _DictionaryManagementScreenState
                             overflow: TextOverflow.ellipsis,
                           ),
                           subtitle: Text(
-                            '${dict['word_count']} headwords${(dict['definition_word_count'] ?? 0) > 0 ? ', ${dict['definition_word_count']} words in definition' : ''}',
+                            '${dict['word_count']} headwords${(dict['definition_word_count'] ?? 0) > 0 ? ', ${dict['definition_word_count']} in meanings' : ''}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               color: Theme.of(context).colorScheme.primary,
                             ),
@@ -661,20 +667,33 @@ class _DictionaryManagementScreenState
                                   _loadDictionaries();
                                 },
                               ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.refresh,
-                                  color: Colors.blueAccent,
-                                ),
-                                onPressed: () => _showReindexDialog(dict),
-                                tooltip: 'Re-index dictionary',
-                              ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.delete_outline,
-                                  color: Colors.redAccent,
-                                ),
-                                onPressed: () => _showDeleteDialog(dict),
+                              PopupMenuButton<String>(
+                                icon: const Icon(Icons.more_vert),
+                                onSelected: (value) {
+                                  if (value == 'reindex') {
+                                    _showReindexDialog(dict);
+                                  } else if (value == 'delete') {
+                                    _showDeleteDialog(dict);
+                                  }
+                                },
+                                itemBuilder: (BuildContext context) => [
+                                  const PopupMenuItem(
+                                    value: 'reindex',
+                                    child: ListTile(
+                                      leading: Icon(Icons.refresh, color: Colors.blueAccent),
+                                      title: Text('Re-index'),
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'delete',
+                                    child: ListTile(
+                                      leading: Icon(Icons.delete_outline, color: Colors.redAccent),
+                                      title: Text('Delete'),
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
@@ -839,13 +858,15 @@ class _DictionaryManagementScreenState
               content: ValueListenableBuilder<DeletionProgress>(
                 valueListenable: progressNotifier,
                 builder: (context, progress, child) {
-                  return Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      LinearProgressIndicator(value: progress.value),
-                      const SizedBox(height: 16),
-                      Text(progress.message, textAlign: TextAlign.center),
-                    ],
+                  return SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        LinearProgressIndicator(value: progress.value),
+                        const SizedBox(height: 16),
+                        Text(progress.message, textAlign: TextAlign.center),
+                      ],
+                    ),
                   );
                 },
               ),
@@ -978,29 +999,31 @@ class _DictionaryManagementScreenState
   }
 
   Widget _buildProgressContent(ImportProgress progress) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (progress.dictionaryName != null) ...[
-          Text(
-            progress.dictionaryName!,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (progress.dictionaryName != null) ...[
+            Text(
+              progress.dictionaryName!,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+          ],
+          LinearProgressIndicator(value: progress.value),
+          const SizedBox(height: 16),
+          Text(progress.message, textAlign: TextAlign.center),
+          if (progress.headwordCount > 0) ...[
+            const SizedBox(height: 8),
+            Text(
+              '${progress.headwordCount} headwords'
+              '${(progress.definitionWordCount > 0) ? ', ${progress.definitionWordCount} definition words indexed' : ' indexed'}',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+          ],
         ],
-        LinearProgressIndicator(value: progress.value),
-        const SizedBox(height: 16),
-        Text(progress.message, textAlign: TextAlign.center),
-        if (progress.headwordCount > 0) ...[
-          const SizedBox(height: 8),
-          Text(
-            '${progress.headwordCount} headwords'
-            '${(progress.definitionWordCount > 0) ? ', ${progress.definitionWordCount} definition words indexed' : ' indexed'}',
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-          ),
-        ],
-      ],
+      ),
     );
   }
 }
