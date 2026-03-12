@@ -1,0 +1,36 @@
+name: hdict
+adopt-info: hdict
+summary: High-performance, feature-rich dictionary reader application
+description: |
+  A high-performance, feature-rich dictionary application built with Flutter. 
+  Optimized for speed, highly customizable, and designed for a premium user experience across all platforms.
+  Supports StarDict, MDict, Dictd and Slob formats with universal tap-to-lookup functionality.
+
+confinement: strict
+base: core22
+grade: stable
+
+slots:
+  dbus-hdict:
+    interface: dbus
+    bus: session
+    name: com.example.hdict
+
+apps:
+  hdict:
+    command: hdict
+    extensions: [gnome]
+    plugs:
+    - network
+    - home
+    slots:
+      - dbus-hdict
+
+parts:
+  hdict:
+    source: .
+    plugin: flutter
+    flutter-target: lib/main.dart
+    override-pull: |
+      craftctl default
+      craftctl set version=$(grep "^version: " pubspec.yaml | cut -d " " -f 2 | cut -d "+" -f 1)
