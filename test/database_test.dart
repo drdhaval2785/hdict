@@ -234,5 +234,56 @@ void main() {
       history = await dbHelper.getSearchHistory();
       expect(history.isEmpty, isTrue);
     });
+
+    test('Dictionary display_order is respected in search results', () async {
+      // Setup: Two dictionaries. dict_2 has a LOWER display_order (higher priority).
+      // Even though dict_1 was inserted first (lower auto-id), dict_2 should appear first.
+      final int dict1Id = await dbHelper.insertDictionary('Dict Alpha', '/path/alpha');
+      final int dict2Id = await dbHelper.insertDictionary('Dict Zeta', '/path/zeta');
+
+      // Set display_order: dict2 = 0 (first), dict1 = 1 (second)
+      await dbHelper.reorderDictionaries([dict2Id, dict1Id]);
+
+      // Insert the same word in both dictionaries
+      await dbHelper.batchInsertWords(dict1Id, [
+        {'word': 'test', 'offset': 0, 'length': 10},
+      ]);
+      await dbHelper.batchInsertWords(dict2Id, [
+        {'word': 'test', 'offset': 100, 'length': 10},
+      ]);
+
+      // Search for the word
+      final results = await dbHelper.searchWords(
+        headwordQuery: 'test',
+        headwordMode: SearchMode.exact,
+      );
+
+      // Verify that results are returned in display_order:
+      // dict2 (display_order=0) should come before dict1 (display_order=1)
+      expect(results.length, 2);
+      expect(results[0]['dict_id'], dict2Id,
+          reason: 'dict2 has higher priority (lower display_order) so it should appear first');
+      expect(results[1]['dict_id'], dict1Id,
+          reason: 'dict1 has lower priority (higher display_order) so it should appear second');
+    });
+
+    test('Reordering dictionaries updates display_order correctly', () async {
+      final int id1 = await dbHelper.insertDictionary('Dict A', '/path/a');
+      final int id2 = await dbHelper.insertDictionary('Dict B', '/path/b');
+      final int id3 = await dbHelper.insertDictionary('Dict C', '/path/c');
+
+      // Reorder: C first, A second, B third
+      await dbHelper.reorderDictionaries([id3, id1, id2]);
+
+      final dicts = await dbHelper.getDictionaries();
+      // Filter to just our three (setUp also inserts one dict)
+      final our3 = dicts.where((d) => [id1, id2, id3].contains(d['id'])).toList();
+      expect(our3.length, 3);
+
+      // getDictionaries returns in display_order ASC, so order should be C, A, B
+      expect(our3[0]['id'], id3, reason: 'Dict C should be first (display_order=0)');
+      expect(our3[1]['id'], id1, reason: 'Dict A should be second (display_order=1)');
+      expect(our3[2]['id'], id2, reason: 'Dict B should be third (display_order=2)');
+    });
   });
 }

@@ -320,7 +320,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
         HPerf.end(enrichmentWatch, 'Search_Enrichment');
 
-        final consolidatedDefs = HomeScreen.consolidateDefinitions(finalGrouped);
+        // Sort finalGrouped by display_order so results respect user-configured priority.
+        // Future.wait completion order is non-deterministic, so we must sort explicitly here.
+        final sortedGrouped = Map.fromEntries(
+          finalGrouped.entries.toList()
+            ..sort((a, b) {
+              final orderA = (dictCache[a.key]?['display_order'] as int?) ?? 999;
+              final orderB = (dictCache[b.key]?['display_order'] as int?) ?? 999;
+              return orderA.compareTo(orderB);
+            }),
+        );
+
+        final consolidatedDefs = HomeScreen.consolidateDefinitions(sortedGrouped);
         
         HPerf.end(totalWatch, 'Search_Total');
         HPerf.dump(prefix: '--- SEARCH RESULTS PERF ---');
