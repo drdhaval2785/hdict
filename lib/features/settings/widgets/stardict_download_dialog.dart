@@ -176,7 +176,11 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
             ),
         ],
       ),
-      content: SizedBox(width: double.maxFinite, child: _buildContent()),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: MediaQuery.sizeOf(context).height * 0.8,
+        child: _buildContent(),
+      ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
@@ -206,11 +210,10 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
       );
     }
 
-    return SingleChildScrollView(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Selection Area
         Autocomplete<String>(
           initialValue: TextEditingValue(
             text: _selectedSourceLanguage != null
@@ -241,41 +244,41 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
                 labelText: 'Source Language',
                 border: OutlineInputBorder(),
                 hintText: 'Type to search...',
+                prefixIcon: Icon(Icons.search),
               ),
               onSubmitted: (_) => onFieldSubmitted(),
             );
           },
           optionsViewBuilder: (context, onSelected, options) {
             return LayoutBuilder(
-              builder: (context, constraints) {
-                return Align(
-                  alignment: Alignment.topLeft,
-                  child: Material(
-                    elevation: 4.0,
-                    borderRadius: BorderRadius.circular(4),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxHeight: 300,
-                        // Match the width of the main content column minus some padding
-                        maxWidth: MediaQuery.of(context).size.width - 64,
-                      ),
-                      child: ListView.builder(
-                        padding: EdgeInsets.zero,
-                        shrinkWrap: true,
-                        itemCount: options.length,
-                        itemBuilder: (context, index) {
-                          final option = options.elementAt(index);
-                          final code = _parseCodeFromOption(option);
-                          return ListTile(
-                            title: Text(option),
-                            onTap: () => onSelected(code),
-                          );
-                        },
+                builder: (context, constraints) {
+                  return Align(
+                    alignment: Alignment.topLeft,
+                    child: Material(
+                      elevation: 4.0,
+                      borderRadius: BorderRadius.circular(8),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: 300,
+                          maxWidth: constraints.maxWidth,
+                        ),
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          itemCount: options.length,
+                          itemBuilder: (context, index) {
+                            final option = options.elementAt(index);
+                            final code = _parseCodeFromOption(option);
+                            return ListTile(
+                              title: Text(option),
+                              onTap: () => onSelected(code),
+                            );
+                          },
+                        ),
                       ),
                     ),
-                  ),
-                );
-              }
+                  );
+                }
             );
           },
           onSelected: (code) {
@@ -283,11 +286,10 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
               _selectedSourceLanguage = code;
               _selectedTargetLanguage = null;
             });
-            // Hide keyboard if it was open from the Autocomplete
             FocusManager.instance.primaryFocus?.unfocus();
           },
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         DropdownButtonFormField<String>(
           initialValue: _selectedTargetLanguage,
           decoration: InputDecoration(
@@ -297,6 +299,7 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
                 ? 'Select source first'
                 : 'Choose a language...',
             enabled: _selectedSourceLanguage != null,
+            prefixIcon: const Icon(Icons.translate),
           ),
           items: _targetLanguages.map((code) {
             final count = _getTargetLanguageCount(code);
@@ -311,16 +314,17 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
           onChanged: _selectedSourceLanguage == null
               ? null
               : (String? value) {
-                  setState(() {
-                    _selectedTargetLanguage = value;
-                  });
-                },
+            setState(() {
+              _selectedTargetLanguage = value;
+            });
+          },
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 8),
         CheckboxListTile(
           title: const Text('Index words in definitions'),
           subtitle: const Text(
-            'Enables searching inside meanings (takes more time/space)',
+            'Enables searching inside meanings',
+            style: TextStyle(fontSize: 12),
           ),
           value: _indexDefinitions,
           onChanged: (val) {
@@ -330,22 +334,33 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
           },
           controlAffinity: ListTileControlAffinity.leading,
           contentPadding: EdgeInsets.zero,
+          dense: true,
         ),
-        const SizedBox(height: 16),
-        const Divider(),
+        const Divider(height: 24),
+        // Results Area
         if (_filteredDictionaries.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Text(
-              'Select a source and target language to see available dictionaries.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey),
+          const Expanded(
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(32.0),
+                child: Text(
+                  'Select languages to see available dictionaries.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+                ),
+              ),
             ),
           )
-        else
-          Flexible(
+        else ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: Text(
+              'Available Dictionaries (${_filteredDictionaries.length})',
+              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+            ),
+          ),
+          Expanded(
             child: ListView.builder(
-              shrinkWrap: true,
               itemCount: _filteredDictionaries.length,
               itemBuilder: (context, index) {
                 final dict = _filteredDictionaries[index];
@@ -353,40 +368,101 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
                 if (release == null) return const SizedBox.shrink();
 
                 final isDownloaded = _downloadedUrls.contains(release.url);
+                final theme = Theme.of(context);
 
                 return Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    title: Text(dict.name),
-                    subtitle: Text(
-                      'Version: ${dict.version.isEmpty ? "N/A" : dict.version} • Headwords: ${dict.headwords.isEmpty ? "N/A" : dict.headwords}',
+                  margin: const EdgeInsets.only(bottom: 12),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                      color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
                     ),
-                    trailing: isDownloaded
-                        ? FilledButton.icon(
-                            icon: const Icon(Icons.check, size: 18),
-                            label: const Text('Downloaded'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: Colors.green,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    dict.name,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Version: ${dict.version.isEmpty ? "N/A" : dict.version}',
+                                    style: theme.textTheme.bodySmall,
+                                  ),
+                                  Text(
+                                    'Headwords: ${dict.headwords.isEmpty ? "N/A" : dict.headwords}',
+                                    style: theme.textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
                             ),
-                            onPressed: null,
-                          )
-                        : FilledButton.icon(
-                            icon: const Icon(Icons.download, size: 18),
-                            label: const Text('Download'),
-                            onPressed: () {
-                              Navigator.pop(context, {
-                                'url': release.url,
-                                'index': _indexDefinitions,
-                              });
-                            },
-                          ),
+                            const SizedBox(width: 8),
+                            if (isDownloaded)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.check_circle, color: Colors.green, size: 14),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Installed',
+                                      style: TextStyle(
+                                        color: Colors.green,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            else
+                              ElevatedButton.icon(
+                                icon: const Icon(Icons.download, size: 18),
+                                label: const Text('Download'),
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                onPressed: () {
+                                  Navigator.pop(context, {
+                                    'url': release.url,
+                                    'index': _indexDefinitions,
+                                  });
+                                },
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 );
               },
             ),
           ),
         ],
-      ),
+      ],
     );
   }
 }
