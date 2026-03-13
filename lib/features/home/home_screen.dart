@@ -259,6 +259,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       // Phase 1: Parallel definition fetching across dictionaries (IO bound)
       // Within each dictionary, reads are sequential if the reader is stateful,
       // or parallel if stateless (handled inside DictionaryManager).
+      // fetchAllDicts_Wall = actual wall-clock time (max of all parallel batches).
+      // fetchBatch_IO_Seq per-dict shows per-dictionary cost; "total" in the dump
+      // is a misleading sum of parallel calls — use "max" from the dump instead.
+      final fetchAllDictsWatch = HPerf.start('fetchAllDicts_Wall');
       await Future.wait(resultsByDict.entries.map((entry) async {
         final dictId = entry.key;
         final requests = entry.value;
@@ -288,6 +292,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           });
         }
       }));
+      HPerf.end(fetchAllDictsWatch, 'fetchAllDicts_Wall');
 
       // Phase 2: HTML Processing is now done LAZILY during ListView scrolling!
       if (entriesToProcess.isNotEmpty) {
