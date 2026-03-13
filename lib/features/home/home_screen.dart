@@ -1038,6 +1038,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     if (d != null) popupDictCache[id] = d;
                   }
 
+                  // fetchAllDefs_Wall = true wall-clock time of all parallel
+                  // fetchDefinition calls. fetchDef_IO "total" is a misleading
+                  // sum; use "max" per-call or this wall timer instead.
+                  final fetchAllDefsWatch = HPerf.start('fetchAllDefs_Wall');
                   final results = await Future.wait(candidates.map((res) async {
                     final dictId = res['dict_id'] as int;
                     final wordValue = res['word'] as String;
@@ -1061,6 +1065,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       'type_sequence': dict['type_sequence'],
                     };
                   }));
+                  HPerf.end(fetchAllDefsWatch, 'fetchAllDefs_Wall');
 
                   final Map<int, Map<String, List<Map<String, dynamic>>>>
                       groupedResults = {};
