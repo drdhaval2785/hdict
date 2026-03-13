@@ -299,7 +299,7 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
                 ? 'Select source first'
                 : 'Choose a language...',
             enabled: _selectedSourceLanguage != null,
-            prefixIcon: const Icon(Icons.translate),
+            prefixIcon: const Icon(Icons.search),
           ),
           items: _targetLanguages.map((code) {
             final count = _getTargetLanguageCount(code);
