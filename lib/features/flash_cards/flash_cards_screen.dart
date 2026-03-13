@@ -373,8 +373,12 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                           Expanded(
                             child: SingleChildScrollView(
                               padding: const EdgeInsets.all(12),
-                              child: Builder(
-                                builder: (ctx) => GestureDetector(
+                               child: MouseRegion(
+                                 cursor: settings.isTapOnMeaningEnabled
+                                     ? SystemMouseCursors.click
+                                     : MouseCursor.defer,
+                                 child: Builder(
+                                   builder: (ctx) => GestureDetector(
                                   behavior: HitTestBehavior.translucent,
                                   onTapUp: (details) {
                                   if (!settings.isTapOnMeaningEnabled) {
@@ -425,6 +429,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                               ),
                              ),
                             ),
+                           ),
                           ),
                         ],
                       ),
@@ -516,8 +521,12 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                   children: [
                     Container(
                       padding: const EdgeInsets.all(16),
-                      child: Builder(
-                        builder: (ctx) => GestureDetector(
+                      child: MouseRegion(
+                        cursor: settings.isTapOnMeaningEnabled
+                            ? SystemMouseCursors.click
+                            : MouseCursor.defer,
+                        child: Builder(
+                          builder: (ctx) => GestureDetector(
                           behavior: HitTestBehavior.translucent,
                           onTapUp: (details) {
                             if (!settings.isTapOnMeaningEnabled) {
@@ -579,6 +588,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                           },
                         ),
                       ),
+                    ),
                     ),
                     ),
                   ],
@@ -749,8 +759,12 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
           children: [
             Text(def['word'], style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: settings.headwordColor, fontFamily: settings.fontFamily, fontSize: settings.fontSize + 8)),
             const Divider(height: 32),
-            Builder(
-              builder: (ctx) => GestureDetector(
+            MouseRegion(
+              cursor: settings.isTapOnMeaningEnabled
+                  ? SystemMouseCursors.click
+                  : MouseCursor.defer,
+              child: Builder(
+                builder: (ctx) => GestureDetector(
                 behavior: HitTestBehavior.translucent,
                 onTapUp: (details) {
                   if (!settings.isTapOnMeaningEnabled) {
@@ -791,6 +805,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                 ),
               ),
             ),
+          ),
           ],
         ),
       ),

@@ -893,8 +893,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Builder(
-                          builder: (ctx) => GestureDetector(
+                        MouseRegion(
+                          cursor: settings.isTapOnMeaningEnabled
+                              ? SystemMouseCursors.click
+                              : MouseCursor.defer,
+                          child: Builder(
+                            builder: (ctx) => GestureDetector(
                             behavior: HitTestBehavior.translucent,
                             onTapUp: (details) {
                             if (!settings.isTapOnMeaningEnabled) {
@@ -974,6 +978,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           },
                         ),
                       ),
+                    ),
                     ),
                     if (index == rawDefinitions.length - 1 && settings.isTapOnMeaningEnabled)
                       const Padding(
