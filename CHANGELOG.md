@@ -1,7 +1,21 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
-
+ 
+## [1.4.2] - 2026-03-13
+ 
+### Added
+- **Native Tap-to-Search**: 
+    - Completely refactored definition interaction to use Flutter's native hit-testing instead of HTML anchor wrapping.
+    - **Significant Performance Gain**: Reduced HTML size by ~50% and eliminated rendering bottlenecks for very large definitions.
+    - **No More character Limits**: Removed the 20,000 character limit. Tap-to-search now works on definitions of any length.
+- **Hover Cursor (Desktop)**: The mouse cursor now changes to a hand icon when hovering over words in the definition area on macOS, Windows, and Linux.
+ 
+### Fixed
+- **iOS/macOS Tap Reliability**: Fixed an issue where word detection would return `null` or be unresponsive on Apple platforms.
+- **Dictionary Ordering**: Fixed a bug where search results ignored user-defined dictionary priority; results now strictly follow the `display_order`.
+- **macOS Instance Bug**: Fixed an edge case where tapping words could trigger multiple app instances.
+ 
 ## [1.4.0] - 2026-03-11
 
 ### Added
