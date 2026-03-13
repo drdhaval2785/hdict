@@ -9,6 +9,9 @@ import 'package:provider/provider.dart';
 import 'dart:math';
 import 'package:hdict/features/home/widgets/app_drawer.dart';
 import 'package:hdict/features/flash_cards/result_screen.dart';
+import 'package:hdict/core/utils/word_boundary.dart' as util;
+import 'package:flutter/rendering.dart';
+import 'package:hdict/core/utils/logger.dart';
 
 class FlashCardsScreen extends StatefulWidget {
   const FlashCardsScreen({super.key});
@@ -370,7 +373,38 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                           Expanded(
                             child: SingleChildScrollView(
                               padding: const EdgeInsets.all(12),
-                              child: SelectionArea(
+                              child: Builder(
+                                builder: (ctx) => GestureDetector(
+                                  behavior: HitTestBehavior.translucent,
+                                  onTapUp: (details) {
+                                  if (!settings.isTapOnMeaningEnabled) {
+                                      hDebugPrint('FlashCards (meaning header): Tap ignored: isTapOnMeaningEnabled is false');
+                                      return;
+                                  }
+                                  final RenderBox? renderBox = ctx.findRenderObject() as RenderBox?;
+                                  if (renderBox == null) {
+                                      hDebugPrint('FlashCards (meaning header): Tap ignored: renderBox is null');
+                                      return;
+                                  }
+                                  final BoxHitTestResult result = BoxHitTestResult();
+                                  renderBox.hitTest(result, position: renderBox.globalToLocal(details.globalPosition));
+                                  for (final HitTestEntry entry in result.path) {
+                                    final target = entry.target;
+                                    if (target is RenderParagraph) {
+                                      final String text = target.text.toPlainText();
+                                      if (text.replaceAll('\uFFFC', '').trim().isEmpty) continue;
+                                      final Offset localOffset = target.globalToLocal(details.globalPosition);
+                                      final TextPosition pos = target.getPositionForOffset(localOffset);
+                                      final String? word = util.WordBoundary.wordAt(text, pos.offset);
+                                      hDebugPrint('FlashCards (meaning header): Word tapped for search: $word');
+                                      if (word != null && word.trim().isNotEmpty) {
+                                        _showWordPopup(word);
+                                        return;
+                                      }
+                                    }
+                                  }
+                                  hDebugPrint('FlashCards (meaning header): HitTest found no valid text paragraph.');
+                                },
                                 child: Html(
                                   data: currentWord['meaning'],
                                   style: {
@@ -389,6 +423,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                                   },
                                 ),
                               ),
+                             ),
                             ),
                           ),
                         ],
@@ -481,11 +516,40 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                   children: [
                     Container(
                       padding: const EdgeInsets.all(16),
-                      child: SelectionArea(
-                        child: Html(
-                          data: settings.isTapOnMeaningEnabled
-                              ? HtmlLookupWrapper.wrapWords(wordData['meaning'])
-                              : wordData['meaning'],
+                      child: Builder(
+                        builder: (ctx) => GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onTapUp: (details) {
+                            if (!settings.isTapOnMeaningEnabled) {
+                              hDebugPrint('FlashCards (review): Tap ignored: isTapOnMeaningEnabled is false');
+                              return;
+                            }
+                            final RenderBox? renderBox = ctx.findRenderObject() as RenderBox?;
+                            if (renderBox == null) {
+                              hDebugPrint('FlashCards (review): Tap ignored: renderBox is null');
+                              return;
+                            }
+                            final BoxHitTestResult result = BoxHitTestResult();
+                            renderBox.hitTest(result, position: renderBox.globalToLocal(details.globalPosition));
+                            for (final HitTestEntry entry in result.path) {
+                              final target = entry.target;
+                              if (target is RenderParagraph) {
+                                final String text = target.text.toPlainText();
+                                if (text.replaceAll('\uFFFC', '').trim().isEmpty) continue;
+                                final Offset localOffset = target.globalToLocal(details.globalPosition);
+                                final TextPosition pos = target.getPositionForOffset(localOffset);
+                                final String? word = util.WordBoundary.wordAt(text, pos.offset);
+                                hDebugPrint('FlashCards (review): Word tapped for search: $word');
+                                if (word != null && word.trim().isNotEmpty) {
+                                  _showWordPopup(word);
+                                  return;
+                                }
+                              }
+                            }
+                            hDebugPrint('FlashCards (review): HitTest found no valid text paragraph.');
+                          },
+                          child: Html(
+                            data: wordData['meaning'],
                           style: {
                             "body": Style(
                               fontSize: FontSize(settings.fontSize),
@@ -515,6 +579,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                           },
                         ),
                       ),
+                    ),
                     ),
                   ],
                 );
@@ -591,10 +656,9 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
             Expanded(
               child: FutureBuilder<List<Map<String, dynamic>>>(
                 future: () async {
-                  final brightness = Theme.of(context).brightness;
-                  final isDark = brightness == Brightness.dark;
 
                   // 1. Try exact match first
+
                   List<Map<String, dynamic>> candidates =
                       await _dbHelper.searchWords(
                     headwordQuery: word,
@@ -608,7 +672,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                       headwordMode: SearchMode.prefix,
                     );
                   }
-                  final highlightColor = isDark ? '#ff9800' : '#ffeb3b';
+                  // 3. Parallel fetch & pre-process
 
                   // 3. Parallel fetch & pre-process
                   final results = await Future.wait(candidates.map((res) async {
@@ -628,9 +692,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                     content = HtmlLookupWrapper.processRecord(
                       html: content,
                       format: dict['format'] ?? 'stardict',
-                      highlightQuery: word, // Highlighting the word tapped
-                      highlightColor: highlightColor,
-                      wrapWords: settings.isTapOnMeaningEnabled,
+                      underlineQuery: word, // Performance: highlight is same as underline in this wrapper now
                     );
 
                     return {
@@ -687,25 +749,46 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
           children: [
             Text(def['word'], style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: settings.headwordColor, fontFamily: settings.fontFamily, fontSize: settings.fontSize + 8)),
             const Divider(height: 32),
-            SelectionArea(
-              child: Html(
-                data: definitionHtml,
-                style: {
-                  "body": Style(fontSize: FontSize(settings.fontSize), lineHeight: LineHeight.em(1.5), margin: Margins.zero, padding: HtmlPaddings.zero, color: settings.textColor, fontFamily: settings.fontFamily),
-                  "a": Style(color: settings.textColor, textDecoration: TextDecoration.none),
-                },
-                onLinkTap: (url, attributes, element) {
-                  if (url != null && url.startsWith('look_up:')) {
-                    final encodedWord = url.substring(8);
-                    Navigator.pop(context);
-                    try {
-                      final word = encodedWord.contains('%') ? Uri.decodeComponent(encodedWord) : encodedWord;
-                      _showWordPopup(word);
-                    } catch (e) {
-                      _showWordPopup(encodedWord);
+            Builder(
+              builder: (ctx) => GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTapUp: (details) {
+                  if (!settings.isTapOnMeaningEnabled) {
+                    hDebugPrint('FlashCards (popup): Tap ignored: isTapOnMeaningEnabled is false');
+                    return;
+                  }
+                  final RenderBox? renderBox = ctx.findRenderObject() as RenderBox?;
+                  if (renderBox == null) {
+                    hDebugPrint('FlashCards (popup): Tap ignored: renderBox is null');
+                    return;
+                  }
+                  final BoxHitTestResult result = BoxHitTestResult();
+                  renderBox.hitTest(result, position: renderBox.globalToLocal(details.globalPosition));
+                  for (final HitTestEntry entry in result.path) {
+                    final target = entry.target;
+                    if (target is RenderParagraph) {
+                      final String text = target.text.toPlainText();
+                      if (text.replaceAll('\uFFFC', '').trim().isEmpty) continue;
+                      final Offset localOffset = target.globalToLocal(details.globalPosition);
+                      final TextPosition pos = target.getPositionForOffset(localOffset);
+                      final String? tappedWord = util.WordBoundary.wordAt(text, pos.offset);
+                      hDebugPrint('FlashCards (popup): Word tapped for search: $tappedWord');
+                      if (tappedWord != null && tappedWord.trim().isNotEmpty) {
+                        Navigator.pop(context);
+                        _showWordPopup(tappedWord);
+                        return;
+                      }
                     }
                   }
+                  hDebugPrint('FlashCards (popup): HitTest found no valid text paragraph.');
                 },
+                child: Html(
+                  data: definitionHtml,
+                  style: {
+                    "body": Style(fontSize: FontSize(settings.fontSize), lineHeight: LineHeight.em(1.5), margin: Margins.zero, padding: HtmlPaddings.zero, color: settings.textColor, fontFamily: settings.fontFamily),
+                    "a": Style(color: settings.textColor, textDecoration: TextDecoration.none),
+                  },
+                ),
               ),
             ),
           ],

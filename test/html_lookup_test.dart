@@ -3,19 +3,20 @@ import 'package:hdict/core/utils/html_lookup_wrapper.dart';
 
 void main() {
   group('HtmlLookupWrapper Tests', () {
-    test('wrapWords preserves HTML entities', () {
+    test('processRecord preserves HTML entities while highlighting', () {
       const input = 'doctor&apos;s bill &amp; AT&T';
-      final output = HtmlLookupWrapper.wrapWords(input);
+      final output = HtmlLookupWrapper.processRecord(
+        html: input,
+        format: 'html',
+        underlineQuery: 'doctor',
+      );
       
-      // It should NOT wrap 'apos' as a word.
-      // It should wrap 'doctor', 's', 'bill', 'AT', 'T'
       expect(output, contains('&apos;'));
       expect(output, contains('&amp;'));
-      expect(output, isNot(contains('>apos<')));
-      expect(output, isNot(contains('>amp<')));
+      expect(output, contains('<mark>doctor</mark>'));
     });
 
-    test('highlightText preserves HTML entities', () {
+    test('highlightText utility preserves HTML entities', () {
       const input = 'doctor&apos;s';
       final output = HtmlLookupWrapper.highlightText(input, 'doctor');
       expect(output, contains('<mark>doctor</mark>&apos;s'));

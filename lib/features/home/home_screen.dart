@@ -11,6 +11,8 @@ import 'package:hdict/features/settings/settings_provider.dart';
 import 'package:hdict/features/home/widgets/app_drawer.dart';
 import 'package:hdict/features/settings/dictionary_management_screen.dart';
 import 'dart:async';
+import 'package:hdict/core/utils/word_boundary.dart' as util;
+import 'package:flutter/rendering.dart';
 
 
 
@@ -863,27 +865,68 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   final String format = defMap['format'] as String? ?? 'stardict';
                   final String? typeSequence = defMap['type_sequence'] as String?;
                   
-                  // Wrap and Highlight
+                  // Wrap and Highlight (Word wrapping removed in favor of tap-position detection)
                   final processed = HtmlLookupWrapper.processRecord(
                     html: HomeScreen.normalizeWhitespace(rawContent, format: format, typeSequence: typeSequence),
                     format: format,
                     typeSequence: typeSequence,
-                    wrapWords: settings.isTapOnMeaningEnabled,
-                    highlightQuery: _lastHeadwordQuery,
                     underlineQuery: _lastDefinitionQuery,
-                    highlightColor: highlightCol,
                   );
                   
                   definitionHtml = '${defData['headwordHtml']}\n$processed';
                   defData['processedHtml'] = definitionHtml; // Cache for subsequent scrolls
                 }
-                return Stack(
+
+                  return Stack(
                   children: [
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Html(
-                          data: definitionHtml,
+                        Builder(
+                          builder: (ctx) => GestureDetector(
+                            behavior: HitTestBehavior.translucent,
+                            onTapUp: (details) {
+                            if (!settings.isTapOnMeaningEnabled) {
+                              hDebugPrint('Tap ignored: isTapOnMeaningEnabled is false');
+                              return;
+                            }
+                            
+                            final RenderBox? renderBox = ctx.findRenderObject() as RenderBox?;
+                            if (renderBox == null) {
+                              hDebugPrint('Tap ignored: renderBox is null');
+                              return;
+                            }
+                            
+                            final BoxHitTestResult result = BoxHitTestResult();
+                            renderBox.hitTest(result, position: renderBox.globalToLocal(details.globalPosition));
+
+                            for (final HitTestEntry entry in result.path) {
+                              final target = entry.target;
+                              if (target is RenderParagraph) {
+                                final String text = target.text.toPlainText();
+                                // Ignore \uFFFC which is the Object Replacement Character representing inline widgets
+                                if (text.replaceAll('\uFFFC', '').trim().isEmpty) continue;
+
+                                final Offset localOffset = target.globalToLocal(details.globalPosition);
+                                final TextPosition pos = target.getPositionForOffset(localOffset);
+                                final String charAtOffset = (pos.offset >= 0 && pos.offset < text.length) ? text[pos.offset] : 'EOF';
+                                
+                                hDebugPrint('HitTest detected on Paragraph text: "$text"');
+                                hDebugPrint('Calculated TextOffset: ${pos.offset}, Char: "$charAtOffset"');
+                                
+                                final String? word = util.WordBoundary.wordAt(text, pos.offset);
+                                hDebugPrint('Word tapped for search: $word');
+                                
+                                if (word != null && word.trim().isNotEmpty) {
+                                  _showWordPopup(word);
+                                  return; // Stop looking after the first valid text paragraph is found
+                                }
+                              }
+                            }
+                            hDebugPrint('HitTest found no valid text paragraph.');
+                          },
+                          child: Html(
+                            data: definitionHtml,
                           style: {
                             "body": Style(fontSize: FontSize(settings.fontSize), lineHeight: LineHeight.em(1.5), margin: Margins.zero, padding: HtmlPaddings.zero, color: settings.textColor, fontFamily: settings.fontFamily),
                             "a": Style(color: theme.colorScheme.primary, textDecoration: TextDecoration.underline),
@@ -894,8 +937,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             ".headword .dict-word": Style(color: settings.headwordColor, textDecoration: TextDecoration.none),
                            },
                           onLinkTap: (url, attributes, element) async {
+                            hDebugPrint('onLinkTap triggered with url: $url');
                             if (url != null) {
                               if (url.startsWith('http://') || url.startsWith('https://')) {
+                                hDebugPrint('Launching external URL: $url');
                                 final uri = Uri.parse(url);
                                 if (await canLaunchUrl(uri)) {
                                   await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -917,8 +962,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             }
                           },
                         ),
-                        if (index == rawDefinitions.length - 1 && settings.isTapOnMeaningEnabled)
-                          const Padding(
+                      ),
+                    ),
+                    if (index == rawDefinitions.length - 1 && settings.isTapOnMeaningEnabled)
+                      const Padding(
                             padding: EdgeInsets.only(top: 24.0),
                             child: Text('Tap on words/links to look them up.', style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey, fontSize: 12)),
                           ),

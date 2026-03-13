@@ -197,40 +197,26 @@ author=Tester
   // ── HtmlLookupWrapper Tests ─────────────────────────────────────────────────
 
   group('HtmlLookupWrapper Tests', () {
-    test('wrapWords handles Devanagari with marks correctly', () {
+    test('processRecord highlights Devanagari with marks correctly', () {
       const input = 'शतपत्त्र कमल';
-      final output = HtmlLookupWrapper.wrapWords(input);
+      final output = HtmlLookupWrapper.processRecord(
+        html: input,
+        format: 'html',
+        highlightQuery: 'शतपत्त्र',
+      );
 
-      // शतपत्त्र should be wrapped as one word including marks
-      expect(
-        output,
-        contains(
-          '<a href="look_up:शतपत्त्र" class="dict-word">शतपत्त्र</a>',
-        ),
-      );
-      expect(
-        output,
-        contains('<a href="look_up:कमल" class="dict-word">कमल</a>'),
-      );
+      expect(output, contains('<mark>शतपत्त्र</mark> कमल'));
     });
 
-    test('wrapWords preserves line breaks as <br>', () {
+    test('processRecord preserves line breaks as <br>', () {
       const input = 'line1\nline2';
-      final output = HtmlLookupWrapper.wrapWords(input);
-
-      expect(output, contains('line1</a><br>'));
-      expect(output, contains('line2</a>'));
-    });
-
-    test('wrapWords handles URI encoding for special characters', () {
-      const input = 'word#1';
-      final output = HtmlLookupWrapper.wrapWords(input);
-
-      // # is not \p{L}\p{N}\p{M}, so it should be a boundary
-      expect(
-        output,
-        contains('<a href="look_up:word" class="dict-word">word</a>#<a href="look_up:1" class="dict-word">1</a>'),
+      final output = HtmlLookupWrapper.processRecord(
+        html: input,
+        format: 'html',
+        underlineQuery: 'line1',
       );
+
+      expect(output, contains('<mark>line1</mark><br>line2'));
     });
   });
 
