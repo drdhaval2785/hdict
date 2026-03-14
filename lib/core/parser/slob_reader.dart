@@ -110,6 +110,18 @@ class SlobReader {
     return blobs.map((b) => utf8.decode(b.content, allowMalformed: true)).toList();
   }
 
+  /// Fetches [count] blobs starting at global reference [start] in a single
+  /// batched call.  Uses [getBlobs()] which decompresses each compressed bin
+  /// exactly once and returns key + content together — the fastest way to
+  /// sequentially iterate all blobs in a slob file.
+  Future<List<lib.SlobBlob>> getBlobsByRange(int start, int count) async {
+    if (kIsWeb) throw UnsupportedError('Slob is not supported on Web.');
+    if (!_isInitialized) await open();
+    if (_reader == null) return [];
+    if (count <= 0) return [];
+    return await _reader!.getBlobs([(start, count)]);
+  }
+
   /// Closes the Slob file.
 
   Future<void> close() async {

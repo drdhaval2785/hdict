@@ -427,49 +427,28 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
     int headwordCount = 0;
     int defWordCount = 0;
     final totalBlobs = reader.blobCount;
-    const int readBatchSize = 100;
+    // Use larger batches — getBlobs() decompresses each bin once, so bigger
+    // batches hit fewer bins per call and yield best throughput.
+    const int readBatchSize = 500;
     const int dbBatchSize = 10000;
     List<Map<String, dynamic>> dbBatch = [];
 
-    // Slob indexing is usually by iterating all blobs
-    // We can fetch blobs in batches for efficiency
     for (int i = 0; i < totalBlobs; i += readBatchSize) {
-      final end = (i + readBatchSize < totalBlobs)
-          ? i + readBatchSize
-          : totalBlobs;
+      final batchCount =
+          (i + readBatchSize < totalBlobs) ? readBatchSize : totalBlobs - i;
 
-      // Unfortunately slob_reader getBlobs might only support List<(int, int)> i.e. (binIndex, itemIndex)
-      // If we want to iterate sequentially, we might need a different approach or just use getBlob
-      // But user said getBlobs is available. Let's assume it works with global indices or we use bin/item.
-      // Actually SlobReader.blobs was yielding lib.SlobBlob.
-      // Let's use getBlobs with binIndex/itemIndex if possible.
+      // getBlobs([(start, length)]) reads key + content in a single pass,
+      // decompressing each compressed bin only once — no double-fetching.
+      final List<SlobBlob> blobs = await reader.getBlobsByRange(i, batchCount);
 
-      // For now, let's stick to the most efficient batching we can do.
-      // If slob_reader v0.1.3 has getBlobs(List<(int, int)>), we need those pairs.
-
-      // Wait, let's look at SlobReader.blobs again. It yields one by one.
-      // Let's optimize _indexSlobEntry by reading in batches.
-
-      final List<SlobBlob> blobs = [];
-      for (int j = i; j < end; j++) {
-        final b = await reader.getBlob(j);
-        if (b != null) {
-          blobs.add(b);
-        }
-      }
-
-      final List<int> ids = blobs.map((b) => b.id).toList();
-      final List<String> contents = args.indexDefinitions
-          ? await reader.getBlobsContentByIds(ids)
-          : List.filled(blobs.length, '');
-
-      for (int j = 0; j < blobs.length; j++) {
-        final blob = blobs[j];
-        final content = contents[j];
+      for (final blob in blobs) {
+        final content = args.indexDefinitions
+            ? utf8.decode(blob.content, allowMalformed: true)
+            : '';
 
         dbBatch.add({
           'word': blob.key,
-          'content': args.indexDefinitions ? content : '',
+          'content': content,
           'dict_id': args.dictId,
           'offset': blob.id,
           'length': blob.content.length,
@@ -500,6 +479,21 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
           );
         }
       }
+
+      // Send progress after every read-batch (ensures UI updates even when
+      // dbBatch hasn't filled yet, e.g. small dictionaries).
+      sendPort.send(
+        ImportProgress(
+          message:
+              '${args.bookName}: $headwordCount / $totalBlobs headwords indexed',
+          value:
+              0.45 +
+              (headwordCount / (totalBlobs == 0 ? 1 : totalBlobs)) * 0.5,
+          headwordCount: headwordCount,
+          definitionWordCount: defWordCount,
+          dictionaryName: args.bookName,
+        ),
+      );
     }
 
     if (dbBatch.isNotEmpty)
@@ -1430,10 +1424,25 @@ class DictionaryManager {
         processedFiles++;
       }
 
-      final ifoNames = allFiles.keys.where((n) => n.endsWith('.ifo')).toList();
-      if (ifoNames.isEmpty) throw Exception('No .ifo files found');
+      // Find all dictionary entry points in the extracted file map.
+      final ifoNames = allFiles.keys
+          .where((n) => n.toLowerCase().endsWith('.ifo'))
+          .toList();
+      final mdxNames = allFiles.keys
+          .where((n) => n.toLowerCase().endsWith('.mdx'))
+          .toList();
+      final slobNames = allFiles.keys
+          .where((n) => n.toLowerCase().endsWith('.slob'))
+          .toList();
 
-      int totalDicts = ifoNames.length;
+      if (ifoNames.isEmpty && mdxNames.isEmpty && slobNames.isEmpty) {
+        throw Exception(
+          'No supported dictionary files (.ifo, .mdx, .slob) found in archive.',
+        );
+      }
+
+      // --- StarDict dictionaries ---
+      int totalDicts = ifoNames.length + mdxNames.length + slobNames.length;
       int currentDict = 0;
 
       for (final ifoName in ifoNames) {
@@ -1466,6 +1475,41 @@ class DictionaryManager {
         } catch (e) {
           hDebugPrint('Web error importing $ifoName: $e');
         }
+      }
+
+      // --- MDict dictionaries (extracted from archive) ---
+      // MDict import on Web requires a real file path, which isn't possible
+      // in a web context. Surface a clear error instead of silently skipping.
+      for (final mdxName in mdxNames) {
+        currentDict++;
+        yield ImportProgress(
+          message:
+              '[$currentDict/$totalDicts] MDict (.mdx) files inside archives are not supported on Web. '
+              'Please import the .mdx file directly using "Import File".',
+          value: 0.5 + (currentDict - 1) / totalDicts * 0.5,
+          error:
+              'MDict inside archive not supported on Web',
+          isCompleted: totalDicts == currentDict,
+          dictionaryName: p.basenameWithoutExtension(mdxName),
+        );
+        hDebugPrint('Web: skipped MDict $mdxName — not supported in archive');
+      }
+
+      // --- Slob dictionaries (extracted from archive) ---
+      // Same limitation as MDict on Web — needs a file path.
+      for (final slobName in slobNames) {
+        currentDict++;
+        yield ImportProgress(
+          message:
+              '[$currentDict/$totalDicts] Slob (.slob) files inside archives are not supported on Web. '
+              'Please import the .slob file directly using "Import File".',
+          value: 0.5 + (currentDict - 1) / totalDicts * 0.5,
+          error:
+              'Slob inside archive not supported on Web',
+          isCompleted: totalDicts == currentDict,
+          dictionaryName: p.basenameWithoutExtension(slobName),
+        );
+        hDebugPrint('Web: skipped Slob $slobName — not supported in archive');
       }
 
       yield ImportProgress(
@@ -2752,7 +2796,8 @@ class DictionaryManager {
       '.tbz2',
       '.tar.xz',
       '.tar', // Archives
-      '.mdx', '.mdd', // Dictionary formats
+      '.slob', // Slob format (direct download)
+      '.mdx', '.mdd', // MDict formats
       '.ifo', '.ifo.gz', '.ifo.dz', '.ifo.bz2', '.ifo.xz', // StarDict
       '.idx', '.idx.gz', '.idx.dz', '.idx.bz2', '.idx.xz',
       '.dict', '.dict.dz', '.dict.gz', '.dict.bz2', '.dict.xz',
