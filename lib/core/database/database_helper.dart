@@ -36,8 +36,8 @@ class DatabaseHelper {
     if (result != null) {
       if (result is List) {
         hDebugPrint('Result Count: ${result.length}');
-        if (result.isNotEmpty) {
-          hDebugPrint('Results: $result');
+        if (result.isNotEmpty && result.length <= 5) {
+          hDebugPrint('Sample Results: $result');
         }
       } else {
         hDebugPrint('Result: $result');
@@ -751,6 +751,11 @@ class DatabaseHelper {
     return text.toLowerCase();
   }
 
+  /// Translates user-facing wildcards (? and *) to SQLite LIKE wildcards (_ and %).
+  String _translateWildcards(String query) {
+    return query.replaceAll('?', '_').replaceAll('*', '%');
+  }
+
   /// Resolves a stored path to an absolute path.
   /// Handles relative paths (stored relative to Documents) for iOS compatibility.
   Future<String> resolvePath(String storedPath) async {
@@ -1303,9 +1308,15 @@ class DatabaseHelper {
           if (terms.isEmpty) return '';
           return terms
               .map((t) {
-                String clean = t.replaceAll(RegExp(r'["*\(\)]'), '');
-                return isPrefix ? '$clean*' : clean;
+                // For FTS5, we can only use prefix matching. If there's a wildcard
+                // elsewhere, we use the part before it to narrow down results.
+                int wildcardIdx = t.indexOf(RegExp(r'[*?]'));
+                String cleanPart = wildcardIdx != -1 ? t.substring(0, wildcardIdx) : t;
+                String clean = cleanPart.replaceAll(RegExp(r'["\(\)]'), '');
+                if (clean.isEmpty) return '';
+                return (isPrefix || wildcardIdx != -1) ? '$clean*' : clean;
               })
+              .where((s) => s.isNotEmpty)
               .join(' AND ');
         }
 
@@ -1316,14 +1327,26 @@ class DatabaseHelper {
               if (ftsQuery.isNotEmpty) {
                 whereClauses.add('i.word MATCH ?');
                 whereArgs.add(ftsQuery);
-                // Augment with SQL '=' to ensure exact match of the entire string
-                whereClauses.add('m.word = ?');
-                whereArgs.add(hq);
+                
+                final bool hasWildcards = hq.contains('*') || hq.contains('?');
+                if (hasWildcards) {
+                  whereClauses.add('m.word LIKE ?');
+                  whereArgs.add(_translateWildcards(hq));
+                } else {
+                  whereClauses.add('m.word = ?');
+                  whereArgs.add(hq);
+                }
                 needsFts5Join = true;
               }
             } else {
-              whereClauses.add('m.word = ?');
-              whereArgs.add(hq);
+              final bool hasWildcards = hq.contains('*') || hq.contains('?');
+              if (hasWildcards) {
+                whereClauses.add('m.word LIKE ?');
+                whereArgs.add(_translateWildcards(hq));
+              } else {
+                whereClauses.add('m.word = ?');
+                whereArgs.add(hq);
+              }
             }
             break;
           case SearchMode.prefix:
@@ -1334,13 +1357,15 @@ class DatabaseHelper {
                 whereArgs.add(ftsQuery);
                 // Augment with SQL LIKE to ensure precise prefix matching.
                 // With NOCASE collation, LIKE is now index-optimized.
+                final translatedHq = _translateWildcards(hq);
                 whereClauses.add('m.word LIKE ?');
-                whereArgs.add('$hq%');
+                whereArgs.add('$translatedHq%');
                 needsFts5Join = true;
               }
             } else {
+              final translatedHq = _translateWildcards(hq);
               whereClauses.add('m.word LIKE ?');
-              whereArgs.add('$hq%');
+              whereArgs.add('$translatedHq%');
             }
             break;
           case SearchMode.suffix:
@@ -1422,8 +1447,11 @@ class DatabaseHelper {
       }
       whereArgs.add(limit);
 
+      final bool hasWildcards = (headwordQuery?.contains('*') ?? false) || (headwordQuery?.contains('?') ?? false);
+      final String opDescriptor = hasWildcards ? 'LIKE (Wildcard)' : (headwordMode == SearchMode.prefix ? 'LIKE (Prefix)' : '=');
+
       final result = await db.rawQuery(sql, whereArgs);
-      _log('RAW_QUERY (Advanced Search)', sql, whereArgs, result);
+      _log('RAW_QUERY [$opDescriptor]', sql, whereArgs, result);
       return result;
     } catch (e) {
       hDebugPrint("Search error: $e");
@@ -1452,8 +1480,22 @@ class DatabaseHelper {
     }
 
     final List<Map<String, dynamic>> finalResults = [];
-    final String likePattern = headwordMode == SearchMode.prefix ? '$hq%' : hq;
-    final String operator = headwordMode == SearchMode.prefix ? 'LIKE' : '=';
+    final bool hasWildcards = hq.contains('*') || hq.contains('?');
+    final String translatedHq = _translateWildcards(hq);
+
+    final String likePattern;
+    final String operator;
+
+    if (headwordMode == SearchMode.prefix) {
+      operator = 'LIKE';
+      likePattern = '$translatedHq%';
+    } else if (hasWildcards) {
+      operator = 'LIKE';
+      likePattern = translatedHq;
+    } else {
+      operator = '=';
+      likePattern = hq;
+    }
 
     // 2. Query each dictionary
     // Because we have idx_metadata_dict_word(dict_id, word),
@@ -1481,9 +1523,9 @@ class DatabaseHelper {
     // However, original logic sorts by dict_id first.
 
     _log(
-      'SEQUENTIAL_QUERY (Headword Only)',
-      'Iterated ${dicts.length} dicts',
-      [likePattern, limit],
+      'SEQUENTIAL_QUERY [$operator]',
+      'SELECT word, dict_id, offset, length FROM word_metadata WHERE dict_id = ? AND word $operator ? ORDER BY word ASC LIMIT $limit',
+      ['[IDs of ${dicts.length} dicts]', likePattern],
       finalResults,
     );
     return finalResults;
