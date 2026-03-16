@@ -480,9 +480,191 @@ class _DictionaryManagementScreenState
     }
   }
 
+  Future<void> _importFolder() async {
+    final String? folderPath = await getDirectoryPath();
+    if (folderPath == null) return;
+    if (!mounted) return;
+
+    bool indexDefinitions = false;
+    final dynamic importConfig = await showDialog<dynamic>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Import Folder'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Scanning "$folderPath" for dictionaries.',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                    const SizedBox(height: 16),
+                    CheckboxListTile(
+                      title: const Text('Index words in definitions'),
+                      subtitle: const Text(
+                        'Enables searching inside meanings (takes more time/space)',
+                      ),
+                      value: indexDefinitions,
+                      onChanged: (val) {
+                        setDialogState(() {
+                          indexDefinitions = val ?? false;
+                        });
+                      },
+                      controlAffinity: ListTileControlAffinity.leading,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, indexDefinitions),
+                  child: const Text('Proceed'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (importConfig == null) return;
+    indexDefinitions = importConfig as bool;
+
+    if (!mounted) return;
+
+    // Show progress dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: const Text('Importing from Folder'),
+            content: ValueListenableBuilder<ImportProgress>(
+              valueListenable: _progressNotifier,
+              builder: (context, progress, child) {
+                return _buildProgressContent(progress);
+              },
+            ),
+          ),
+        );
+      },
+    );
+
+    try {
+      List<String>? incompleteEntries;
+
+      final stream = _dictionaryManager.importFolderStream(
+        folderPath,
+        indexDefinitions: indexDefinitions,
+      );
+
+      await for (final progress in stream) {
+        _progressNotifier.value = progress;
+        if (progress.isCompleted) {
+          incompleteEntries = progress.incompleteEntries;
+          if (progress.error != null) {
+            throw Exception(progress.error);
+          }
+        }
+      }
+
+      if (mounted) {
+        Navigator.pop(context); // Close progress dialog
+        await _loadDictionaries();
+
+        // Show incomplete-entries dialog if any dictionaries were skipped
+        if (incompleteEntries != null && incompleteEntries.isNotEmpty) {
+          await showDialog<void>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Some Dictionaries Skipped'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'The following dictionaries could not be imported because '
+                      'they are missing required files:',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                    const SizedBox(height: 12),
+                    ...incompleteEntries!.map(
+
+                      (msg) => Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.warning_amber_rounded,
+                              color: Colors.orange,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                msg,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Folder imported successfully.'),
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close progress dialog
+        final String errorStr = e.toString();
+        String message;
+        if (errorStr.contains('ALREADY_EXISTS:')) {
+          message = errorStr.split('ALREADY_EXISTS:').last.trim();
+        } else if (errorStr.contains('already in your library')) {
+          message = errorStr.replaceAll('Exception: ', '').trim();
+        } else {
+          message = 'Folder import failed: $e';
+        }
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      }
+    }
+  }
+
   final ValueNotifier<ImportProgress> _progressNotifier = ValueNotifier(
     ImportProgress(message: 'Starting...', value: 0.0),
   );
+
 
   @override
   Widget build(BuildContext context) {
@@ -497,7 +679,7 @@ class _DictionaryManagementScreenState
       persistentFooterButtons: [
         () {
           final double screenWidth = MediaQuery.sizeOf(context).width;
-          final bool isWide = screenWidth > 580; // slightly wider for 3 buttons
+          final bool isWide = screenWidth > 680; // wider to comfortably fit 4 buttons
 
           if (isWide) {
             return Row(
@@ -507,6 +689,13 @@ class _DictionaryManagementScreenState
                   onPressed: _isLoading ? null : _importDictionary,
                   icon: Icons.file_open_outlined,
                   label: 'Import File',
+                  isPrimary: false,
+                ),
+                const SizedBox(width: 8),
+                _buildFooterButton(
+                  onPressed: _isLoading ? null : _importFolder,
+                  icon: Icons.folder_open_outlined,
+                  label: 'Import Folder',
                   isPrimary: false,
                 ),
                 const SizedBox(width: 8),
@@ -542,29 +731,42 @@ class _DictionaryManagementScreenState
                     const SizedBox(width: 8),
                     Expanded(
                       child: _buildFooterButton(
-                        onPressed: _isLoading ? null : _downloadDictionary,
-                        icon: Icons.public,
-                        label: 'Download Web',
+                        onPressed: _isLoading ? null : _importFolder,
+                        icon: Icons.folder_open_outlined,
+                        label: 'Import Folder',
                         isPrimary: false,
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: _buildFooterButton(
-                    onPressed: _isLoading ? null : _downloadFreedictDictionary,
-                    icon: Icons.language,
-                    label: 'Select by Language',
-                    isPrimary: true,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildFooterButton(
+                        onPressed: _isLoading ? null : _downloadDictionary,
+                        icon: Icons.public,
+                        label: 'Download Web',
+                        isPrimary: false,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildFooterButton(
+                        onPressed: _isLoading ? null : _downloadFreedictDictionary,
+                        icon: Icons.language,
+                        label: 'Select by Language',
+                        isPrimary: true,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             );
           }
         }(),
       ],
+
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _dictionaries.isEmpty

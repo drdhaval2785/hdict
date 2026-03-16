@@ -20,6 +20,7 @@ import 'package:hdict/core/parser/slob_reader.dart';
 import 'package:dictd_reader/dictd_reader.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_7zip/flutter_7zip.dart';
+import 'package:hdict/core/utils/folder_scanner.dart';
 
 // Top-level functions for compute
 List<int> _decompressGzip(List<int> bytes) {
@@ -47,6 +48,11 @@ class ImportProgress {
   final int definitionWordCount;
   final String? dictionaryName;
 
+  /// Dictionaries that were skipped due to missing mandatory files.
+  /// Each entry is a human-readable string, e.g.:
+  ///   "mydict (StarDict): missing .idx, .dict / .dict.dz"
+  final List<String>? incompleteEntries;
+
   ImportProgress({
     required this.message,
     required this.value,
@@ -58,6 +64,7 @@ class ImportProgress {
     this.headwordCount = 0,
     this.definitionWordCount = 0,
     this.dictionaryName,
+    this.incompleteEntries,
   });
 }
 
@@ -717,45 +724,6 @@ Future<void> _extractToWorkspaceSync(_ExtractArgs args) async {
   }
 }
 
-/// Discovers all supported dictionary files in a directory recursively.
-Future<List<Map<String, String?>>> _discoverDictionariesInDir(
-  String directoryPath,
-) async {
-  final List<Map<String, String?>> discovered = [];
-  final dir = Directory(directoryPath);
-  if (!await dir.exists()) return discovered;
-
-  await for (final entity in dir.list(recursive: true)) {
-    if (entity is! File) continue;
-
-    final lowerPath = entity.path.toLowerCase();
-    if (lowerPath.endsWith('.ifo') ||
-        lowerPath.endsWith('.ifo.gz') ||
-        lowerPath.endsWith('.ifo.dz') ||
-        lowerPath.endsWith('.ifo.bz2') ||
-        lowerPath.endsWith('.ifo.xz')) {
-      discovered.add({'path': entity.path, 'format': 'stardict'});
-    } else if (lowerPath.endsWith('.mdx')) {
-      discovered.add({'path': entity.path, 'format': 'mdict'});
-    } else if (lowerPath.endsWith('.slob')) {
-      discovered.add({'path': entity.path, 'format': 'slob'});
-    } else if (lowerPath.endsWith('.index')) {
-      final base = p.withoutExtension(entity.path);
-      final dictPath = [
-        '$base.dict.dz',
-        '$base.dict',
-      ].firstWhere((dp) => File(dp).existsSync(), orElse: () => '');
-      if (dictPath.isNotEmpty) {
-        discovered.add({
-          'path': entity.path,
-          'format': 'dictd',
-          'companionPath': dictPath,
-        });
-      }
-    }
-  }
-  return discovered;
-}
 
 // Updated _importEntry to support extracting to a specific workspace and discovering multiple files
 Future<void> _extractToWorkspace(String filePath, String workspacePath) async {
@@ -776,18 +744,28 @@ Future<void> _importEntry(_ImportArgs args) async {
       ImportProgress(message: 'Locating dictionary files...', value: 0.45),
     );
 
-    final discovered = await _discoverDictionariesInDir(tempDirPath);
+    final scanResult = await scanFolderForDictionaries(
+      tempDirPath,
+      extractArchives: false, // Already extracted above
+    );
 
-    if (discovered.isEmpty) {
+    if (scanResult.discovered.isEmpty && scanResult.incomplete.isEmpty) {
       throw Exception('No valid dictionary files found in archive.');
     }
+
+    // Encode discovered as a list of maps and incomplete as human-readable strings
+    final discoveredMaps = scanResult.discovered.map((d) => d.toMap()).toList();
+    final incompleteMessages = scanResult.incomplete
+        .map((i) => '${i.name} (${i.format}): missing ${i.missingFiles.join(', ')}')
+        .toList();
 
     sendPort.send(
       ImportProgress(
         message: 'Extraction complete.',
         value: 0.5,
         isCompleted: true,
-        ifoPath: jsonEncode(discovered), // Use ifoPath to carry the JSON list
+        ifoPath: jsonEncode(discoveredMaps),
+        incompleteEntries: incompleteMessages.isEmpty ? null : incompleteMessages,
       ),
     );
   } catch (e, s) {
@@ -1266,21 +1244,31 @@ class DictionaryManager {
         value: 0.45,
       );
 
-      final discoveredRaw = await _discoverDictionariesInDir(workspaceDir.path);
-      if (discoveredRaw.isEmpty) {
+      final scanResult = await scanFolderForDictionaries(
+        workspaceDir.path,
+        extractArchives: false, // already extracted above
+      );
+      if (scanResult.discovered.isEmpty) {
         throw Exception(
-          'No valid dictionary files found. Supported formats: StarDict (.ifo), MDict (.mdx), DICTD (.index+.dict)',
+          'No valid dictionary files found. Supported formats: StarDict (.ifo), MDict (.mdx), Slob (.slob), DICTD (.index+.dict)',
         );
       }
 
-      int totalDicts = discoveredRaw.length;
+      final incompleteMessages = scanResult.incomplete
+          .map(
+            (i) =>
+                '${i.name} (${i.format}): missing ${i.missingFiles.join(', ')}',
+          )
+          .toList();
+
+      int totalDicts = scanResult.discovered.length;
       int currentDict = 0;
 
-      for (final item in discoveredRaw) {
+      for (final item in scanResult.discovered) {
         currentDict++;
-        final primaryPath = item['path']!;
-        final format = item['format']!;
-        final companionPath = item['companionPath'];
+        final primaryPath = item.path;
+        final format = item.format;
+        final companionPath = item.companionPath;
 
         final name = p.basenameWithoutExtension(primaryPath);
         yield ImportProgress(
@@ -1347,8 +1335,188 @@ class DictionaryManager {
         message: 'All imports complete.',
         value: 1.0,
         isCompleted: true,
+        incompleteEntries: incompleteMessages.isEmpty ? null : incompleteMessages,
       );
+
     } catch (e) {
+      yield ImportProgress(
+        message: 'Error: $e',
+        value: 0.0,
+        error: e.toString(),
+        isCompleted: true,
+      );
+    } finally {
+      if (await workspaceDir.exists()) {
+        await workspaceDir.delete(recursive: true);
+      }
+    }
+  }
+  /// Imports all dictionaries found recursively inside [folderPath].
+  ///
+  /// Archives (`.zip`, `.tar.gz`, etc.) found inside the folder are extracted
+  /// before scanning.  Dictionaries with all mandatory files are imported;
+  /// those missing required files are reported via
+  /// [ImportProgress.incompleteEntries] on the final completion event.
+  Stream<ImportProgress> importFolderStream(
+    String folderPath, {
+    bool indexDefinitions = false,
+  }) async* {
+    yield ImportProgress(message: 'Scanning folder...', value: 0.0);
+
+    if (kIsWeb) {
+      yield ImportProgress(
+        message: 'Folder import is not supported on Web.',
+        value: 0.0,
+        error: 'Folder import not supported on Web',
+        isCompleted: true,
+      );
+      return;
+    }
+
+    // We copy the folder into a temporary workspace first so the originals are
+    // never modified and archive extraction happens in a sandboxed location.
+    final tempBaseDir = await getTemporaryDirectory();
+    await tempBaseDir.create(recursive: true);
+    final workspaceDir = await tempBaseDir.createTemp('folder_import_');
+
+    try {
+      yield ImportProgress(message: 'Copying folder contents...', value: 0.05);
+
+      // Copy the entire source folder tree into the workspace.
+      final sourceDir = Directory(folderPath);
+      final entities = await sourceDir.list(recursive: true).toList();
+      for (final entity in entities) {
+        if (entity is File) {
+          final relative = entity.path.substring(folderPath.length);
+          final destPath = p.join(workspaceDir.path, relative);
+          await File(destPath).create(recursive: true);
+          await entity.copy(destPath);
+        }
+      }
+
+      yield ImportProgress(
+        message: 'Scanning for dictionaries (including archives)...',
+        value: 0.15,
+      );
+
+      // The scanner handles archive extraction internally.
+      final scanResult = await scanFolderForDictionaries(
+        workspaceDir.path,
+        extractArchives: true,
+      );
+
+      if (scanResult.discovered.isEmpty && scanResult.incomplete.isEmpty) {
+        throw Exception(
+          'No dictionary files found in the selected folder.\n'
+          'Supported: StarDict (.ifo+.idx+.dict), MDict (.mdx), '
+          'Slob (.slob), DICTD (.index+.dict)',
+        );
+      }
+
+      // Even if only incomplete dictionaries exist, surface them nicely.
+      if (scanResult.discovered.isEmpty) {
+        final incompleteMessages = scanResult.incomplete
+            .map(
+              (i) =>
+                  '${i.name} (${i.format}): missing ${i.missingFiles.join(', ')}',
+            )
+            .toList();
+        yield ImportProgress(
+          message: 'No complete dictionaries found.',
+          value: 1.0,
+          isCompleted: true,
+          incompleteEntries: incompleteMessages,
+        );
+        return;
+      }
+
+      final incompleteMessages = scanResult.incomplete
+          .map(
+            (i) =>
+                '${i.name} (${i.format}): missing ${i.missingFiles.join(', ')}',
+          )
+          .toList();
+
+      int totalDicts = scanResult.discovered.length;
+      int currentDict = 0;
+
+      for (final item in scanResult.discovered) {
+        currentDict++;
+        final primaryPath = item.path;
+        final format = item.format;
+        final companionPath = item.companionPath;
+
+        final name = p.basenameWithoutExtension(primaryPath);
+        yield ImportProgress(
+          message:
+              'Importing dictionary $currentDict of $totalDicts: $name',
+          value: 0.2 + (currentDict - 1) / totalDicts * 0.8,
+          dictionaryName: name,
+        );
+
+        Stream<ImportProgress> subStream;
+        switch (format) {
+          case 'mdict':
+            final mddPath = p.join(
+              p.dirname(primaryPath),
+              '${p.basenameWithoutExtension(primaryPath)}.mdd',
+            );
+            subStream = importMdictStream(
+              primaryPath,
+              mddPath: File(mddPath).existsSync() ? mddPath : null,
+              indexDefinitions: indexDefinitions,
+            );
+            break;
+          case 'slob':
+            subStream = importSlobStream(
+              primaryPath,
+              indexDefinitions: indexDefinitions,
+            );
+            break;
+          case 'dictd':
+            if (companionPath == null) {
+              throw Exception('DICTD .dict file missing for $name');
+            }
+            subStream = importDictdStream(
+              primaryPath,
+              companionPath,
+              indexDefinitions: indexDefinitions,
+            );
+            break;
+          case 'stardict':
+          default:
+            subStream = _processDictionaryFiles(
+              primaryPath,
+              indexDefinitions: indexDefinitions,
+            );
+            break;
+        }
+
+        await for (final progress in subStream) {
+          yield ImportProgress(
+            message: '[$currentDict/$totalDicts] ${progress.message}',
+            value: 0.2 +
+                ((currentDict - 1) + progress.value) / totalDicts * 0.8,
+            headwordCount: progress.headwordCount,
+            isCompleted: progress.isCompleted && currentDict == totalDicts,
+            dictId: progress.dictId,
+            sampleWords: progress.sampleWords,
+            error: progress.error,
+            dictionaryName: progress.dictionaryName ?? name,
+          );
+          if (progress.isCompleted) break;
+        }
+      }
+
+      yield ImportProgress(
+        message: 'Folder import complete.',
+        value: 1.0,
+        isCompleted: true,
+        incompleteEntries:
+            incompleteMessages.isEmpty ? null : incompleteMessages,
+      );
+    } catch (e, s) {
+      hDebugPrint('Error in importFolderStream: $e\n$s');
       yield ImportProgress(
         message: 'Error: $e',
         value: 0.0,
@@ -1363,6 +1531,7 @@ class DictionaryManager {
   }
 
   /// Web-friendly multiple file import.
+
   Stream<ImportProgress> importMultipleFilesWebStream(
     List<({String name, Uint8List bytes})> files, {
     bool indexDefinitions = false,
