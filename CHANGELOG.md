@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
  
+## [1.4.4] - 2026-03-16
+ 
+### Added
+- **Folder Import**: Users can now import entire directories of dictionaries at once.
+- **Improved Slob Support**: Optimized `.slob` file reading using batch processing for much faster lookups.
+- **Expanded Download Formats**: Enabled direct web downloads for `.slob`, `.dictd`, `.mdx`, and `.mdd` files.
+ 
+### Fixed
+- **StarDict Indexing**: Fixed a synonym indexing issue that caused the progress bar to appear frozen.
+ - **UI Improvements**: Updated the "Download Web" label to "Download from Web" for better clarity across the app.
+- **Enhanced Manual**: Completely rewritten User Manual with detailed instructions for importing, customization, and Flash Cards.
+
+## [1.4.3] - 2026-03-13
+ 
+### Fixed
+
+- **Dictionary Scrolling**: Fixed a bug where dictionary scrolling was not working properly.
+ 
 ## [1.4.2] - 2026-03-13
  
 ### Added
