@@ -11,21 +11,20 @@ To search for a word, simply type it into the top search bar. The app searches y
 *   **Wildcards**: Use these when you are unsure of the spelling:
     *   `*` (Asterisk): Matches any number of characters. Example: `app*` will find "apple", "apply", and "application".
     *   `?` (Question Mark): Matches exactly one character. Example: `a?ple` will find "apple".
-*   **Search History**: All your searches are saved. Tap the 📜 icon in the menu to revisit them.
 
 ---
 
 ## 📚 2. Importing & Downloading Dictionaries
 
-**hdict** is a "shell" app—it doesn't come with many dictionaries, but it can read almost any format you find online.
+**hdict** is a "shell" app—it doesn't come pre-loaded with any dictionaries, but it can read almost any dictionary format you find online. Here is how you can get your dictionaries.
 
+*   **Select by Language**: The easiest way! Browse over 1,900 high-quality dictionaries by language pairs and tap to download.
 *   **Import File**: Use this for a single dictionary file or a compressed archive.
 *   **Import Folder**: Point the app to a folder on your device. It will scan every sub-folder and automatically detect valid dictionaries.
-*   **Download from Web**: If you have a direct link (e.g., `http://example.com/french.zip`), paste it here to download and install directly.
-*   **Select by Language**: The easiest way! Browse over 1,900 high-quality dictionaries by language pairs and tap to download.
+*   **Download from Web**: If you have a direct link to a dictionary file, paste it here to download and install directly.
 
 ### Supported Compression Formats
-The app can automatically open:
+The app can read:
 *   `.zip`
 *   `.7z`
 *   `.tar.gz` / `.tgz`
@@ -37,13 +36,13 @@ If you are importing manually, ensure you have these files:
 *   **StarDict**: Requires `.ifo` (info), `.idx` (index), and `.dict` (data).
 *   **MDict**: Requires `.mdx` (data). Optional `.mdd` for images and sounds.
 *   **Slob**: A single `.slob` file is enough.
-*   **DICTD**: Requires `.index` and `.dict.dz`.
+*   **DICTD**: Requires `.index` and `.dict.dz / .dict`.
 
 ---
 
 ## 🔎 3. Deep Search (Inside Definitions)
 
-By default, the app looks for "Headwords" (the main titles of entries). However, you can enable **"Index words in definitions"** during import.
+By default, the app looks for "Headwords" (the main titles of entries). However, you can enable **"Index words in definitions"** during import, or subsequently by pressing 'Reindex' button in 'Manage Dictionaries' folder. It is available by clicking triple dots besides the dictionary name.
 
 *   **What it does**: It reads every single word inside every definition and maps it.
 *   **Example**: If you search for "astronomy", a normal search finds the entry for "Astronomy". A **Deep Search** will also find "Telescope" or "Galaxy" because they mention "astronomy" in their descriptions.
@@ -57,7 +56,7 @@ Turn your dictionaries into a study tool!
 
 *   **Starting a Session**: Go to "Flash Cards" in the menu. Choose how many random words you want to be tested on (from 5 to 50).
 *   **Dictionaries**: Pick which dictionaries the app should pull words from.
-*   **Sneak Peek**: If you can't remember a word, tap **"Peek"** for a hint before revealing the full answer.
+*   **Sneak Peek**: If you can't remember a word, tap **"Peek"** for the meaning.
 *   **Score History**: Track your progress over time. Every session result is saved with details of which words you got right or wrong.
 
 ---
@@ -67,15 +66,14 @@ Turn your dictionaries into a study tool!
 Head over to **Settings** to make the app your own:
 
 ### Search Settings
-*   **Fuzzy Search**: When enabled, if you type "aple", the app will still suggest "apple".
-*   **Search Modes**: Set whether your search should match the start of the word (**Prefix**), the end (**Suffix**), or the **Exact** word.
+*   **Search Modes**: Set whether your search should match the start of the word (**Prefix**), the end (**Suffix**), the internal (**Substring**) or the **Exact** word.
 
 ### Appearance
-*   **Theme & Dark Mode**: Pick from several vibrant colors and toggle Dark Mode to reduce eye strain.
+*   **Theme**: Pick from several vibrant colors.
 *   **Typography**: Change the font family and adjust the font size so definitions are perfectly readable for you.
 
 ### Dictionary Interaction
-*   **Tap-on-Meaning**: See a word inside a definition that you don't know? Just **tap it**! A popup will appear showing its meaning without leaving your current page.
+*   **Tap-on-Meaning**: See a word inside a definition that you don't know? Just **tap it**! A popup will appear showing its meaning without leaving your current page. If you want to show the tapped words in full screen rather than a pop-up, you can change the preference in 'Settings' menu.
 
 ---
 
@@ -85,4 +83,3 @@ In **Manage Dictionaries**, you have full control:
 
 *   **Reorder Priority**: Drag dictionaries up or down. If multiple dictionaries have the same word, the one at the top will be shown first.
 *   **Re-indexing**: If a dictionary seems to have missing words, use the "Re-index" tool to rebuild its word list.
-*   **Space Cleanup**: If you delete a dictionary, use the **"Orphan Cleanup"** tool (in the side menu) to ensure no leftover files are wasting space.
