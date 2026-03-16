@@ -1387,7 +1387,7 @@ class DictionaryManager {
       final entities = await sourceDir.list(recursive: true).toList();
       for (final entity in entities) {
         if (entity is File) {
-          final relative = entity.path.substring(folderPath.length);
+          final relative = p.relative(entity.path, from: folderPath);
           final destPath = p.join(workspaceDir.path, relative);
           await File(destPath).create(recursive: true);
           await entity.copy(destPath);
