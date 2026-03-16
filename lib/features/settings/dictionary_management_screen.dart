@@ -581,6 +581,7 @@ class _DictionaryManagementScreenState
       if (mounted) {
         Navigator.pop(context); // Close progress dialog
         await _loadDictionaries();
+        if (!mounted) return;
 
         // Show incomplete-entries dialog if any dictionaries were skipped
         if (incompleteEntries != null && incompleteEntries.isNotEmpty) {
@@ -600,7 +601,6 @@ class _DictionaryManagementScreenState
                     ),
                     const SizedBox(height: 12),
                     ...incompleteEntries!.map(
-
                       (msg) => Padding(
                         padding: const EdgeInsets.only(bottom: 6),
                         child: Row(
