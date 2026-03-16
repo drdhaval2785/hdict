@@ -663,7 +663,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
             const SizedBox(height: 16),
             Text(
-              'You can also use "Import File" or "Download Web" if you have a specific file or URL.',
+              'You can also use "Import File", "Import Folder" or "Download from Web" if you have a specific file or URL.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: Colors.grey.withValues(alpha: 0.6)),
             ),

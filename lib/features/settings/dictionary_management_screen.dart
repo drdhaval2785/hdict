@@ -702,7 +702,7 @@ class _DictionaryManagementScreenState
                 _buildFooterButton(
                   onPressed: _isLoading ? null : _downloadDictionary,
                   icon: Icons.public,
-                  label: 'Download Web',
+                  label: 'Download from Web',
                   isPrimary: false,
                 ),
                 const SizedBox(width: 8),
@@ -746,7 +746,7 @@ class _DictionaryManagementScreenState
                       child: _buildFooterButton(
                         onPressed: _isLoading ? null : _downloadDictionary,
                         icon: Icons.public,
-                        label: 'Download Web',
+                        label: 'Download from Web',
                         isPrimary: false,
                       ),
                     ),
