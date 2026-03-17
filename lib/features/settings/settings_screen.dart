@@ -3,9 +3,84 @@ import 'package:hdict/features/settings/settings_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:hdict/features/home/widgets/app_drawer.dart';
+import 'package:hdict/core/database/database_helper.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  final DatabaseHelper _dbHelper = DatabaseHelper();
+  int _databaseSize = 0;
+  bool _isOptimizing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDatabaseSize();
+  }
+
+  Future<void> _loadDatabaseSize() async {
+    final size = await _dbHelper.getDatabaseSize();
+    if (mounted) {
+      setState(() {
+        _databaseSize = size;
+      });
+    }
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+  }
+
+  Future<void> _optimizeDatabase() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Optimize Database'),
+        content: const Text(
+          'This will reconstruct the database and free up space occupied by remnants of deleted dictionaries. This process may take some time depending on the size of your database.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Optimize'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      setState(() {
+        _isOptimizing = true;
+      });
+
+      await _dbHelper.optimizeDatabase();
+
+      await _loadDatabaseSize();
+
+      if (mounted) {
+        setState(() {
+          _isOptimizing = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Database optimized successfully')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +101,9 @@ class SettingsScreen extends StatelessWidget {
           _buildSectionHeader(theme, 'Search settings'),
           ListTile(
             title: const Text('How many results to return from database'),
-            subtitle: const Text('Setting it to higher number may slow down the result loading'),
+            subtitle: const Text(
+              'Setting it to higher number may slow down the result loading',
+            ),
             trailing: SizedBox(
               width: 80,
               child: TextFormField(
@@ -82,7 +159,11 @@ class SettingsScreen extends StatelessWidget {
               padding: EdgeInsets.symmetric(horizontal: 32.0, vertical: 8.0),
               child: Text(
                 'Note: "Suffix" and "Substring" searches require exhaustive full-table scans which take significantly longer. It is strongly advised to stick with "Prefix" or "Exact" searches for instantaneous FTS5 results.',
-                style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey,
+                  fontStyle: FontStyle.italic,
+                ),
               ),
             ),
           const Divider(),
@@ -186,6 +267,33 @@ class SettingsScreen extends StatelessWidget {
               ),
             ),
           ),
+          const Divider(),
+          _buildSectionHeader(theme, 'Database'),
+          ListTile(
+            title: const Text('Database Size'),
+            subtitle: Text(_formatBytes(_databaseSize)),
+            trailing: _isOptimizing
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : TextButton(
+                    onPressed: _optimizeDatabase,
+                    child: const Text('Optimize'),
+                  ),
+          ),
+          if (_isOptimizing)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.0),
+              child: Text(
+                'Optimizing database, please wait...',
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
         ],
       ),
     );

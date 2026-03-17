@@ -99,7 +99,8 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 28, // Version 28: Migrated FTS5 to contentful to fix deletion leaks
+      version:
+          28, // Version 28: Migrated FTS5 to contentful to fix deletion leaks
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onOpen: _onOpen,
@@ -1045,17 +1046,42 @@ class DatabaseHelper {
 
       await txn.delete('files', where: 'dict_id = ?', whereArgs: [id]);
     });
+  }
 
-    // Physically reclaim storage space by rewriting the database file
+  Future<void> optimizeDatabase() async {
+    final db = await database;
     try {
-      // Force FTS5 to merge its internal b-trees and drop orphaned shadow table rows
       await db.execute("INSERT INTO word_index(word_index) VALUES('optimize')");
-      // Re-write the database to shrink the native file size
       await db.execute('VACUUM');
       hDebugPrint('Database optimized and vacuumed successfully');
     } catch (e) {
       hDebugPrint('Error vacuuming database: $e');
     }
+  }
+
+  Future<int> getDatabaseSize() async {
+    String path;
+    if (kIsWeb) {
+      path = 'hdict_v4.db';
+    } else {
+      try {
+        Directory documentsDirectory = await getApplicationDocumentsDirectory();
+        path = join(documentsDirectory.path, 'novalex.db');
+      } catch (e) {
+        hDebugPrint('Error getting documents directory: $e');
+        return 0;
+      }
+    }
+
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        return await file.length();
+      }
+    } catch (e) {
+      hDebugPrint('Error getting database size: $e');
+    }
+    return 0;
   }
 
   Future<List<Map<String, dynamic>>> getDictionaries() async {
@@ -1311,7 +1337,9 @@ class DatabaseHelper {
                 // For FTS5, we can only use prefix matching. If there's a wildcard
                 // elsewhere, we use the part before it to narrow down results.
                 int wildcardIdx = t.indexOf(RegExp(r'[*?]'));
-                String cleanPart = wildcardIdx != -1 ? t.substring(0, wildcardIdx) : t;
+                String cleanPart = wildcardIdx != -1
+                    ? t.substring(0, wildcardIdx)
+                    : t;
                 String clean = cleanPart.replaceAll(RegExp(r'["\(\)]'), '');
                 if (clean.isEmpty) return '';
                 return (isPrefix || wildcardIdx != -1) ? '$clean*' : clean;
@@ -1327,7 +1355,7 @@ class DatabaseHelper {
               if (ftsQuery.isNotEmpty) {
                 whereClauses.add('i.word MATCH ?');
                 whereArgs.add(ftsQuery);
-                
+
                 final bool hasWildcards = hq.contains('*') || hq.contains('?');
                 if (hasWildcards) {
                   whereClauses.add('m.word LIKE ?');
@@ -1447,8 +1475,12 @@ class DatabaseHelper {
       }
       whereArgs.add(limit);
 
-      final bool hasWildcards = (headwordQuery?.contains('*') ?? false) || (headwordQuery?.contains('?') ?? false);
-      final String opDescriptor = hasWildcards ? 'LIKE (Wildcard)' : (headwordMode == SearchMode.prefix ? 'LIKE (Prefix)' : '=');
+      final bool hasWildcards =
+          (headwordQuery?.contains('*') ?? false) ||
+          (headwordQuery?.contains('?') ?? false);
+      final String opDescriptor = hasWildcards
+          ? 'LIKE (Wildcard)'
+          : (headwordMode == SearchMode.prefix ? 'LIKE (Prefix)' : '=');
 
       final result = await db.rawQuery(sql, whereArgs);
       _log('RAW_QUERY [$opDescriptor]', sql, whereArgs, result);
