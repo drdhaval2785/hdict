@@ -35,6 +35,8 @@ class SettingsProvider with ChangeNotifier {
   static const String _keyHeadwordColor = 'headword_color';
   static const String _keySearchResultLimit = 'search_result_limit';
   static const String _keyFlashCardWordCount = 'flash_card_word_count';
+  static const String _keyAppLaunchCount = 'app_launch_count';
+  static const String _keyHasShownReviewPrompt = 'has_shown_review_prompt';
 
   String _fontFamily = 'Roboto';
   double _fontSize = 16.0;
@@ -52,6 +54,8 @@ class SettingsProvider with ChangeNotifier {
   Color _headwordColor = Colors.brown;
   int _searchResultLimit = 50;
   int _flashCardWordCount = 10;
+  int _appLaunchCount = 0;
+  bool _hasShownReviewPrompt = false;
 
   String get fontFamily => _fontFamily;
   double get fontSize => _fontSize;
@@ -69,6 +73,8 @@ class SettingsProvider with ChangeNotifier {
   Color get headwordColor => _headwordColor;
   int get searchResultLimit => _searchResultLimit;
   int get flashCardWordCount => _flashCardWordCount;
+  int get appLaunchCount => _appLaunchCount;
+  bool get hasShownReviewPrompt => _hasShownReviewPrompt;
 
   /// Returns the background color, adapting to the theme if it's set to the default white.
   Color getEffectiveBackgroundColor(BuildContext context) {
@@ -127,6 +133,8 @@ class SettingsProvider with ChangeNotifier {
         Color(prefs.getInt(_keyHeadwordColor) ?? Colors.brown.toARGB32());
     _searchResultLimit = prefs.getInt(_keySearchResultLimit) ?? 50;
     _flashCardWordCount = prefs.getInt(_keyFlashCardWordCount) ?? 10;
+    _appLaunchCount = prefs.getInt(_keyAppLaunchCount) ?? 0;
+    _hasShownReviewPrompt = prefs.getBool(_keyHasShownReviewPrompt) ?? false;
     notifyListeners();
   }
 
@@ -239,6 +247,20 @@ class SettingsProvider with ChangeNotifier {
     _flashCardWordCount = count;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_keyFlashCardWordCount, count);
+    notifyListeners();
+  }
+
+  Future<void> incrementAppLaunchCount() async {
+    _appLaunchCount++;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyAppLaunchCount, _appLaunchCount);
+    notifyListeners();
+  }
+
+  Future<void> setHasShownReviewPrompt(bool shown) async {
+    _hasShownReviewPrompt = shown;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyHasShownReviewPrompt, shown);
     notifyListeners();
   }
 }

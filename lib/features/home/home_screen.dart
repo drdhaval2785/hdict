@@ -11,8 +11,10 @@ import 'package:hdict/features/settings/settings_provider.dart';
 import 'package:hdict/features/home/widgets/app_drawer.dart';
 import 'package:hdict/features/settings/dictionary_management_screen.dart';
 import 'dart:async';
+import 'dart:io';
 import 'package:hdict/core/utils/word_boundary.dart' as util;
 import 'package:flutter/rendering.dart';
+import 'package:in_app_review/in_app_review.dart';
 
 /// Arguments for HTML processing in a separate isolate.
 
@@ -468,6 +470,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         _showMigrationNotice();
       }
 
+      _checkAndPromptReview();
+
       if (widget.initialWord != null) {
         // Double check text if it somehow got cleared
         if (_headwordController.text.isEmpty) {
@@ -481,6 +485,50 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         _performSearch(isRobust: true);
       }
     });
+  }
+
+  Future<void> _checkAndPromptReview() async {
+    final settings = context.read<SettingsProvider>();
+    await settings.incrementAppLaunchCount();
+
+    if (!settings.hasShownReviewPrompt && settings.appLaunchCount >= 50) {
+      final InAppReview inAppReview = InAppReview.instance;
+
+      if (await inAppReview.isAvailable()) {
+        await settings.setHasShownReviewPrompt(true);
+        inAppReview.requestReview();
+      } else {
+        // Fallback for platforms where in-app review is not available natively e.g Linux (Snap Store)
+        if (Platform.isLinux) {
+          if (!mounted) return;
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Enjoying hdict?'),
+              content: const Text(
+                  'If you find this app useful, please consider giving it a rating or review on the Snap Store.'),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    settings.setHasShownReviewPrompt(true);
+                  },
+                  child: const Text('Later'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    settings.setHasShownReviewPrompt(true);
+                    launchUrl(Uri.parse('https://snapcraft.io/hdict')); 
+                  },
+                  child: const Text('Rate on Snap Store'),
+                ),
+              ],
+            ),
+          );
+        }
+      }
+    }
   }
 
   void _showMigrationNotice() {

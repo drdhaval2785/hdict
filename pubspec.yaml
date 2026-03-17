@@ -55,6 +55,7 @@ dependencies:
   dictd_reader: ^0.1.1
   slob_reader: ^0.1.4
   flutter_markdown_plus: ^1.0.7
+  in_app_review: ^2.0.11
 
 
 dev_dependencies:
