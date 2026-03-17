@@ -70,6 +70,37 @@ class SettingsProvider with ChangeNotifier {
   int get searchResultLimit => _searchResultLimit;
   int get flashCardWordCount => _flashCardWordCount;
 
+  /// Returns the background color, adapting to the theme if it's set to the default white.
+  Color getEffectiveBackgroundColor(BuildContext context) {
+    final Brightness brightness = Theme.of(context).brightness;
+    if (_backgroundColor.toARGB32() == Colors.white.toARGB32()) {
+      return brightness == Brightness.light
+          ? Colors.white
+          : const Color(0xFF212121);
+    }
+    return _backgroundColor;
+  }
+
+  /// Returns the text color, adapting to the theme if it's set to the default black87.
+  Color getEffectiveTextColor(BuildContext context) {
+    final Brightness brightness = Theme.of(context).brightness;
+    if (_textColor.toARGB32() == Colors.black87.toARGB32()) {
+      return brightness == Brightness.light ? Colors.black87 : Colors.white70;
+    }
+    return _textColor;
+  }
+
+  /// Returns the headword color, adapting to the theme if it's set to the default brown.
+  Color getEffectiveHeadwordColor(BuildContext context) {
+    final Brightness brightness = Theme.of(context).brightness;
+    if (_headwordColor.toARGB32() == Colors.brown.toARGB32()) {
+      return brightness == Brightness.light
+          ? Colors.brown
+          : const Color(0xFFFFAB40); // seedColor
+    }
+    return _headwordColor;
+  }
+
   SettingsProvider() {
     _loadSettings();
   }

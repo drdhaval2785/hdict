@@ -974,7 +974,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         : '#ffeb3b';
 
     return Container(
-      color: settings.backgroundColor,
+      color: settings.getEffectiveBackgroundColor(context),
       child: Column(
         children: [
           Align(
@@ -1035,7 +1035,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       'Showed $resultCount results in $totalMs ms.\n'
                       'Sqlite query took $sqliteMs ms.\n'
                       'Other work took $otherMs ms.',
-                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                       textAlign: TextAlign.center,
                     );
                   }
@@ -1158,7 +1161,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                       lineHeight: LineHeight.em(1.5),
                                       margin: Margins.zero,
                                       padding: HtmlPaddings.zero,
-                                      color: settings.textColor,
+                                      color: settings.getEffectiveTextColor(context),
                                       fontFamily: settings.fontFamily,
                                     ),
                                     "a": Style(
@@ -1178,11 +1181,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                       textDecoration: TextDecoration.none,
                                     ),
                                     ".headword": Style(
-                                      color: settings.headwordColor,
+                                      color: settings.getEffectiveHeadwordColor(context),
                                       fontWeight: FontWeight.bold,
                                     ),
                                     ".headword a": Style(
-                                      color: settings.headwordColor,
+                                      color: settings.getEffectiveHeadwordColor(context),
                                       textDecoration: TextDecoration.none,
                                     ),
                                     ".headword .dict-word": Style(
@@ -1237,13 +1240,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           ),
                           if (index == rawDefinitions.length - 1 &&
                               settings.isTapOnMeaningEnabled)
-                            const Padding(
-                              padding: EdgeInsets.only(top: 24.0),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 24.0),
                               child: Text(
                                 'Tap on words/links to look them up.',
                                 style: TextStyle(
                                   fontStyle: FontStyle.italic,
-                                  color: Colors.grey,
+                                  color: theme.colorScheme.onSurfaceVariant,
                                   fontSize: 12,
                                 ),
                               ),
@@ -1255,7 +1258,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         right: 0,
                         child: IconButton(
                           icon: const Icon(Icons.copy, size: 20),
-                          color: Colors.grey,
+                          color: theme.colorScheme.onSurfaceVariant,
                           tooltip: 'Copy this definition',
                           onPressed: () {
                             final String copyHtml =
@@ -1311,7 +1314,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           width: double.infinity,
           height: MediaQuery.of(context).size.height * 0.5,
           decoration: BoxDecoration(
-            color: settings.backgroundColor,
+            color: settings.getEffectiveBackgroundColor(context),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: Column(

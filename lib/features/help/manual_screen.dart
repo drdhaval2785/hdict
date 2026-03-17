@@ -41,15 +41,15 @@ class ManualScreen extends StatelessWidget {
               data: data,
               selectable: true,
               styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
-                h1: const TextStyle(
+                h1: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 24,
-                  color: Color(0xFFFFAB40),
+                  color: theme.colorScheme.primary,
                 ),
-                h2: const TextStyle(
+                h2: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 20,
-                  color: Color(0xFFFFAB40),
+                  color: theme.colorScheme.primary,
                   height: 2.0,
                 ),
                 h3: const TextStyle(
@@ -60,11 +60,11 @@ class ManualScreen extends StatelessWidget {
                 p: const TextStyle(fontSize: 16, height: 1.6),
                 listBullet: const TextStyle(fontSize: 16, height: 1.6),
                 code: TextStyle(
+                  color: theme.colorScheme.onSurfaceVariant,
                   backgroundColor: theme.colorScheme.onSurface.withValues(
                     alpha: 0.1,
                   ),
                   fontFamily: 'monospace',
-                  color: theme.colorScheme.primary,
                 ),
                 horizontalRuleDecoration: BoxDecoration(
                   border: Border(

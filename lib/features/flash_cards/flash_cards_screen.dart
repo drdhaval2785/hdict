@@ -353,7 +353,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                   ? Container(
                       margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                       decoration: BoxDecoration(
-                        color: settings.backgroundColor,
+                        color: settings.getEffectiveBackgroundColor(context),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: Theme.of(context).dividerColor),
                       ),
@@ -420,11 +420,11 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                                       lineHeight: LineHeight.em(1.4),
                                       margin: Margins.zero,
                                       padding: HtmlPaddings.zero,
-                                      color: settings.textColor,
+                                      color: settings.getEffectiveTextColor(context),
                                       fontFamily: settings.fontFamily,
                                     ),
                                     "a": Style(
-                                      color: settings.textColor,
+                                      color: settings.getEffectiveTextColor(context),
                                       textDecoration: TextDecoration.none,
                                     ),
                                   },
@@ -568,11 +568,11 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                               lineHeight: LineHeight.em(1.5),
                               margin: Margins.zero,
                               padding: HtmlPaddings.zero,
-                              color: settings.textColor,
+                              color: settings.getEffectiveTextColor(context),
                               fontFamily: settings.fontFamily,
                             ),
                             "a": Style(
-                              color: settings.textColor,
+                              color: settings.getEffectiveTextColor(context),
                               textDecoration: TextDecoration.none,
                             ),
                           },
@@ -638,7 +638,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
         width: double.infinity,
         height: MediaQuery.of(context).size.height * 0.5,
         decoration: BoxDecoration(
-          color: settings.backgroundColor,
+          color: settings.getEffectiveBackgroundColor(context),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
@@ -757,13 +757,13 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
     final String definitionHtml = def['definition'];
 
     return Container(
-      color: settings.backgroundColor,
+            color: settings.getEffectiveBackgroundColor(context),
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(def['word'], style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: settings.headwordColor, fontFamily: settings.fontFamily, fontSize: settings.fontSize + 8)),
+            Text(def['word'], style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: settings.getEffectiveHeadwordColor(context), fontFamily: settings.fontFamily, fontSize: settings.fontSize + 8)),
             const Divider(height: 32),
             MouseRegion(
               cursor: settings.isTapOnMeaningEnabled
