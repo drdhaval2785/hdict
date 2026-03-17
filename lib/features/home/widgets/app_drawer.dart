@@ -47,25 +47,15 @@ class AppDrawer extends StatelessWidget {
             trailing: IconButton(
               icon: const Icon(Icons.history),
               tooltip: 'Search History',
-              onPressed: () async {
+              onPressed: () {
                 Navigator.pop(context);
-                final String? selectedWord = await Navigator.push<String>(
+                Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) => const SearchHistoryScreen(),
                   ),
                 );
-                
-                if (selectedWord != null && context.mounted) {
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(
-                      builder: (context) => HomeScreen(initialWord: selectedWord),
-                    ),
-                    (route) => false,
-                  );
-                }
               },
-
             ),
             onTap: () {
               Navigator.pop(context);

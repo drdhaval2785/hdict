@@ -90,9 +90,7 @@ class _SearchHistoryScreenState extends State<SearchHistoryScreen> {
                   subtitle: Text(
                     '${item['search_type'] ?? 'Headword Search'} • ${DateFormat('MMM dd, yyyy - hh:mm a').format(date)}',
                   ),
-                  onTap: () {
-                    Navigator.pop(context, item['word']);
-                  },
+                  onTap: null,
                 );
               },
             ),

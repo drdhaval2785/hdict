@@ -14,10 +14,7 @@ import 'dart:async';
 import 'package:hdict/core/utils/word_boundary.dart' as util;
 import 'package:flutter/rendering.dart';
 
-
-
 /// Arguments for HTML processing in a separate isolate.
-
 
 class _EntryToProcess {
   final int index;
@@ -37,7 +34,6 @@ class _EntryToProcess {
 
 /// Isolate processing completely removed in favor of Lazy processing directly in the ListView!
 
-
 /// The main search screen of the hdict app.
 class HomeScreen extends StatefulWidget {
   final String? initialWord;
@@ -48,7 +44,8 @@ class HomeScreen extends StatefulWidget {
   /// `definition` and groups them first by dictionary id and then by the
   /// specific headword before producing a list suitable for the UI.
   static List<Map<String, dynamic>> consolidateDefinitions(
-      Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults) {
+    Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults,
+  ) {
     final List<Map<String, dynamic>> consolidated = [];
     groupedResults.forEach((dictId, uniqueKeyMap) {
       String? dictName;
@@ -61,14 +58,18 @@ class HomeScreen extends StatefulWidget {
         dictName ??= entries.first['dict_name'] as String;
         format ??= entries.first['format'] as String?;
         typeSequence ??= entries.first['type_sequence'] as String?;
-        
-        final headwords = entries.map((e) => e['word'] as String).toSet().toList();
+
+        final headwords = entries
+            .map((e) => e['word'] as String)
+            .toSet()
+            .toList();
         final headwordStr = headwords.join(' | ');
         allHeadwords.add(headwordStr);
 
         definitionsList.add({
           'word': entries.first['word'] as String,
-          'headwordHtml': '<div class="headword" style="font-weight:bold;margin-bottom:8px;">$headwordStr</div>',
+          'headwordHtml':
+              '<div class="headword" style="font-weight:bold;margin-bottom:8px;">$headwordStr</div>',
           'rawContent': entries.first['raw_content'] as String,
           'processedHtml': null,
         });
@@ -88,16 +89,23 @@ class HomeScreen extends StatefulWidget {
 
   /// Normalizes whitespace. If content is HTML, it's more aggressive.
   /// If it's plain text, it preserves newlines as <br>.
-  static String normalizeWhitespace(String text, {String? format, String? typeSequence}) {
+  static String normalizeWhitespace(
+    String text, {
+    String? format,
+    String? typeSequence,
+  }) {
     bool isHtml = false;
     if (format == 'mdict' || format == 'dictd') {
-      isHtml = true; 
+      isHtml = true;
     } else if (format == 'stardict') {
-      if (typeSequence != null && (typeSequence.contains('h') || typeSequence.contains('x') || typeSequence.contains('g'))) {
+      if (typeSequence != null &&
+          (typeSequence.contains('h') ||
+              typeSequence.contains('x') ||
+              typeSequence.contains('g'))) {
         isHtml = true;
       }
     }
-    
+
     // Heuristic: if it looks like it has tags, treat as HTML regardless of format
     if (!isHtml && text.contains('<') && text.contains('>')) {
       isHtml = true;
@@ -105,27 +113,33 @@ class HomeScreen extends StatefulWidget {
 
     if (isHtml) {
       // List of common HTML tags to KEEP.
-      const allowedTags = 'html|head|body|div|span|p|br|hr|b|i|u|blockquote|a|ul|ol|li|h[1-6]|table|tr|td|th|thead|tbody|tfoot|img|font|big|small|em|strong|sub|sup|mark';
-      
+      const allowedTags =
+          'html|head|body|div|span|p|br|hr|b|i|u|blockquote|a|ul|ol|li|h[1-6]|table|tr|td|th|thead|tbody|tfoot|img|font|big|small|em|strong|sub|sup|mark';
+
       // regex to match any tag <tag ...> or </tag>
-      final genericTagRegex = RegExp(r'<(/?[a-z0-9]+)([^>]*)>', caseSensitive: false);
-      
+      final genericTagRegex = RegExp(
+        r'<(/?[a-z0-9]+)([^>]*)>',
+        caseSensitive: false,
+      );
+
       String processed;
       if (format == 'mdict' || format == 'slob' || format == 'dictd') {
-        // These formats usually contain standard HTML. 
+        // These formats usually contain standard HTML.
         // We skip the aggressive tag-to-span conversion to preserve structure and performance.
         processed = text;
       } else {
         processed = text.replaceAllMapped(genericTagRegex, (match) {
           String fullTag = match.group(1)!;
           bool isClosing = fullTag.startsWith('/');
-          String tagName = isClosing ? fullTag.substring(1).toLowerCase() : fullTag.toLowerCase();
-          
+          String tagName = isClosing
+              ? fullTag.substring(1).toLowerCase()
+              : fullTag.toLowerCase();
+
           // If it's in the whitelist, keep it as is
           if (RegExp('^(?:$allowedTags)\$').hasMatch(tagName)) {
             return match.group(0)!;
           }
-          
+
           // Convert non-standard tags to semantic span with class
           if (isClosing) {
             return '</span>';
@@ -135,23 +149,21 @@ class HomeScreen extends StatefulWidget {
         });
       }
 
-      return processed
-          .replaceAll(RegExp(r'\s+'), ' ')
-          .trim();
+      return processed.replaceAll(RegExp(r'\s+'), ' ').trim();
     } else {
       // Plain text dictionary: Preserve newlines by converting them to <br>
       // then collapsing other multiple spaces.
-      return text
-          .replaceAll('\r\n', '\n')
-          .trim()
-          .replaceAllMapped(RegExp(r'\s+'), (match) {
-            if (match.group(0)!.contains('\n')) {
-              // Count newlines and return appropriate number of <br>
-              int n = match.group(0)!.split('\n').length - 1;
-              return '<br>' * n;
-            }
-            return ' ';
-          });
+      return text.replaceAll('\r\n', '\n').trim().replaceAllMapped(
+        RegExp(r'\s+'),
+        (match) {
+          if (match.group(0)!.contains('\n')) {
+            // Count newlines and return appropriate number of <br>
+            int n = match.group(0)!.split('\n').length - 1;
+            return '<br>' * n;
+          }
+          return ' ';
+        },
+      );
     }
   }
 
@@ -184,7 +196,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // SQL query on every widget rebuild (keyboard, theme, settings changes, etc.).
   late Future<List<Map<String, dynamic>>> _dictionariesFuture;
 
-
   @override
   void dispose() {
     _headwordController.dispose();
@@ -193,7 +204,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  Future<void> _performSearch() async {
+  Future<void> _performSearch({bool isRobust = false}) async {
     final headword = _headwordController.text.trim();
     final definition = _definitionController.text.trim();
 
@@ -202,7 +213,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     if (headword.isNotEmpty) {
       await _dbHelper.addSearchHistory(headword, searchType: 'Headword Search');
     } else if (definition.isNotEmpty) {
-      await _dbHelper.addSearchHistory(definition, searchType: 'Definition Search');
+      await _dbHelper.addSearchHistory(
+        definition,
+        searchType: 'Definition Search',
+      );
     }
 
     if (!mounted) return;
@@ -223,23 +237,56 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       final settings = context.read<SettingsProvider>();
       final totalWatch = HPerf.start('Search_Total');
       final sqliteWatch = HPerf.start('Search_SQLite');
-      
-      List<Map<String, dynamic>> results = await _dbHelper.searchWords(
-        headwordQuery: headword.isNotEmpty ? headword : null,
-        headwordMode: settings.headwordSearchMode,
-        definitionQuery: definition.isNotEmpty ? definition : null,
-        definitionMode: settings.definitionSearchMode,
-        limit: settings.searchResultLimit,
-      );
+
+      List<Map<String, dynamic>> results = [];
+
+      if (headword.isNotEmpty) {
+        // First try with user's preferred mode
+        results = await _dbHelper.searchWords(
+          headwordQuery: headword,
+          headwordMode: settings.headwordSearchMode,
+          limit: settings.searchResultLimit,
+        );
+
+        // If robust mode is on and we found nothing, try fallbacks
+        if (isRobust && results.isEmpty) {
+          // 1. Try exact match if preferred mode wasn't already exact
+          if (settings.headwordSearchMode != SearchMode.exact) {
+            results = await _dbHelper.searchWords(
+              headwordQuery: headword,
+              headwordMode: SearchMode.exact,
+            );
+          }
+
+          // 2. Try longest prefix match (like popup logic)
+          if (results.isEmpty) {
+            String prefix = headword;
+            while (prefix.length > 2) {
+              prefix = prefix.substring(0, prefix.length - 1);
+              results = await _dbHelper.searchWords(
+                headwordQuery: prefix,
+                headwordMode: SearchMode.prefix,
+                limit: settings.searchResultLimit,
+              );
+              if (results.isNotEmpty) break;
+            }
+          }
+        }
+      } else if (definition.isNotEmpty) {
+        results = await _dbHelper.searchWords(
+          definitionQuery: definition,
+          definitionMode: settings.definitionSearchMode,
+          limit: settings.searchResultLimit,
+        );
+      }
 
       HPerf.end(sqliteWatch, 'Search_SQLite');
       final sqliteMs = sqliteWatch?.elapsedMilliseconds ?? 0;
 
       final List<_EntryToProcess> entriesToProcess = [];
       final List<Map<String, dynamic>> resultsMetadata = [];
-      
-      final enrichmentWatch = HPerf.start('Search_Enrichment');
 
+      final enrichmentWatch = HPerf.start('Search_Enrichment');
 
       // Pre-fetch unique dictionaries to avoid repeated SQL queries
       final uniqueDictIds = results.map((r) => r['dict_id'] as int).toSet();
@@ -253,7 +300,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       // This is critical for performance on stateful readers (.dz, .mdx)
       final Map<int, List<Map<String, dynamic>>> resultsByDict = {};
       final Map<int, List<int>> originalIndicesByDict = {};
-      
+
       for (int i = 0; i < results.length; i++) {
         final r = results[i];
         final dictId = r['dict_id'] as int;
@@ -270,48 +317,57 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       // fetchBatch_IO_Seq per-dict shows per-dictionary cost; "total" in the dump
       // is a misleading sum of parallel calls — use "max" from the dump instead.
       final fetchAllDictsWatch = HPerf.start('fetchAllDicts_Wall');
-      await Future.wait(resultsByDict.entries.map((entry) async {
-        final dictId = entry.key;
-        final requests = entry.value;
-        final originalIndices = originalIndicesByDict[dictId]!;
-        final dict = dictCache[dictId]!;
+      await Future.wait(
+        resultsByDict.entries.map((entry) async {
+          final dictId = entry.key;
+          final requests = entry.value;
+          final originalIndices = originalIndicesByDict[dictId]!;
+          final dict = dictCache[dictId]!;
 
-        final batchContents = await _dictManager.fetchDefinitionsBatch(dict, requests);
+          final batchContents = await _dictManager.fetchDefinitionsBatch(
+            dict,
+            requests,
+          );
 
-        for (int i = 0; i < requests.length; i++) {
-          final content = batchContents[i] ?? '';
-          final req = requests[i];
-          final ogIndex = originalIndices[i];
+          for (int i = 0; i < requests.length; i++) {
+            final content = batchContents[i] ?? '';
+            final req = requests[i];
+            final ogIndex = originalIndices[i];
 
-          entriesToProcess.add(_EntryToProcess(
-            index: ogIndex,
-            content: content,
-            word: req['word'] as String,
-            format: dict['format'],
-            typeSequence: dict['type_sequence'],
-          ));
-          
-          resultsMetadata.add({
-            ...req,
-            'dict_name': dict['name'],
-            'format': dict['format'],
-            'type_sequence': dict['type_sequence'],
-          });
-        }
-      }));
+            entriesToProcess.add(
+              _EntryToProcess(
+                index: ogIndex,
+                content: content,
+                word: req['word'] as String,
+                format: dict['format'],
+                typeSequence: dict['type_sequence'],
+              ),
+            );
+
+            resultsMetadata.add({
+              ...req,
+              'dict_name': dict['name'],
+              'format': dict['format'],
+              'type_sequence': dict['type_sequence'],
+            });
+          }
+        }),
+      );
       HPerf.end(fetchAllDictsWatch, 'fetchAllDicts_Wall');
 
       // Phase 2: HTML Processing is now done LAZILY during ListView scrolling!
       if (entriesToProcess.isNotEmpty) {
-        final Map<int, Map<String, List<Map<String, dynamic>>>> finalGrouped = {};
+        final Map<int, Map<String, List<Map<String, dynamic>>>> finalGrouped =
+            {};
         int finalResultCount = 0;
 
         for (int i = 0; i < entriesToProcess.length; i++) {
           final entry = entriesToProcess[i];
           final original = results[entry.index];
           final dictId = original['dict_id'] as int;
-          final String uniqueKey = '${original['offset']}_${original['length']}';
-          
+          final String uniqueKey =
+              '${original['offset']}_${original['length']}';
+
           final meta = resultsMetadata[i];
 
           finalResultCount++;
@@ -328,16 +384,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         // Sort finalGrouped by display_order so results respect user-configured priority.
         // Future.wait completion order is non-deterministic, so we must sort explicitly here.
         final sortedGrouped = Map.fromEntries(
-          finalGrouped.entries.toList()
-            ..sort((a, b) {
-              final orderA = (dictCache[a.key]?['display_order'] as int?) ?? 999;
-              final orderB = (dictCache[b.key]?['display_order'] as int?) ?? 999;
-              return orderA.compareTo(orderB);
-            }),
+          finalGrouped.entries.toList()..sort((a, b) {
+            final orderA = (dictCache[a.key]?['display_order'] as int?) ?? 999;
+            final orderB = (dictCache[b.key]?['display_order'] as int?) ?? 999;
+            return orderA.compareTo(orderB);
+          }),
         );
 
-        final consolidatedDefs = HomeScreen.consolidateDefinitions(sortedGrouped);
-        
+        final consolidatedDefs = HomeScreen.consolidateDefinitions(
+          sortedGrouped,
+        );
+
         HPerf.end(totalWatch, 'Search_Total');
         HPerf.dump(prefix: '--- SEARCH RESULTS PERF ---');
 
@@ -368,7 +425,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           _isLoading = false;
         });
       }
-      hDebugPrint('--- SEARCH_TOTAL: ${_searchTotalMs}ms (SQLite: ${sqliteMs}ms, Other: ${_searchOtherMs}ms) ---');
+      hDebugPrint(
+        '--- SEARCH_TOTAL: ${_searchTotalMs}ms (SQLite: ${sqliteMs}ms, Other: ${_searchOtherMs}ms) ---',
+      );
     } catch (e) {
       hDebugPrint('Error fetching definitions: $e');
       if (mounted) {
@@ -390,7 +449,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     enableDebugLogs = true; // Enable logging for performance investigation
-    
+
     if (widget.initialWord != null) {
       _headwordController.text = widget.initialWord!;
       _selectedWord = widget.initialWord!;
@@ -401,27 +460,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _checkDictionaries();
     _cleanHistory();
     _cleanOrphanedFiles();
-    
+
     // Check for migration alert from version 16
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (DatabaseHelper.needsMigrationAlert) {
         DatabaseHelper.needsMigrationAlert = false;
         _showMigrationNotice();
       }
-      
+
       if (widget.initialWord != null) {
         // Double check text if it somehow got cleared
         if (_headwordController.text.isEmpty) {
           _headwordController.text = widget.initialWord!;
         }
-        
+        _definitionController.clear();
+
         // Ensure _hasDictionaries is checked at least once before searching
-        // if it's still false, we wait a bit or just proceed as searchWords 
+        // if it's still false, we wait a bit or just proceed as searchWords
         // will return empty anyway if no dicts exist in DB.
-        _performSearch();
+        _performSearch(isRobust: true);
       }
     });
-
   }
 
   void _showMigrationNotice() {
@@ -449,7 +508,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       // Small delay to let app settle
       await Future.delayed(const Duration(seconds: 2));
       if (!mounted) return;
-      
+
       final orphanedFolders = await _dictManager.getOrphanedDictionaryFolders();
       if (orphanedFolders.isNotEmpty && mounted) {
         _showOrphanCleanupDialog(orphanedFolders);
@@ -461,7 +520,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   void _showOrphanCleanupDialog(List<String> folders) {
     List<String> selectedFolders = List.from(folders);
-    
+
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -509,17 +568,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               child: const Text('Later'),
             ),
             ElevatedButton(
-              onPressed: selectedFolders.isEmpty 
-                ? null 
-                : () async {
-                    final messenger = ScaffoldMessenger.of(context);
-                    await _dictManager.deleteOrphanedFolders(selectedFolders);
-                    if (!context.mounted) return;
-                    Navigator.pop(context);
-                    messenger.showSnackBar(
-                      const SnackBar(content: Text('Cleanup complete.')),
-                    );
-                  },
+              onPressed: selectedFolders.isEmpty
+                  ? null
+                  : () async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      await _dictManager.deleteOrphanedFolders(selectedFolders);
+                      if (!context.mounted) return;
+                      Navigator.pop(context);
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('Cleanup complete.')),
+                      );
+                    },
               child: const Text('Delete Selected'),
             ),
           ],
@@ -562,7 +621,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('hdict', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'hdict',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
       ),
       drawer: const AppDrawer(),
       body: _checkingDicts
@@ -591,12 +653,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.library_books_outlined,
-                  size: 80, color: theme.colorScheme.primary.withValues(alpha: 0.3)),
+              Icon(
+                Icons.library_books_outlined,
+                size: 80,
+                color: theme.colorScheme.primary.withValues(alpha: 0.3),
+              ),
               const SizedBox(height: 24),
-              Text('No dictionaries found',
-                  style: theme.textTheme.headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.bold)),
+              Text(
+                'No dictionaries found',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 12),
               const Text(
                 'To start searching, you need to install at least one dictionary.',
@@ -619,7 +687,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       color: theme.colorScheme.primaryContainer.withValues(alpha: 0.1),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: theme.colorScheme.primary.withValues(alpha: 0.1)),
+        side: BorderSide(
+          color: theme.colorScheme.primary.withValues(alpha: 0.1),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(24.0),
@@ -631,7 +701,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 color: theme.colorScheme.primary.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.language, color: theme.colorScheme.primary, size: 32),
+              child: Icon(
+                Icons.language,
+                color: theme.colorScheme.primary,
+                size: 32,
+              ),
             ),
             const SizedBox(height: 16),
             Text(
@@ -663,8 +737,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               style: ElevatedButton.styleFrom(
                 backgroundColor: theme.colorScheme.primary,
                 foregroundColor: theme.colorScheme.onPrimary,
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 16,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 elevation: 2,
               ),
               child: const Text(
@@ -675,19 +754,32 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             const SizedBox(height: 24),
             Row(
               children: [
-                Expanded(child: Divider(color: Colors.grey.withValues(alpha: 0.2))),
+                Expanded(
+                  child: Divider(color: Colors.grey.withValues(alpha: 0.2)),
+                ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text('OR', style: TextStyle(fontSize: 12, color: Colors.grey.withValues(alpha: 0.5))),
+                  child: Text(
+                    'OR',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.withValues(alpha: 0.5),
+                    ),
+                  ),
                 ),
-                Expanded(child: Divider(color: Colors.grey.withValues(alpha: 0.2))),
+                Expanded(
+                  child: Divider(color: Colors.grey.withValues(alpha: 0.2)),
+                ),
               ],
             ),
             const SizedBox(height: 16),
             Text(
               'You can also use "Import File", "Import Folder" or "Download from Web" if you have a specific file or URL.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: Colors.grey.withValues(alpha: 0.6)),
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.withValues(alpha: 0.6),
+              ),
             ),
           ],
         ),
@@ -738,24 +830,42 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _dictionariesFuture, // Fix #5: use cached future
       builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data!.isEmpty) return const SizedBox.shrink();
+        if (!snapshot.hasData || snapshot.data!.isEmpty)
+          return const SizedBox.shrink();
         return ListView(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           children: [
             const SizedBox(height: 20),
-            Text('Your Dictionaries', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              'Your Dictionaries',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 12),
             ...snapshot.data!.map((dict) {
               if (dict['is_enabled'] != 1) return const SizedBox.shrink();
               return Card(
                 elevation: 0,
-                color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+                color: theme.colorScheme.primaryContainer.withValues(
+                  alpha: 0.3,
+                ),
                 margin: const EdgeInsets.only(bottom: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: ListTile(
                   leading: const Icon(Icons.book_outlined),
-                  title: Text(dict['name'], style: const TextStyle(fontWeight: FontWeight.w500)),
-                  trailing: Text('${dict['word_count'] ?? 0} words', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary)),
+                  title: Text(
+                    dict['name'],
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                  trailing: Text(
+                    '${dict['word_count'] ?? 0} words',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
                 ),
               );
             }),
@@ -774,13 +884,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           children: [
             Icon(Icons.search_off, size: 64, color: Colors.grey),
             SizedBox(height: 12),
-            Text('No results found for this word', style: TextStyle(color: Colors.grey)),
+            Text(
+              'No results found for this word',
+              style: TextStyle(color: Colors.grey),
+            ),
           ],
         ),
       );
     }
 
-    if (_tabController == null || _tabController!.length != _currentDefinitions.length) return const SizedBox.shrink();
+    if (_tabController == null ||
+        _tabController!.length != _currentDefinitions.length)
+      return const SizedBox.shrink();
     return Column(
       children: [
         TabBar(
@@ -805,7 +920,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         if (_currentDefinitions.isEmpty) {
                           _selectedWord = null;
                         } else {
-                          _tabController = TabController(length: _currentDefinitions.length, vsync: this);
+                          _tabController = TabController(
+                            length: _currentDefinitions.length,
+                            vsync: this,
+                          );
                         }
                       });
                     },
@@ -820,9 +938,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           child: TabBarView(
             controller: _tabController,
             children: _currentDefinitions
-                .map((def) => _buildDefinitionContent(theme, def,
+                .map(
+                  (def) => _buildDefinitionContent(
+                    theme,
+                    def,
                     highlightHeadword: _lastHeadwordQuery,
-                    highlightDefinition: _lastDefinitionQuery))
+                    highlightDefinition: _lastDefinitionQuery,
+                  ),
+                )
                 .toList(),
           ),
         ),
@@ -830,17 +953,25 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildDefinitionContent(ThemeData theme, Map<String, dynamic> defMap,
-      {String? highlightHeadword,
-      String? highlightDefinition,
-      int? searchSqliteMs,
-      int? searchOtherMs,
-      int? searchTotalMs,
-      int? searchResultCount}) {
+  Widget _buildDefinitionContent(
+    ThemeData theme,
+    Map<String, dynamic> defMap, {
+    String? highlightHeadword,
+    String? highlightDefinition,
+    int? searchSqliteMs,
+    int? searchOtherMs,
+    int? searchTotalMs,
+    int? searchResultCount,
+  }) {
     final settings = context.watch<SettingsProvider>();
-    final List<Map<String, dynamic>> rawDefinitions = List<Map<String, dynamic>>.from(defMap['definitions']);
-    
-    final highlightCol = ThemeData.estimateBrightnessForColor(settings.backgroundColor) == Brightness.dark ? '#ff9900' : '#ffeb3b';
+    final List<Map<String, dynamic>> rawDefinitions =
+        List<Map<String, dynamic>>.from(defMap['definitions']);
+
+    final highlightCol =
+        ThemeData.estimateBrightnessForColor(settings.backgroundColor) ==
+            Brightness.dark
+        ? '#ff9900'
+        : '#ffeb3b';
 
     return Container(
       color: settings.backgroundColor,
@@ -852,13 +983,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               icon: const Icon(Icons.copy_all, size: 18),
               label: const Text('Copy All'),
               onPressed: () {
-                final allText = rawDefinitions.map((d) {
-                  final String html = d['processedHtml'] ?? '${d['headwordHtml']}\n${d['rawContent']}';
-                  return html.replaceAll(RegExp(r'<[^>]*>', multiLine: true, caseSensitive: true), '');
-                }).join('\n\n');
+                final allText = rawDefinitions
+                    .map((d) {
+                      final String html =
+                          d['processedHtml'] ??
+                          '${d['headwordHtml']}\n${d['rawContent']}';
+                      return html.replaceAll(
+                        RegExp(
+                          r'<[^>]*>',
+                          multiLine: true,
+                          caseSensitive: true,
+                        ),
+                        '',
+                      );
+                    })
+                    .join('\n\n');
                 Clipboard.setData(ClipboardData(text: allText));
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Copied all definitions to clipboard'), duration: Duration(seconds: 2)),
+                  const SnackBar(
+                    content: Text('Copied all definitions to clipboard'),
+                    duration: Duration(seconds: 2),
+                  ),
                 );
               },
             ),
@@ -869,7 +1014,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               itemCount: rawDefinitions.length + 1,
               separatorBuilder: (context, index) {
                 if (index == rawDefinitions.length - 1) {
-                  return const Divider(height: 48, thickness: 1, color: Colors.transparent);
+                  return const Divider(
+                    height: 48,
+                    thickness: 1,
+                    color: Colors.transparent,
+                  );
                 }
                 return const Divider(height: 32, thickness: 2);
               },
@@ -888,29 +1037,36 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     textAlign: TextAlign.center,
                   );
                 }
-                
+
                 // HTML Processing is done LAZILY right as the item scrolls onto the screen!
                 final Map<String, dynamic> defData = rawDefinitions[index];
                 String? definitionHtml = defData['processedHtml'];
-                
+
                 if (definitionHtml == null) {
                   final String rawContent = defData['rawContent'] as String;
-                  final String format = defMap['format'] as String? ?? 'stardict';
-                  final String? typeSequence = defMap['type_sequence'] as String?;
-                  
+                  final String format =
+                      defMap['format'] as String? ?? 'stardict';
+                  final String? typeSequence =
+                      defMap['type_sequence'] as String?;
+
                   // Wrap and Highlight (Word wrapping removed in favor of tap-position detection)
                   final processed = HtmlLookupWrapper.processRecord(
-                    html: HomeScreen.normalizeWhitespace(rawContent, format: format, typeSequence: typeSequence),
+                    html: HomeScreen.normalizeWhitespace(
+                      rawContent,
+                      format: format,
+                      typeSequence: typeSequence,
+                    ),
                     format: format,
                     typeSequence: typeSequence,
                     underlineQuery: _lastDefinitionQuery,
                   );
-                  
+
                   definitionHtml = '${defData['headwordHtml']}\n$processed';
-                  defData['processedHtml'] = definitionHtml; // Cache for subsequent scrolls
+                  defData['processedHtml'] =
+                      definitionHtml; // Cache for subsequent scrolls
                 }
 
-                  return Stack(
+                return Stack(
                   children: [
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -921,91 +1077,174 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               : MouseCursor.defer,
                           child: Builder(
                             builder: (ctx) => GestureDetector(
-                            behavior: HitTestBehavior.translucent,
-                            onTapUp: (details) {
-                            if (!settings.isTapOnMeaningEnabled) {
-                              hDebugPrint('Tap ignored: isTapOnMeaningEnabled is false');
-                              return;
-                            }
-                            
-                            final RenderBox? renderBox = ctx.findRenderObject() as RenderBox?;
-                            if (renderBox == null) {
-                              hDebugPrint('Tap ignored: renderBox is null');
-                              return;
-                            }
-                            
-                            final BoxHitTestResult result = BoxHitTestResult();
-                            renderBox.hitTest(result, position: renderBox.globalToLocal(details.globalPosition));
+                              behavior: HitTestBehavior.translucent,
+                              onTapUp: (details) {
+                                if (!settings.isTapOnMeaningEnabled) {
+                                  hDebugPrint(
+                                    'Tap ignored: isTapOnMeaningEnabled is false',
+                                  );
+                                  return;
+                                }
 
-                            for (final HitTestEntry entry in result.path) {
-                              final target = entry.target;
-                              if (target is RenderParagraph) {
-                                final String text = target.text.toPlainText();
-                                // Ignore \uFFFC which is the Object Replacement Character representing inline widgets
-                                if (text.replaceAll('\uFFFC', '').trim().isEmpty) continue;
+                                final RenderBox? renderBox =
+                                    ctx.findRenderObject() as RenderBox?;
+                                if (renderBox == null) {
+                                  hDebugPrint('Tap ignored: renderBox is null');
+                                  return;
+                                }
 
-                                final Offset localOffset = target.globalToLocal(details.globalPosition);
-                                final TextPosition pos = target.getPositionForOffset(localOffset);
-                                final String charAtOffset = (pos.offset >= 0 && pos.offset < text.length) ? text[pos.offset] : 'EOF';
-                                
-                                hDebugPrint('HitTest detected on Paragraph text: "$text"');
-                                hDebugPrint('Calculated TextOffset: ${pos.offset}, Char: "$charAtOffset"');
-                                
-                                final String? word = util.WordBoundary.wordAt(text, pos.offset);
-                                hDebugPrint('Word tapped for search: $word');
-                                
-                                if (word != null && word.trim().isNotEmpty) {
-                                  _showWordPopup(word);
-                                  return; // Stop looking after the first valid text paragraph is found
+                                final BoxHitTestResult result =
+                                    BoxHitTestResult();
+                                renderBox.hitTest(
+                                  result,
+                                  position: renderBox.globalToLocal(
+                                    details.globalPosition,
+                                  ),
+                                );
+
+                                for (final HitTestEntry entry in result.path) {
+                                  final target = entry.target;
+                                  if (target is RenderParagraph) {
+                                    final String text = target.text
+                                        .toPlainText();
+                                    // Ignore \uFFFC which is the Object Replacement Character representing inline widgets
+                                    if (text
+                                        .replaceAll('\uFFFC', '')
+                                        .trim()
+                                        .isEmpty)
+                                      continue;
+
+                                    final Offset localOffset = target
+                                        .globalToLocal(details.globalPosition);
+                                    final TextPosition pos = target
+                                        .getPositionForOffset(localOffset);
+                                    final String charAtOffset =
+                                        (pos.offset >= 0 &&
+                                            pos.offset < text.length)
+                                        ? text[pos.offset]
+                                        : 'EOF';
+
+                                    hDebugPrint(
+                                      'HitTest detected on Paragraph text: "$text"',
+                                    );
+                                    hDebugPrint(
+                                      'Calculated TextOffset: ${pos.offset}, Char: "$charAtOffset"',
+                                    );
+
+                                    final String? word = util
+                                        .WordBoundary.wordAt(text, pos.offset);
+                                    hDebugPrint(
+                                      'Word tapped for search: $word',
+                                    );
+
+                                    if (word != null &&
+                                        word.trim().isNotEmpty) {
+                                      _showWordPopup(word);
+                                      return; // Stop looking after the first valid text paragraph is found
+                                    }
+                                  }
                                 }
-                              }
-                            }
-                            hDebugPrint('HitTest found no valid text paragraph.');
-                          },
-                          child: Html(
-                            data: definitionHtml,
-                          style: {
-                            "body": Style(fontSize: FontSize(settings.fontSize), lineHeight: LineHeight.em(1.5), margin: Margins.zero, padding: HtmlPaddings.zero, color: settings.textColor, fontFamily: settings.fontFamily),
-                            "a": Style(color: theme.colorScheme.primary, textDecoration: TextDecoration.underline),
-                            "mark": Style(backgroundColor: Color(int.parse(highlightCol.replaceFirst('#', '0xFF'))), color: Colors.black),
-                            ".dict-word": Style(color: settings.textColor, textDecoration: TextDecoration.none),
-                            ".headword": Style(color: settings.headwordColor, fontWeight: FontWeight.bold),
-                            ".headword a": Style(color: settings.headwordColor, textDecoration: TextDecoration.none),
-                            ".headword .dict-word": Style(color: settings.headwordColor, textDecoration: TextDecoration.none),
-                           },
-                          onLinkTap: (url, attributes, element) async {
-                            hDebugPrint('onLinkTap triggered with url: $url');
-                            if (url != null) {
-                              if (url.startsWith('http://') || url.startsWith('https://')) {
-                                hDebugPrint('Launching external URL: $url');
-                                final uri = Uri.parse(url);
-                                if (await canLaunchUrl(uri)) {
-                                  await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                }
-                              } else {
-                                String wordToLookup = url;
-                                if (wordToLookup.startsWith('look_up:')) {
-                                  wordToLookup = wordToLookup.substring(8);
-                                } else if (wordToLookup.startsWith('bword://')) {
-                                  wordToLookup = wordToLookup.substring(8);
-                                }
-                                try {
-                                  final word = wordToLookup.contains('%') ? Uri.decodeComponent(wordToLookup) : wordToLookup;
-                                  _showWordPopup(word);
-                                } catch (e) {
-                                  _showWordPopup(wordToLookup);
-                                }
-                              }
-                            }
-                          },
+                                hDebugPrint(
+                                  'HitTest found no valid text paragraph.',
+                                );
+                              },
+                              child: Html(
+                                data: definitionHtml,
+                                style: {
+                                  "body": Style(
+                                    fontSize: FontSize(settings.fontSize),
+                                    lineHeight: LineHeight.em(1.5),
+                                    margin: Margins.zero,
+                                    padding: HtmlPaddings.zero,
+                                    color: settings.textColor,
+                                    fontFamily: settings.fontFamily,
+                                  ),
+                                  "a": Style(
+                                    color: theme.colorScheme.primary,
+                                    textDecoration: TextDecoration.underline,
+                                  ),
+                                  "mark": Style(
+                                    backgroundColor: Color(
+                                      int.parse(
+                                        highlightCol.replaceFirst('#', '0xFF'),
+                                      ),
+                                    ),
+                                    color: Colors.black,
+                                  ),
+                                  ".dict-word": Style(
+                                    color: settings.textColor,
+                                    textDecoration: TextDecoration.none,
+                                  ),
+                                  ".headword": Style(
+                                    color: settings.headwordColor,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  ".headword a": Style(
+                                    color: settings.headwordColor,
+                                    textDecoration: TextDecoration.none,
+                                  ),
+                                  ".headword .dict-word": Style(
+                                    color: settings.headwordColor,
+                                    textDecoration: TextDecoration.none,
+                                  ),
+                                },
+                                onLinkTap: (url, attributes, element) async {
+                                  hDebugPrint(
+                                    'onLinkTap triggered with url: $url',
+                                  );
+                                  if (url != null) {
+                                    if (url.startsWith('http://') ||
+                                        url.startsWith('https://')) {
+                                      hDebugPrint(
+                                        'Launching external URL: $url',
+                                      );
+                                      final uri = Uri.parse(url);
+                                      if (await canLaunchUrl(uri)) {
+                                        await launchUrl(
+                                          uri,
+                                          mode: LaunchMode.externalApplication,
+                                        );
+                                      }
+                                    } else {
+                                      String wordToLookup = url;
+                                      if (wordToLookup.startsWith('look_up:')) {
+                                        wordToLookup = wordToLookup.substring(
+                                          8,
+                                        );
+                                      } else if (wordToLookup.startsWith(
+                                        'bword://',
+                                      )) {
+                                        wordToLookup = wordToLookup.substring(
+                                          8,
+                                        );
+                                      }
+                                      try {
+                                        final word = wordToLookup.contains('%')
+                                            ? Uri.decodeComponent(wordToLookup)
+                                            : wordToLookup;
+                                        _showWordPopup(word);
+                                      } catch (e) {
+                                        _showWordPopup(wordToLookup);
+                                      }
+                                    }
+                                  }
+                                },
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                    ),
-                    if (index == rawDefinitions.length - 1 && settings.isTapOnMeaningEnabled)
-                      const Padding(
+                        if (index == rawDefinitions.length - 1 &&
+                            settings.isTapOnMeaningEnabled)
+                          const Padding(
                             padding: EdgeInsets.only(top: 24.0),
-                            child: Text('Tap on words/links to look them up.', style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey, fontSize: 12)),
+                            child: Text(
+                              'Tap on words/links to look them up.',
+                              style: TextStyle(
+                                fontStyle: FontStyle.italic,
+                                color: Colors.grey,
+                                fontSize: 12,
+                              ),
+                            ),
                           ),
                       ],
                     ),
@@ -1017,11 +1256,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         color: Colors.grey,
                         tooltip: 'Copy this definition',
                         onPressed: () {
-                          final String copyHtml = rawDefinitions[index]['processedHtml'] ?? '${rawDefinitions[index]['headwordHtml']}\n${rawDefinitions[index]['rawContent']}';
-                          final plainText = copyHtml.replaceAll(RegExp(r'<[^>]*>', multiLine: true, caseSensitive: true), '');
+                          final String copyHtml =
+                              rawDefinitions[index]['processedHtml'] ??
+                              '${rawDefinitions[index]['headwordHtml']}\n${rawDefinitions[index]['rawContent']}';
+                          final plainText = copyHtml.replaceAll(
+                            RegExp(
+                              r'<[^>]*>',
+                              multiLine: true,
+                              caseSensitive: true,
+                            ),
+                            '',
+                          );
                           Clipboard.setData(ClipboardData(text: plainText));
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Copied definition to clipboard'), duration: Duration(seconds: 2)),
+                            const SnackBar(
+                              content: Text('Copied definition to clipboard'),
+                              duration: Duration(seconds: 2),
+                            ),
                           );
                         },
                       ),
@@ -1056,18 +1307,44 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         return Container(
           width: double.infinity,
           height: MediaQuery.of(context).size.height * 0.5,
-          decoration: BoxDecoration(color: settings.backgroundColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
+          decoration: BoxDecoration(
+            color: settings.backgroundColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
           child: Column(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                decoration: BoxDecoration(color: theme.colorScheme.primaryContainer, borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(20),
+                  ),
+                ),
                 child: Row(
                   children: [
-                    const Icon(Icons.info_outline, size: 20, color: Colors.orange),
+                    const Icon(
+                      Icons.info_outline,
+                      size: 20,
+                      color: Colors.orange,
+                    ),
                     const SizedBox(width: 12),
-                    Expanded(child: Text(word, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.onPrimaryContainer))),
-                    IconButton(icon: const Icon(Icons.keyboard_arrow_down), onPressed: () => Navigator.pop(context)),
+                    Expanded(
+                      child: Text(
+                        word,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onPrimaryContainer,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.keyboard_arrow_down),
+                      onPressed: () => Navigator.pop(context),
+                    ),
                   ],
                 ),
               ),
@@ -1078,113 +1355,116 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     final totalWatch = HPerf.start('Pop-up_Total');
                     final sqliteWatch = HPerf.start('Pop-up_SQLite');
 
-                  // 1. Try exact match first for popups
-                  List<Map<String, dynamic>> candidates =
-                      await _dbHelper.searchWords(
-                    headwordQuery: word,
-                    headwordMode: SearchMode.exact,
-                  );
+                    // 1. Try exact match first for popups
+                    List<Map<String, dynamic>> candidates = await _dbHelper
+                        .searchWords(
+                          headwordQuery: word,
+                          headwordMode: SearchMode.exact,
+                        );
 
-                  // 2. Fallback to user setting or prefix if exact fails
-                  if (candidates.isEmpty) {
-                    candidates = await _dbHelper.searchWords(
-                      headwordQuery: word,
-                      headwordMode: settings.headwordSearchMode,
-                    );
-                  }
-
-                  // 3. Last fallback: longest prefix match
-                  if (candidates.isEmpty) {
-                    String prefix = word;
-                    while (prefix.length > 2) {
-                      prefix = prefix.substring(0, prefix.length - 1);
+                    // 2. Fallback to user setting or prefix if exact fails
+                    if (candidates.isEmpty) {
                       candidates = await _dbHelper.searchWords(
-                        headwordQuery: prefix,
-                        headwordMode: SearchMode.prefix,
+                        headwordQuery: word,
+                        headwordMode: settings.headwordSearchMode,
                       );
-                      if (candidates.isNotEmpty) break;
                     }
-                  }
 
-                  HPerf.end(sqliteWatch, 'Pop-up_SQLite');
+                    // 3. Last fallback: longest prefix match
+                    if (candidates.isEmpty) {
+                      String prefix = word;
+                      while (prefix.length > 2) {
+                        prefix = prefix.substring(0, prefix.length - 1);
+                        candidates = await _dbHelper.searchWords(
+                          headwordQuery: prefix,
+                          headwordMode: SearchMode.prefix,
+                        );
+                        if (candidates.isNotEmpty) break;
+                      }
+                    }
 
-                  final enrichmentWatch = HPerf.start('Pop-up_Enrichment');
+                    HPerf.end(sqliteWatch, 'Pop-up_SQLite');
 
-                  // Parallelize definition fetching and HTML pre-processing
+                    final enrichmentWatch = HPerf.start('Pop-up_Enrichment');
 
+                    // Parallelize definition fetching and HTML pre-processing
 
-                  // Fix #2: Pre-fetch unique dicts in one pass to avoid N SQL
-                  // queries inside Future.wait (one per result, not per dict).
-                  final uniquePopupDictIds =
-                      candidates.map((r) => r['dict_id'] as int).toSet();
-                  final Map<int, Map<String, dynamic>> popupDictCache = {};
-                  for (final id in uniquePopupDictIds) {
-                    final d = await _dbHelper.getDictionaryById(id);
-                    if (d != null) popupDictCache[id] = d;
-                  }
+                    // Fix #2: Pre-fetch unique dicts in one pass to avoid N SQL
+                    // queries inside Future.wait (one per result, not per dict).
+                    final uniquePopupDictIds = candidates
+                        .map((r) => r['dict_id'] as int)
+                        .toSet();
+                    final Map<int, Map<String, dynamic>> popupDictCache = {};
+                    for (final id in uniquePopupDictIds) {
+                      final d = await _dbHelper.getDictionaryById(id);
+                      if (d != null) popupDictCache[id] = d;
+                    }
 
-                  // fetchAllDefs_Wall = true wall-clock time of all parallel
-                  // fetchDefinition calls. fetchDef_IO "total" is a misleading
-                  // sum; use "max" per-call or this wall timer instead.
-                  final fetchAllDefsWatch = HPerf.start('fetchAllDefs_Wall');
-                  final results = await Future.wait(candidates.map((res) async {
-                    final dictId = res['dict_id'] as int;
-                    final wordValue = res['word'] as String;
-                    final dict = popupDictCache[dictId];
-                    if (dict == null || dict['is_enabled'] != 1) return null;
+                    // fetchAllDefs_Wall = true wall-clock time of all parallel
+                    // fetchDefinition calls. fetchDef_IO "total" is a misleading
+                    // sum; use "max" per-call or this wall timer instead.
+                    final fetchAllDefsWatch = HPerf.start('fetchAllDefs_Wall');
+                    final results = await Future.wait(
+                      candidates.map((res) async {
+                        final dictId = res['dict_id'] as int;
+                        final wordValue = res['word'] as String;
+                        final dict = popupDictCache[dictId];
+                        if (dict == null || dict['is_enabled'] != 1)
+                          return null;
 
-                    String content = await _dictManager.fetchDefinition(
-                          dict,
-                          wordValue,
-                          res['offset'] as int,
-                          res['length'] as int,
-                        ) ??
-                        '';
+                        String content =
+                            await _dictManager.fetchDefinition(
+                              dict,
+                              wordValue,
+                              res['offset'] as int,
+                              res['length'] as int,
+                            ) ??
+                            '';
 
-                    return {
-                      'id': dictId,
-                      'word': wordValue,
-                      'dict_name': dict['name'],
-                      'raw_content': content,
-                      'format': dict['format'],
-                      'type_sequence': dict['type_sequence'],
+                        return {
+                          'id': dictId,
+                          'word': wordValue,
+                          'dict_name': dict['name'],
+                          'raw_content': content,
+                          'format': dict['format'],
+                          'type_sequence': dict['type_sequence'],
+                        };
+                      }),
+                    );
+                    HPerf.end(fetchAllDefsWatch, 'fetchAllDefs_Wall');
+
+                    final Map<int, Map<String, List<Map<String, dynamic>>>>
+                    groupedResults = {};
+                    int resultCount = 0;
+                    for (final res in results) {
+                      if (res == null) continue;
+                      resultCount++;
+                      final dictId = res['id'] as int;
+                      final wordValue = res['word'] as String;
+                      groupedResults.putIfAbsent(dictId, () => {});
+                      groupedResults[dictId]!.putIfAbsent(wordValue, () => []);
+                      groupedResults[dictId]![wordValue]!.add(res);
+                    }
+
+                    final consolidated = HomeScreen.consolidateDefinitions(
+                      groupedResults,
+                    );
+
+                    HPerf.end(enrichmentWatch, 'Pop-up_Enrichment');
+                    HPerf.end(totalWatch, 'Pop-up_Total');
+                    HPerf.dump(prefix: '--- POP-UP SEARCH PERF ---');
+
+                    final timing = {
+                      'sqliteMs': sqliteWatch?.elapsedMilliseconds ?? 0,
+                      'totalMs': totalWatch?.elapsedMilliseconds ?? 0,
+                      'otherMs':
+                          (totalWatch?.elapsedMilliseconds ?? 0) -
+                          (sqliteWatch?.elapsedMilliseconds ?? 0),
+                      'resultCount': resultCount,
                     };
-                  }));
-                  HPerf.end(fetchAllDefsWatch, 'fetchAllDefs_Wall');
 
-                  final Map<int, Map<String, List<Map<String, dynamic>>>>
-                      groupedResults = {};
-                  int resultCount = 0;
-                  for (final res in results) {
-                    if (res == null) continue;
-                    resultCount++;
-                    final dictId = res['id'] as int;
-                    final wordValue = res['word'] as String;
-                    groupedResults.putIfAbsent(dictId, () => {});
-                    groupedResults[dictId]!.putIfAbsent(wordValue, () => []);
-                    groupedResults[dictId]![wordValue]!.add(res);
-                  }
-
-                  final consolidated =
-                      HomeScreen.consolidateDefinitions(groupedResults);
-
-                  HPerf.end(enrichmentWatch, 'Pop-up_Enrichment');
-                  HPerf.end(totalWatch, 'Pop-up_Total');
-                  HPerf.dump(prefix: '--- POP-UP SEARCH PERF ---');
-
-                  final timing = {
-                    'sqliteMs': sqliteWatch?.elapsedMilliseconds ?? 0,
-                    'totalMs': totalWatch?.elapsedMilliseconds ?? 0,
-                    'otherMs': (totalWatch?.elapsedMilliseconds ?? 0) -
-                        (sqliteWatch?.elapsedMilliseconds ?? 0),
-                    'resultCount': resultCount,
-                  };
-
-                  return {
-                    'definitions': consolidated,
-                    'timing': timing,
-                  };
-                }(),
+                    return {'definitions': consolidated, 'timing': timing};
+                  }(),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(child: CircularProgressIndicator());
@@ -1202,46 +1482,49 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       child: Column(
                         children: [
                           TabBar(
-                              isScrollable: true,
-                              labelColor: theme.colorScheme.primary,
-                              unselectedLabelColor: Colors.grey,
-                              tabs: defs.map((def) {
-                                String name = def['dict_name'];
-                                if (name.length > 13) {
-                                  name = '${name.substring(0, 10)}...';
-                                }
-                                return Tab(
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(name),
-                                      const SizedBox(width: 4),
-                                      GestureDetector(
-                                        onTap: () {
-                                          defs.remove(def);
-                                          (context as Element)
-                                              .markNeedsBuild();
-                                        },
-                                        child: const Icon(Icons.close, size: 14),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }).toList()),
+                            isScrollable: true,
+                            labelColor: theme.colorScheme.primary,
+                            unselectedLabelColor: Colors.grey,
+                            tabs: defs.map((def) {
+                              String name = def['dict_name'];
+                              if (name.length > 13) {
+                                name = '${name.substring(0, 10)}...';
+                              }
+                              return Tab(
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(name),
+                                    const SizedBox(width: 4),
+                                    GestureDetector(
+                                      onTap: () {
+                                        defs.remove(def);
+                                        (context as Element).markNeedsBuild();
+                                      },
+                                      child: const Icon(Icons.close, size: 14),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
                           Expanded(
-                              child: TabBarView(
-                                  children: defs
-                                      .map((def) => _buildDefinitionContent(
-                                            theme,
-                                            def,
-                                            highlightHeadword: word,
-                                            searchSqliteMs: timing['sqliteMs'],
-                                            searchOtherMs: timing['otherMs'],
-                                            searchTotalMs: timing['totalMs'],
-                                            searchResultCount:
-                                                timing['resultCount'],
-                                          ))
-                                      .toList())),
+                            child: TabBarView(
+                              children: defs
+                                  .map(
+                                    (def) => _buildDefinitionContent(
+                                      theme,
+                                      def,
+                                      highlightHeadword: word,
+                                      searchSqliteMs: timing['sqliteMs'],
+                                      searchOtherMs: timing['otherMs'],
+                                      searchTotalMs: timing['totalMs'],
+                                      searchResultCount: timing['resultCount'],
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                          ),
                         ],
                       ),
                     );
