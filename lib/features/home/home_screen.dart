@@ -40,7 +40,8 @@ class _EntryToProcess {
 
 /// The main search screen of the hdict app.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final String? initialWord;
+  const HomeScreen({super.key, this.initialWord});
 
   // Helpers ------------------------------------------------------------------
   /// Takes results that have already been enriched with `dict_name` and
@@ -176,9 +177,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _searchTotalMs = 0;
   int _searchResultCount = 0;
 
+  bool _hasDictionaries = false;
+  bool _checkingDicts = true;
+
   // Fix #5: Cache the dictionaries future so FutureBuilder doesn't fire a new
   // SQL query on every widget rebuild (keyboard, theme, settings changes, etc.).
   late Future<List<Map<String, dynamic>>> _dictionariesFuture;
+
 
   @override
   void dispose() {
@@ -381,13 +386,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     await _performSearch();
   }
 
-  bool _hasDictionaries = false;
-  bool _checkingDicts = true;
-
   @override
   void initState() {
     super.initState();
     enableDebugLogs = true; // Enable logging for performance investigation
+    
+    if (widget.initialWord != null) {
+      _headwordController.text = widget.initialWord!;
+      _selectedWord = widget.initialWord!;
+      _isLoading = true;
+    }
+
     _dictionariesFuture = _dbHelper.getDictionaries();
     _checkDictionaries();
     _cleanHistory();
@@ -399,7 +408,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         DatabaseHelper.needsMigrationAlert = false;
         _showMigrationNotice();
       }
+      
+      if (widget.initialWord != null) {
+        // Double check text if it somehow got cleared
+        if (_headwordController.text.isEmpty) {
+          _headwordController.text = widget.initialWord!;
+        }
+        
+        // Ensure _hasDictionaries is checked at least once before searching
+        // if it's still false, we wait a bit or just proceed as searchWords 
+        // will return empty anyway if no dicts exist in DB.
+        _performSearch();
+      }
     });
+
   }
 
   void _showMigrationNotice() {
