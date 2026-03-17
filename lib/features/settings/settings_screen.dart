@@ -95,206 +95,209 @@ class _SettingsScreenState extends State<SettingsScreen> {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16.0),
-        children: [
-          _buildSectionHeader(theme, 'Search settings'),
-          ListTile(
-            title: const Text('How many results to return from database'),
-            subtitle: const Text(
-              'Setting it to higher number may slow down the result loading',
-            ),
-            trailing: SizedBox(
-              width: 80,
-              child: TextFormField(
-                initialValue: '${settings.searchResultLimit}',
-                keyboardType: TextInputType.number,
-                textAlign: TextAlign.right,
-                decoration: const InputDecoration(border: InputBorder.none),
-                onChanged: (value) {
-                  final limit = int.tryParse(value);
-                  if (limit != null && limit > 0) {
-                    settings.setSearchResultLimit(limit);
-                  }
-                },
+      body: SafeArea(
+        top: false,
+        child: ListView(
+          padding: const EdgeInsets.all(16.0),
+          children: [
+            _buildSectionHeader(theme, 'Search settings'),
+            ListTile(
+              title: const Text('How many results to return from database'),
+              subtitle: const Text(
+                'Setting it to higher number may slow down the result loading',
               ),
-            ),
-          ),
-          SwitchListTile(
-            title: const Text('Search in Headwords'),
-            value: settings.isSearchInHeadwordsEnabled,
-            onChanged: (value) => settings.searchInHeadwords(value),
-          ),
-          if (settings.isSearchInHeadwordsEnabled)
-            Padding(
-              padding: const EdgeInsets.only(left: 32.0, bottom: 8.0),
-              child: SegmentedButton<SearchMode>(
-                segments: SearchMode.values
-                    .map((m) => ButtonSegment(value: m, label: Text(m.label)))
-                    .toList(),
-                selected: {settings.headwordSearchMode},
-                onSelectionChanged: (set) =>
-                    settings.setHeadwordSearchMode(set.first),
-              ),
-            ),
-          SwitchListTile(
-            title: const Text('Search in Definitions'),
-            value: settings.isSearchInDefinitionsEnabled,
-            onChanged: (value) => settings.searchInDefinitions(value),
-          ),
-          if (settings.isSearchInDefinitionsEnabled)
-            Padding(
-              padding: const EdgeInsets.only(left: 32.0, bottom: 8.0),
-              child: SegmentedButton<SearchMode>(
-                segments: SearchMode.values
-                    .map((m) => ButtonSegment(value: m, label: Text(m.label)))
-                    .toList(),
-                selected: {settings.definitionSearchMode},
-                onSelectionChanged: (set) =>
-                    settings.setDefinitionSearchMode(set.first),
-              ),
-            ),
-          if (settings.isSearchInDefinitionsEnabled)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 32.0, vertical: 8.0),
-              child: Text(
-                'Note: "Suffix" and "Substring" searches require exhaustive full-table scans which take significantly longer. It is strongly advised to stick with "Prefix" or "Exact" searches for instantaneous FTS5 results.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey,
-                  fontStyle: FontStyle.italic,
+              trailing: SizedBox(
+                width: 80,
+                child: TextFormField(
+                  initialValue: '${settings.searchResultLimit}',
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.right,
+                  decoration: const InputDecoration(border: InputBorder.none),
+                  onChanged: (value) {
+                    final limit = int.tryParse(value);
+                    if (limit != null && limit > 0) {
+                      settings.setSearchResultLimit(limit);
+                    }
+                  },
                 ),
               ),
             ),
-          const Divider(),
-          _buildSectionHeader(theme, 'Appearance'),
-          ListTile(
-            title: const Text('Font Family'),
-            subtitle: Text(settings.fontFamily),
-            trailing: const Icon(Icons.font_download),
-            onTap: () => _showFontPicker(context, settings),
-          ),
-          ListTile(
-            title: const Text('Font Size'),
-            subtitle: Text('${settings.fontSize.toInt()}'),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.remove),
-                  onPressed: () => settings.setFontSize(settings.fontSize - 1),
+            SwitchListTile(
+              title: const Text('Search in Headwords'),
+              value: settings.isSearchInHeadwordsEnabled,
+              onChanged: (value) => settings.searchInHeadwords(value),
+            ),
+            if (settings.isSearchInHeadwordsEnabled)
+              Padding(
+                padding: const EdgeInsets.only(left: 32.0, bottom: 8.0),
+                child: SegmentedButton<SearchMode>(
+                  segments: SearchMode.values
+                      .map((m) => ButtonSegment(value: m, label: Text(m.label)))
+                      .toList(),
+                  selected: {settings.headwordSearchMode},
+                  onSelectionChanged: (set) =>
+                      settings.setHeadwordSearchMode(set.first),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.add),
-                  onPressed: () => settings.setFontSize(settings.fontSize + 1),
+              ),
+            SwitchListTile(
+              title: const Text('Search in Definitions'),
+              value: settings.isSearchInDefinitionsEnabled,
+              onChanged: (value) => settings.searchInDefinitions(value),
+            ),
+            if (settings.isSearchInDefinitionsEnabled)
+              Padding(
+                padding: const EdgeInsets.only(left: 32.0, bottom: 8.0),
+                child: SegmentedButton<SearchMode>(
+                  segments: SearchMode.values
+                      .map((m) => ButtonSegment(value: m, label: Text(m.label)))
+                      .toList(),
+                  selected: {settings.definitionSearchMode},
+                  onSelectionChanged: (set) =>
+                      settings.setDefinitionSearchMode(set.first),
                 ),
-              ],
-            ),
-          ),
-          _buildColorTile(
-            context,
-            'Background Colour',
-            settings.backgroundColor,
-            (color) => settings.setBackgroundColor(color),
-          ),
-          _buildColorTile(
-            context,
-            'Text Colour (Content)',
-            settings.textColor,
-            (color) => settings.setTextColor(color),
-          ),
-          _buildColorTile(
-            context,
-            'Headword Colour',
-            settings.headwordColor,
-            (color) => settings.setHeadwordColor(color),
-          ),
-          const Divider(),
-          _buildSectionHeader(theme, 'Dictionary Interaction'),
-          SwitchListTile(
-            title: const Text('Allow Tap on Meanings'),
-            subtitle: const Text('Tap words in meanings to look them up'),
-            value: settings.isTapOnMeaningEnabled,
-            onChanged: (value) => settings.setTapOnMeaning(value),
-          ),
-          SwitchListTile(
-            title: const Text('Open Popup on Tap'),
-            subtitle: const Text(
-              'Show meaning in a popup instead of full screen',
-            ),
-            value: settings.isOpenPopupOnTap,
-            onChanged: (value) => settings.setOpenPopup(value),
-          ),
-          const Divider(),
-          _buildSectionHeader(theme, 'Flash Cards'),
-          ListTile(
-            title: const Text('Number of words in flash cards'),
-            subtitle: Text('${settings.flashCardWordCount} words'),
-            trailing: SizedBox(
-              width: 150,
-              child: Slider(
-                value: settings.flashCardWordCount.toDouble(),
-                min: 5,
-                max: 50,
-                divisions: 9,
-                label: settings.flashCardWordCount.toString(),
-                onChanged: (value) {
-                  settings.setFlashCardWordCount(value.toInt());
-                },
               ),
-            ),
-          ),
-          const Divider(),
-          _buildSectionHeader(theme, 'History'),
-          ListTile(
-            title: const Text('Retain Search History for how many days'),
-            subtitle: Text(
-              'Currently set to ${settings.historyRetentionDays} days',
-            ),
-            trailing: SizedBox(
-              width: 80,
-              child: TextFormField(
-                initialValue: '${settings.historyRetentionDays}',
-                keyboardType: TextInputType.number,
-                textAlign: TextAlign.right,
-                decoration: const InputDecoration(border: InputBorder.none),
-                onChanged: (value) {
-                  final days = int.tryParse(value);
-                  if (days != null && days > 0) {
-                    settings.setHistoryRetentionDays(days);
-                  }
-                },
-              ),
-            ),
-          ),
-          const Divider(),
-          _buildSectionHeader(theme, 'Database'),
-          ListTile(
-            title: const Text('Database Size'),
-            subtitle: Text(_formatBytes(_databaseSize)),
-            trailing: _isOptimizing
-                ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : TextButton(
-                    onPressed: _optimizeDatabase,
-                    child: const Text('Optimize'),
+            if (settings.isSearchInDefinitionsEnabled)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 32.0, vertical: 8.0),
+                child: Text(
+                  'Note: "Suffix" and "Substring" searches require exhaustive full-table scans which take significantly longer. It is strongly advised to stick with "Prefix" or "Exact" searches for instantaneous FTS5 results.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey,
+                    fontStyle: FontStyle.italic,
                   ),
-          ),
-          if (_isOptimizing)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.0),
-              child: Text(
-                'Optimizing database, please wait...',
-                style: TextStyle(
-                  color: Colors.grey,
-                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            const Divider(),
+            _buildSectionHeader(theme, 'Appearance'),
+            ListTile(
+              title: const Text('Font Family'),
+              subtitle: Text(settings.fontFamily),
+              trailing: const Icon(Icons.font_download),
+              onTap: () => _showFontPicker(context, settings),
+            ),
+            ListTile(
+              title: const Text('Font Size'),
+              subtitle: Text('${settings.fontSize.toInt()}'),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.remove),
+                    onPressed: () => settings.setFontSize(settings.fontSize - 1),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.add),
+                    onPressed: () => settings.setFontSize(settings.fontSize + 1),
+                  ),
+                ],
+              ),
+            ),
+            _buildColorTile(
+              context,
+              'Background Colour',
+              settings.backgroundColor,
+              (color) => settings.setBackgroundColor(color),
+            ),
+            _buildColorTile(
+              context,
+              'Text Colour (Content)',
+              settings.textColor,
+              (color) => settings.setTextColor(color),
+            ),
+            _buildColorTile(
+              context,
+              'Headword Colour',
+              settings.headwordColor,
+              (color) => settings.setHeadwordColor(color),
+            ),
+            const Divider(),
+            _buildSectionHeader(theme, 'Dictionary Interaction'),
+            SwitchListTile(
+              title: const Text('Allow Tap on Meanings'),
+              subtitle: const Text('Tap words in meanings to look them up'),
+              value: settings.isTapOnMeaningEnabled,
+              onChanged: (value) => settings.setTapOnMeaning(value),
+            ),
+            SwitchListTile(
+              title: const Text('Open Popup on Tap'),
+              subtitle: const Text(
+                'Show meaning in a popup instead of full screen',
+              ),
+              value: settings.isOpenPopupOnTap,
+              onChanged: (value) => settings.setOpenPopup(value),
+            ),
+            const Divider(),
+            _buildSectionHeader(theme, 'Flash Cards'),
+            ListTile(
+              title: const Text('Number of words in flash cards'),
+              subtitle: Text('${settings.flashCardWordCount} words'),
+              trailing: SizedBox(
+                width: 150,
+                child: Slider(
+                  value: settings.flashCardWordCount.toDouble(),
+                  min: 5,
+                  max: 50,
+                  divisions: 9,
+                  label: settings.flashCardWordCount.toString(),
+                  onChanged: (value) {
+                    settings.setFlashCardWordCount(value.toInt());
+                  },
                 ),
               ),
             ),
-        ],
+            const Divider(),
+            _buildSectionHeader(theme, 'History'),
+            ListTile(
+              title: const Text('Retain Search History for how many days'),
+              subtitle: Text(
+                'Currently set to ${settings.historyRetentionDays} days',
+              ),
+              trailing: SizedBox(
+                width: 80,
+                child: TextFormField(
+                  initialValue: '${settings.historyRetentionDays}',
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.right,
+                  decoration: const InputDecoration(border: InputBorder.none),
+                  onChanged: (value) {
+                    final days = int.tryParse(value);
+                    if (days != null && days > 0) {
+                      settings.setHistoryRetentionDays(days);
+                    }
+                  },
+                ),
+              ),
+            ),
+            const Divider(),
+            _buildSectionHeader(theme, 'Database'),
+            ListTile(
+              title: const Text('Database Size'),
+              subtitle: Text(_formatBytes(_databaseSize)),
+              trailing: _isOptimizing
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : TextButton(
+                      onPressed: _optimizeDatabase,
+                      child: const Text('Optimize'),
+                    ),
+            ),
+            if (_isOptimizing)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.0),
+                child: Text(
+                  'Optimizing database, please wait...',
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

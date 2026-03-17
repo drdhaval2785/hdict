@@ -29,12 +29,14 @@ class ResultScreen extends StatelessWidget {
         title: const Text('Quiz Result'),
         automaticallyImplyLeading: false,
       ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+      body: SafeArea(
+        top: false,
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
               // Score circle
               Container(
                 width: 160,
@@ -131,8 +133,9 @@ class ResultScreen extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   String _label(int pct) {
     if (pct >= 90) return 'Excellent! Outstanding performance!';

@@ -35,38 +35,41 @@ class ManualScreen extends StatelessWidget {
           final String data = snapshot.data ?? 'No content found.';
           final theme = Theme.of(context);
 
-          return Markdown(
-            data: data,
-            selectable: true,
-            styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
-              h1: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 24,
-                color: Color(0xFFFFAB40),
-              ),
-              h2: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 20,
-                color: Color(0xFFFFAB40),
-                height: 2.0,
-              ),
-              h3: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-                height: 1.5,
-              ),
-              p: const TextStyle(fontSize: 16, height: 1.6),
-              listBullet: const TextStyle(fontSize: 16, height: 1.6),
-              code: TextStyle(
-                backgroundColor: theme.colorScheme.onSurface.withValues(
-                  alpha: 0.1,
+          return SafeArea(
+            top: false,
+            child: Markdown(
+              data: data,
+              selectable: true,
+              styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
+                h1: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 24,
+                  color: Color(0xFFFFAB40),
                 ),
-                fontFamily: 'monospace',
-                color: theme.colorScheme.primary,
-              ),
-              horizontalRuleDecoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(color: theme.dividerColor, width: 1),
+                h2: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
+                  color: Color(0xFFFFAB40),
+                  height: 2.0,
+                ),
+                h3: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                  height: 1.5,
+                ),
+                p: const TextStyle(fontSize: 16, height: 1.6),
+                listBullet: const TextStyle(fontSize: 16, height: 1.6),
+                code: TextStyle(
+                  backgroundColor: theme.colorScheme.onSurface.withValues(
+                    alpha: 0.1,
+                  ),
+                  fontFamily: 'monospace',
+                  color: theme.colorScheme.primary,
+                ),
+                horizontalRuleDecoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(color: theme.dividerColor, width: 1),
+                  ),
                 ),
               ),
             ),

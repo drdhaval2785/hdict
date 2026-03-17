@@ -1009,277 +1009,280 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
           ),
           Expanded(
-            child: ListView.separated(
-              padding: const EdgeInsets.only(left: 20, right: 20, bottom: 20),
-              itemCount: rawDefinitions.length + 1,
-              separatorBuilder: (context, index) {
-                if (index == rawDefinitions.length - 1) {
-                  return const Divider(
-                    height: 48,
-                    thickness: 1,
-                    color: Colors.transparent,
-                  );
-                }
-                return const Divider(height: 32, thickness: 2);
-              },
-              itemBuilder: (context, index) {
-                if (index == rawDefinitions.length) {
-                  final sqliteMs = searchSqliteMs ?? _searchSqliteMs;
-                  final totalMs = searchTotalMs ?? _searchTotalMs;
-                  final otherMs = searchOtherMs ?? _searchOtherMs;
-                  final resultCount = searchResultCount ?? _searchResultCount;
+            child: SafeArea(
+              top: false,
+              child: ListView.separated(
+                padding: const EdgeInsets.only(left: 20, right: 20, bottom: 20),
+                itemCount: rawDefinitions.length + 1,
+                separatorBuilder: (context, index) {
+                  if (index == rawDefinitions.length - 1) {
+                    return const Divider(
+                      height: 48,
+                      thickness: 1,
+                      color: Colors.transparent,
+                    );
+                  }
+                  return const Divider(height: 32, thickness: 2);
+                },
+                itemBuilder: (context, index) {
+                  if (index == rawDefinitions.length) {
+                    final sqliteMs = searchSqliteMs ?? _searchSqliteMs;
+                    final totalMs = searchTotalMs ?? _searchTotalMs;
+                    final otherMs = searchOtherMs ?? _searchOtherMs;
+                    final resultCount = searchResultCount ?? _searchResultCount;
 
-                  return Text(
-                    'Showed $resultCount results in $totalMs ms.\n'
-                    'Sqlite query took $sqliteMs ms.\n'
-                    'Other work took $otherMs ms.',
-                    style: const TextStyle(fontSize: 11, color: Colors.grey),
-                    textAlign: TextAlign.center,
-                  );
-                }
+                    return Text(
+                      'Showed $resultCount results in $totalMs ms.\n'
+                      'Sqlite query took $sqliteMs ms.\n'
+                      'Other work took $otherMs ms.',
+                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                      textAlign: TextAlign.center,
+                    );
+                  }
 
-                // HTML Processing is done LAZILY right as the item scrolls onto the screen!
-                final Map<String, dynamic> defData = rawDefinitions[index];
-                String? definitionHtml = defData['processedHtml'];
+                  // HTML Processing is done LAZILY right as the item scrolls onto the screen!
+                  final Map<String, dynamic> defData = rawDefinitions[index];
+                  String? definitionHtml = defData['processedHtml'];
 
-                if (definitionHtml == null) {
-                  final String rawContent = defData['rawContent'] as String;
-                  final String format =
-                      defMap['format'] as String? ?? 'stardict';
-                  final String? typeSequence =
-                      defMap['type_sequence'] as String?;
+                  if (definitionHtml == null) {
+                    final String rawContent = defData['rawContent'] as String;
+                    final String format =
+                        defMap['format'] as String? ?? 'stardict';
+                    final String? typeSequence =
+                        defMap['type_sequence'] as String?;
 
-                  // Wrap and Highlight (Word wrapping removed in favor of tap-position detection)
-                  final processed = HtmlLookupWrapper.processRecord(
-                    html: HomeScreen.normalizeWhitespace(
-                      rawContent,
+                    // Wrap and Highlight (Word wrapping removed in favor of tap-position detection)
+                    final processed = HtmlLookupWrapper.processRecord(
+                      html: HomeScreen.normalizeWhitespace(
+                        rawContent,
+                        format: format,
+                        typeSequence: typeSequence,
+                      ),
                       format: format,
                       typeSequence: typeSequence,
-                    ),
-                    format: format,
-                    typeSequence: typeSequence,
-                    underlineQuery: _lastDefinitionQuery,
-                  );
+                      underlineQuery: _lastDefinitionQuery,
+                    );
 
-                  definitionHtml = '${defData['headwordHtml']}\n$processed';
-                  defData['processedHtml'] =
-                      definitionHtml; // Cache for subsequent scrolls
-                }
+                    definitionHtml = '${defData['headwordHtml']}\n$processed';
+                    defData['processedHtml'] =
+                        definitionHtml; // Cache for subsequent scrolls
+                  }
 
-                return Stack(
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        MouseRegion(
-                          cursor: settings.isTapOnMeaningEnabled
+                  return Stack(
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          MouseRegion(
+                            cursor: settings.isTapOnMeaningEnabled
                               ? SystemMouseCursors.click
                               : MouseCursor.defer,
-                          child: Builder(
-                            builder: (ctx) => GestureDetector(
-                              behavior: HitTestBehavior.translucent,
-                              onTapUp: (details) {
-                                if (!settings.isTapOnMeaningEnabled) {
-                                  hDebugPrint(
-                                    'Tap ignored: isTapOnMeaningEnabled is false',
-                                  );
-                                  return;
-                                }
-
-                                final RenderBox? renderBox =
-                                    ctx.findRenderObject() as RenderBox?;
-                                if (renderBox == null) {
-                                  hDebugPrint('Tap ignored: renderBox is null');
-                                  return;
-                                }
-
-                                final BoxHitTestResult result =
-                                    BoxHitTestResult();
-                                renderBox.hitTest(
-                                  result,
-                                  position: renderBox.globalToLocal(
-                                    details.globalPosition,
-                                  ),
-                                );
-
-                                for (final HitTestEntry entry in result.path) {
-                                  final target = entry.target;
-                                  if (target is RenderParagraph) {
-                                    final String text = target.text
-                                        .toPlainText();
-                                    // Ignore \uFFFC which is the Object Replacement Character representing inline widgets
-                                    if (text
-                                        .replaceAll('\uFFFC', '')
-                                        .trim()
-                                        .isEmpty)
-                                      continue;
-
-                                    final Offset localOffset = target
-                                        .globalToLocal(details.globalPosition);
-                                    final TextPosition pos = target
-                                        .getPositionForOffset(localOffset);
-                                    final String charAtOffset =
-                                        (pos.offset >= 0 &&
-                                            pos.offset < text.length)
-                                        ? text[pos.offset]
-                                        : 'EOF';
-
+                            child: Builder(
+                              builder: (ctx) => GestureDetector(
+                                behavior: HitTestBehavior.translucent,
+                                onTapUp: (details) {
+                                  if (!settings.isTapOnMeaningEnabled) {
                                     hDebugPrint(
-                                      'HitTest detected on Paragraph text: "$text"',
+                                      'Tap ignored: isTapOnMeaningEnabled is false',
                                     );
-                                    hDebugPrint(
-                                      'Calculated TextOffset: ${pos.offset}, Char: "$charAtOffset"',
-                                    );
-
-                                    final String? word = util
-                                        .WordBoundary.wordAt(text, pos.offset);
-                                    hDebugPrint(
-                                      'Word tapped for search: $word',
-                                    );
-
-                                    if (word != null &&
-                                        word.trim().isNotEmpty) {
-                                      _showWordPopup(word);
-                                      return; // Stop looking after the first valid text paragraph is found
-                                    }
+                                    return;
                                   }
-                                }
-                                hDebugPrint(
-                                  'HitTest found no valid text paragraph.',
-                                );
-                              },
-                              child: Html(
-                                data: definitionHtml,
-                                style: {
-                                  "body": Style(
-                                    fontSize: FontSize(settings.fontSize),
-                                    lineHeight: LineHeight.em(1.5),
-                                    margin: Margins.zero,
-                                    padding: HtmlPaddings.zero,
-                                    color: settings.textColor,
-                                    fontFamily: settings.fontFamily,
-                                  ),
-                                  "a": Style(
-                                    color: theme.colorScheme.primary,
-                                    textDecoration: TextDecoration.underline,
-                                  ),
-                                  "mark": Style(
-                                    backgroundColor: Color(
-                                      int.parse(
-                                        highlightCol.replaceFirst('#', '0xFF'),
-                                      ),
+
+                                  final RenderBox? renderBox =
+                                      ctx.findRenderObject() as RenderBox?;
+                                  if (renderBox == null) {
+                                    hDebugPrint('Tap ignored: renderBox is null');
+                                    return;
+                                  }
+
+                                  final BoxHitTestResult result =
+                                      BoxHitTestResult();
+                                  renderBox.hitTest(
+                                    result,
+                                    position: renderBox.globalToLocal(
+                                      details.globalPosition,
                                     ),
-                                    color: Colors.black,
-                                  ),
-                                  ".dict-word": Style(
-                                    color: settings.textColor,
-                                    textDecoration: TextDecoration.none,
-                                  ),
-                                  ".headword": Style(
-                                    color: settings.headwordColor,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  ".headword a": Style(
-                                    color: settings.headwordColor,
-                                    textDecoration: TextDecoration.none,
-                                  ),
-                                  ".headword .dict-word": Style(
-                                    color: settings.headwordColor,
-                                    textDecoration: TextDecoration.none,
-                                  ),
-                                },
-                                onLinkTap: (url, attributes, element) async {
-                                  hDebugPrint(
-                                    'onLinkTap triggered with url: $url',
                                   );
-                                  if (url != null) {
-                                    if (url.startsWith('http://') ||
-                                        url.startsWith('https://')) {
+
+                                  for (final HitTestEntry entry in result.path) {
+                                    final target = entry.target;
+                                    if (target is RenderParagraph) {
+                                      final String text = target.text
+                                          .toPlainText();
+                                      // Ignore \uFFFC which is the Object Replacement Character representing inline widgets
+                                      if (text
+                                          .replaceAll('\uFFFC', '')
+                                          .trim()
+                                          .isEmpty)
+                                        continue;
+
+                                      final Offset localOffset = target
+                                          .globalToLocal(details.globalPosition);
+                                      final TextPosition pos = target
+                                          .getPositionForOffset(localOffset);
+                                      final String charAtOffset =
+                                          (pos.offset >= 0 &&
+                                              pos.offset < text.length)
+                                          ? text[pos.offset]
+                                          : 'EOF';
+
                                       hDebugPrint(
-                                        'Launching external URL: $url',
+                                        'HitTest detected on Paragraph text: "$text"',
                                       );
-                                      final uri = Uri.parse(url);
-                                      if (await canLaunchUrl(uri)) {
-                                        await launchUrl(
-                                          uri,
-                                          mode: LaunchMode.externalApplication,
-                                        );
-                                      }
-                                    } else {
-                                      String wordToLookup = url;
-                                      if (wordToLookup.startsWith('look_up:')) {
-                                        wordToLookup = wordToLookup.substring(
-                                          8,
-                                        );
-                                      } else if (wordToLookup.startsWith(
-                                        'bword://',
-                                      )) {
-                                        wordToLookup = wordToLookup.substring(
-                                          8,
-                                        );
-                                      }
-                                      try {
-                                        final word = wordToLookup.contains('%')
-                                            ? Uri.decodeComponent(wordToLookup)
-                                            : wordToLookup;
+                                      hDebugPrint(
+                                        'Calculated TextOffset: ${pos.offset}, Char: "$charAtOffset"',
+                                      );
+
+                                      final String? word = util
+                                          .WordBoundary.wordAt(text, pos.offset);
+                                      hDebugPrint(
+                                        'Word tapped for search: $word',
+                                      );
+
+                                      if (word != null &&
+                                          word.trim().isNotEmpty) {
                                         _showWordPopup(word);
-                                      } catch (e) {
-                                        _showWordPopup(wordToLookup);
+                                        return; // Stop looking after the first valid text paragraph is found
                                       }
                                     }
                                   }
+                                  hDebugPrint(
+                                    'HitTest found no valid text paragraph.',
+                                  );
                                 },
+                                child: Html(
+                                  data: definitionHtml,
+                                  style: {
+                                    "body": Style(
+                                      fontSize: FontSize(settings.fontSize),
+                                      lineHeight: LineHeight.em(1.5),
+                                      margin: Margins.zero,
+                                      padding: HtmlPaddings.zero,
+                                      color: settings.textColor,
+                                      fontFamily: settings.fontFamily,
+                                    ),
+                                    "a": Style(
+                                      color: theme.colorScheme.primary,
+                                      textDecoration: TextDecoration.underline,
+                                    ),
+                                    "mark": Style(
+                                      backgroundColor: Color(
+                                        int.parse(
+                                          highlightCol.replaceFirst('#', '0xFF'),
+                                        ),
+                                      ),
+                                      color: Colors.black,
+                                    ),
+                                    ".dict-word": Style(
+                                      color: settings.textColor,
+                                      textDecoration: TextDecoration.none,
+                                    ),
+                                    ".headword": Style(
+                                      color: settings.headwordColor,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    ".headword a": Style(
+                                      color: settings.headwordColor,
+                                      textDecoration: TextDecoration.none,
+                                    ),
+                                    ".headword .dict-word": Style(
+                                      color: settings.headwordColor,
+                                      textDecoration: TextDecoration.none,
+                                    ),
+                                  },
+                                  onLinkTap: (url, attributes, element) async {
+                                    hDebugPrint(
+                                      'onLinkTap triggered with url: $url',
+                                    );
+                                    if (url != null) {
+                                      if (url.startsWith('http://') ||
+                                          url.startsWith('https://')) {
+                                        hDebugPrint(
+                                          'Launching external URL: $url',
+                                        );
+                                        final uri = Uri.parse(url);
+                                        if (await canLaunchUrl(uri)) {
+                                          await launchUrl(
+                                            uri,
+                                            mode: LaunchMode.externalApplication,
+                                          );
+                                        }
+                                      } else {
+                                        String wordToLookup = url;
+                                        if (wordToLookup.startsWith('look_up:')) {
+                                          wordToLookup = wordToLookup.substring(
+                                            8,
+                                          );
+                                        } else if (wordToLookup.startsWith(
+                                          'bword://',
+                                        )) {
+                                          wordToLookup = wordToLookup.substring(
+                                            8,
+                                          );
+                                        }
+                                        try {
+                                          final word = wordToLookup.contains('%')
+                                              ? Uri.decodeComponent(wordToLookup)
+                                              : wordToLookup;
+                                          _showWordPopup(word);
+                                        } catch (e) {
+                                          _showWordPopup(wordToLookup);
+                                        }
+                                      }
+                                    }
+                                  },
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        if (index == rawDefinitions.length - 1 &&
-                            settings.isTapOnMeaningEnabled)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 24.0),
-                            child: Text(
-                              'Tap on words/links to look them up.',
-                              style: TextStyle(
-                                fontStyle: FontStyle.italic,
-                                color: Colors.grey,
-                                fontSize: 12,
+                          if (index == rawDefinitions.length - 1 &&
+                              settings.isTapOnMeaningEnabled)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 24.0),
+                              child: Text(
+                                'Tap on words/links to look them up.',
+                                style: TextStyle(
+                                  fontStyle: FontStyle.italic,
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                ),
                               ),
                             ),
-                          ),
-                      ],
-                    ),
-                    Positioned(
-                      top: 0,
-                      right: 0,
-                      child: IconButton(
-                        icon: const Icon(Icons.copy, size: 20),
-                        color: Colors.grey,
-                        tooltip: 'Copy this definition',
-                        onPressed: () {
-                          final String copyHtml =
-                              rawDefinitions[index]['processedHtml'] ??
-                              '${rawDefinitions[index]['headwordHtml']}\n${rawDefinitions[index]['rawContent']}';
-                          final plainText = copyHtml.replaceAll(
-                            RegExp(
-                              r'<[^>]*>',
-                              multiLine: true,
-                              caseSensitive: true,
-                            ),
-                            '',
-                          );
-                          Clipboard.setData(ClipboardData(text: plainText));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Copied definition to clipboard'),
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
-                        },
+                        ],
                       ),
-                    ),
-                  ],
-                );
-              },
+                      Positioned(
+                        top: 0,
+                        right: 0,
+                        child: IconButton(
+                          icon: const Icon(Icons.copy, size: 20),
+                          color: Colors.grey,
+                          tooltip: 'Copy this definition',
+                          onPressed: () {
+                            final String copyHtml =
+                                rawDefinitions[index]['processedHtml'] ??
+                                '${rawDefinitions[index]['headwordHtml']}\n${rawDefinitions[index]['rawContent']}';
+                            final plainText = copyHtml.replaceAll(
+                              RegExp(
+                                r'<[^>]*>',
+                                multiLine: true,
+                                caseSensitive: true,
+                              ),
+                              '',
+                            );
+                            Clipboard.setData(ClipboardData(text: plainText));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Copied definition to clipboard'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         ],

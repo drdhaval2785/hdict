@@ -282,14 +282,17 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
               },
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: ElevatedButton(
-              onPressed: _startQuiz,
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: ElevatedButton(
+                onPressed: _startQuiz,
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 50),
+                ),
+                child: Text('Start Random Session (${settings.flashCardWordCount} words)'),
               ),
-              child: Text('Start Random Session (${settings.flashCardWordCount} words)'),
             ),
           ),
         ],
@@ -596,21 +599,24 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
               },
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: ElevatedButton(
-              onPressed: () {
-                _dbHelper.addFlashCardScore(
-                  _score,
-                  _quizWords.length,
-                  _selectedDictIds.join(','),
-                );
-                setState(() => _isQuizStarted = false);
-              },
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: ElevatedButton(
+                onPressed: () {
+                  _dbHelper.addFlashCardScore(
+                    _score,
+                    _quizWords.length,
+                    _selectedDictIds.join(','),
+                  );
+                  setState(() => _isQuizStarted = false);
+                },
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 50),
+                ),
+                child: const Text('Finish Review'),
               ),
-              child: const Text('Finish Review'),
             ),
           ),
         ],
