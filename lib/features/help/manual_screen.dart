@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:hdict/features/home/widgets/app_drawer.dart';
 
@@ -22,7 +22,7 @@ class ManualScreen extends StatelessWidget {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          
+
           if (snapshot.hasError) {
             return Center(
               child: Padding(
@@ -39,13 +39,28 @@ class ManualScreen extends StatelessWidget {
             data: data,
             selectable: true,
             styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
-              h1: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: Color(0xFFFFAB40)),
-              h2: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Color(0xFFFFAB40), height: 2.0),
-              h3: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, height: 1.5),
+              h1: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 24,
+                color: Color(0xFFFFAB40),
+              ),
+              h2: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+                color: Color(0xFFFFAB40),
+                height: 2.0,
+              ),
+              h3: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+                height: 1.5,
+              ),
               p: const TextStyle(fontSize: 16, height: 1.6),
               listBullet: const TextStyle(fontSize: 16, height: 1.6),
               code: TextStyle(
-                backgroundColor: theme.colorScheme.onSurface.withValues(alpha: 0.1),
+                backgroundColor: theme.colorScheme.onSurface.withValues(
+                  alpha: 0.1,
+                ),
                 fontFamily: 'monospace',
                 color: theme.colorScheme.primary,
               ),

@@ -1,6 +1,11 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+
+## [1.4.6] - 2026-03-17
+  
+### Added
+- **Database optimization**: Database optimization option given to users in Settings to vacuum the database and free up space.
  
 ## [1.4.5] - 2026-03-16
   
