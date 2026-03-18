@@ -39,9 +39,21 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_macos_build_settings(target)
 
+    # Remove PrivacyInfo.xcprivacy from Compile Sources to prevent the "no rule to process file" warning
+    target.build_phases.each do |build_phase|
+      if build_phase.isa == 'PBXSourcesBuildPhase'
+        build_phase.files.each do |file|
+          if file.file_ref && file.file_ref.path && file.file_ref.path.end_with?('.xcprivacy')
+            build_phase.remove_build_file(file)
+          end
+        end
+      end
+    end
+
     target.build_configurations.each do |config|
       config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf-with-dsym'
       config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+      config.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '10.15'
     end
 
     # Silence sqlite3 warnings

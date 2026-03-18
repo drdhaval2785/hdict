@@ -488,6 +488,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Future<void> _checkAndPromptReview() async {
+    // Give the app some time to settle and for the user to see the home screen
+    await Future.delayed(const Duration(seconds: 5));
+    if (!mounted) return;
+
     final settings = context.read<SettingsProvider>();
     
     if (settings.hasGivenReview || settings.reviewPromptCount >= 5) {
@@ -498,41 +502,63 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     final now = DateTime.now().millisecondsSinceEpoch;
     if (now >= settings.nextReviewPromptDate) {
-      final InAppReview inAppReview = InAppReview.instance;
+      if (!mounted) return;
 
-      if (await inAppReview.isAvailable()) {
-        await settings.incrementReviewPromptCountAndSetNextDate();
-        inAppReview.requestReview();
-      } else {
-        // Fallback for platforms where in-app review is not available natively e.g Linux (Snap Store)
-        if (Platform.isLinux) {
-          if (!mounted) return;
-          showDialog(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Enjoying hdict?'),
-              content: const Text(
-                  'If you find this app useful, please consider giving it a rating or review on the Snap Store.'),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    settings.incrementReviewPromptCountAndSetNextDate();
-                  },
-                  child: const Text('Later'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    settings.setHasGivenReview(true);
-                    launchUrl(Uri.parse('https://snapcraft.io/hdict')); 
-                  },
-                  child: const Text('Rate on Snap Store'),
-                ),
-              ],
+      // Show a stable internal dialog first to prevent the fleeting native popup issue
+      final bool? confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
+            children: [
+              Icon(Icons.stars_rounded, color: Colors.amber, size: 28),
+              SizedBox(width: 12),
+              Text('Enjoying hdict?'),
+            ],
+          ),
+          content: const Text(
+            'Your feedback helps us reach more dictionary enthusiasts! Would you like to share your rating with us?',
+            style: TextStyle(fontSize: 15),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(
+                'Later',
+                style: TextStyle(color: Colors.grey[600]),
+              ),
             ),
-          );
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Rate Now'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirm == true) {
+        // Mark as finished so they aren't prompted again
+        await settings.setHasGivenReview(true);
+        
+        final InAppReview inAppReview = InAppReview.instance;
+        if (await inAppReview.isAvailable()) {
+          // Native call - now with focus and intent
+          await inAppReview.requestReview();
+        } else {
+          // Fallback link for Linux/Snap and others
+          final String storeUrl = Platform.isLinux 
+              ? 'https://snapcraft.io/hdict' 
+              : 'https://github.com/drdhaval2785/hdict';
+          launchUrl(Uri.parse(storeUrl));
         }
+      } else if (confirm == false) {
+        // They said "Later", so we postpone for 15 days as per rule
+        await settings.incrementReviewPromptCountAndSetNextDate();
       }
     }
   }
