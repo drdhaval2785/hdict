@@ -489,13 +489,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Future<void> _checkAndPromptReview() async {
     final settings = context.read<SettingsProvider>();
-    await settings.incrementAppLaunchCount();
+    
+    if (settings.hasGivenReview || settings.reviewPromptCount >= 5) {
+      return;
+    }
 
-    if (!settings.hasShownReviewPrompt && settings.appLaunchCount >= 50) {
+    await settings.initAppFirstLaunchDateIfNeeded();
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now >= settings.nextReviewPromptDate) {
       final InAppReview inAppReview = InAppReview.instance;
 
       if (await inAppReview.isAvailable()) {
-        await settings.setHasShownReviewPrompt(true);
+        await settings.incrementReviewPromptCountAndSetNextDate();
         inAppReview.requestReview();
       } else {
         // Fallback for platforms where in-app review is not available natively e.g Linux (Snap Store)
@@ -511,14 +517,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 TextButton(
                   onPressed: () {
                     Navigator.pop(ctx);
-                    settings.setHasShownReviewPrompt(true);
+                    settings.incrementReviewPromptCountAndSetNextDate();
                   },
                   child: const Text('Later'),
                 ),
                 ElevatedButton(
                   onPressed: () {
                     Navigator.pop(ctx);
-                    settings.setHasShownReviewPrompt(true);
+                    settings.setHasGivenReview(true);
                     launchUrl(Uri.parse('https://snapcraft.io/hdict')); 
                   },
                   child: const Text('Rate on Snap Store'),

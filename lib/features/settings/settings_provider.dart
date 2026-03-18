@@ -35,8 +35,10 @@ class SettingsProvider with ChangeNotifier {
   static const String _keyHeadwordColor = 'headword_color';
   static const String _keySearchResultLimit = 'search_result_limit';
   static const String _keyFlashCardWordCount = 'flash_card_word_count';
-  static const String _keyAppLaunchCount = 'app_launch_count';
-  static const String _keyHasShownReviewPrompt = 'has_shown_review_prompt';
+  static const String _keyAppFirstLaunchDate = 'app_first_launch_date';
+  static const String _keyNextReviewPromptDate = 'next_review_prompt_date';
+  static const String _keyReviewPromptCount = 'review_prompt_count';
+  static const String _keyHasGivenReview = 'has_given_review';
 
   String _fontFamily = 'Roboto';
   double _fontSize = 16.0;
@@ -54,8 +56,10 @@ class SettingsProvider with ChangeNotifier {
   Color _headwordColor = Colors.brown;
   int _searchResultLimit = 50;
   int _flashCardWordCount = 10;
-  int _appLaunchCount = 0;
-  bool _hasShownReviewPrompt = false;
+  int _appFirstLaunchDate = 0;
+  int _nextReviewPromptDate = 0;
+  int _reviewPromptCount = 0;
+  bool _hasGivenReview = false;
 
   String get fontFamily => _fontFamily;
   double get fontSize => _fontSize;
@@ -73,8 +77,10 @@ class SettingsProvider with ChangeNotifier {
   Color get headwordColor => _headwordColor;
   int get searchResultLimit => _searchResultLimit;
   int get flashCardWordCount => _flashCardWordCount;
-  int get appLaunchCount => _appLaunchCount;
-  bool get hasShownReviewPrompt => _hasShownReviewPrompt;
+  int get appFirstLaunchDate => _appFirstLaunchDate;
+  int get nextReviewPromptDate => _nextReviewPromptDate;
+  int get reviewPromptCount => _reviewPromptCount;
+  bool get hasGivenReview => _hasGivenReview;
 
   /// Returns the background color, adapting to the theme if it's set to the default white.
   Color getEffectiveBackgroundColor(BuildContext context) {
@@ -133,8 +139,10 @@ class SettingsProvider with ChangeNotifier {
         Color(prefs.getInt(_keyHeadwordColor) ?? Colors.brown.toARGB32());
     _searchResultLimit = prefs.getInt(_keySearchResultLimit) ?? 50;
     _flashCardWordCount = prefs.getInt(_keyFlashCardWordCount) ?? 10;
-    _appLaunchCount = prefs.getInt(_keyAppLaunchCount) ?? 0;
-    _hasShownReviewPrompt = prefs.getBool(_keyHasShownReviewPrompt) ?? false;
+    _appFirstLaunchDate = prefs.getInt(_keyAppFirstLaunchDate) ?? 0;
+    _nextReviewPromptDate = prefs.getInt(_keyNextReviewPromptDate) ?? 0;
+    _reviewPromptCount = prefs.getInt(_keyReviewPromptCount) ?? 0;
+    _hasGivenReview = prefs.getBool(_keyHasGivenReview) ?? false;
     notifyListeners();
   }
 
@@ -250,17 +258,31 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> incrementAppLaunchCount() async {
-    _appLaunchCount++;
+  Future<void> initAppFirstLaunchDateIfNeeded() async {
+    if (_appFirstLaunchDate == 0) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      _appFirstLaunchDate = now;
+      _nextReviewPromptDate = now + (15 * 24 * 60 * 60 * 1000);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_keyAppFirstLaunchDate, _appFirstLaunchDate);
+      await prefs.setInt(_keyNextReviewPromptDate, _nextReviewPromptDate);
+      notifyListeners();
+    }
+  }
+
+  Future<void> incrementReviewPromptCountAndSetNextDate() async {
+    _reviewPromptCount++;
+    _nextReviewPromptDate = DateTime.now().millisecondsSinceEpoch + (15 * 24 * 60 * 60 * 1000);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_keyAppLaunchCount, _appLaunchCount);
+    await prefs.setInt(_keyReviewPromptCount, _reviewPromptCount);
+    await prefs.setInt(_keyNextReviewPromptDate, _nextReviewPromptDate);
     notifyListeners();
   }
 
-  Future<void> setHasShownReviewPrompt(bool shown) async {
-    _hasShownReviewPrompt = shown;
+  Future<void> setHasGivenReview(bool given) async {
+    _hasGivenReview = given;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyHasShownReviewPrompt, shown);
+    await prefs.setBool(_keyHasGivenReview, given);
     notifyListeners();
   }
 }
