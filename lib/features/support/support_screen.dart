@@ -9,19 +9,20 @@ class SupportScreen extends StatelessWidget {
   Future<void> _launchUrl(String urlString, BuildContext context) async {
     final Uri url = Uri.parse(urlString);
     try {
-      if (await canLaunchUrl(url)) {
+      final bool canLaunch = await canLaunchUrl(url);
+      if (canLaunch) {
         await launchUrl(url, mode: LaunchMode.externalApplication);
       } else {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not launch PayPal. Please check your internet connection.')),
+            SnackBar(content: Text('Could not open link: $urlString. No application found to handle this request.')),
           );
         }
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text('Error launching URL: $e')),
         );
       }
     }

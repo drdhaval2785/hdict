@@ -67,8 +67,20 @@ class AboutScreen extends StatelessWidget {
                         scheme: 'mailto',
                         path: 'drdhaval2785@gmail.com',
                       );
-                      if (await canLaunchUrl(emailLaunchUri)) {
-                        await launchUrl(emailLaunchUri);
+                      try {
+                        if (await canLaunchUrl(emailLaunchUri)) {
+                          await launchUrl(emailLaunchUri);
+                        } else if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('No email application found.')),
+                          );
+                        }
+                      } catch (e) {
+                         if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Error launching email: $e')),
+                          );
+                        }
                       }
                     },
                     child: const Text(
@@ -111,8 +123,20 @@ class AboutScreen extends StatelessWidget {
                       final Uri githubUri = Uri.parse(
                         'https://github.com/drdhaval2785/hdict/',
                       );
-                      if (await canLaunchUrl(githubUri)) {
-                        await launchUrl(githubUri);
+                      try {
+                        if (await canLaunchUrl(githubUri)) {
+                          await launchUrl(githubUri);
+                        } else if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('No browser application found to open GitHub.')),
+                          );
+                        }
+                      } catch (e) {
+                         if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Error launching GitHub: $e')),
+                          );
+                        }
                       }
                     },
                     child: const Text(
