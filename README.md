@@ -47,9 +47,17 @@ A high-performance, feature-rich dictionary application built with Flutter. Opti
 - **Typography & UI**: Choose from curated Google Fonts, adjust font sizes globally, and enjoy reliable boundary padding for seamless interaction on mobile devices.
 - **History Retention**: Automatically clean up your search history after a set number of days.
 
+### Importing Dictionaries
+`hdict` supports multiple dictionary formats including StarDict, MDict, Slob, and DICTD.
+
+1. Open the **Manage Dictionaries** menu in the sidebar.
+2. Choose **Select by Language** to instantly browse and download 1900+ dictionaries.
+3. Alternatively, tap the **Import File**, **Import Folder**, or **Download from Web** button.
+4. Select your `.slob`, `.mdx`, `.zip`, `.7z` etc. dictionary files or folders to parse entirely offline into the local database.
+
 ---
 
-## 🚀 Quickstart
+## 🚀 Developers' Corner
 
 ### Prerequisites
 - [Flutter SDK](https://docs.flutter.dev/get-started/install) (Stable channel recommended)
@@ -75,17 +83,9 @@ A high-performance, feature-rich dictionary application built with Flutter. Opti
    flutter run
    ```
 
-### Importing Dictionaries
-`hdict` supports multiple dictionary formats including StarDict, MDict, Slob, and DICTD.
-
-1. Open the **Manage Dictionaries** menu in the sidebar.
-2. Choose **Select by Language** to instantly browse and download 1900+ dictionaries.
-3. Alternatively, tap the **Import File**, **Import Folder**, or **Download from Web** button.
-4. Select your `.slob`, `.mdx`, `.zip`, `.7z` etc. dictionary files or folders to parse entirely offline into the local database.
-
 ---
 
-## 🛠️ Build Commands
+### 🛠️ Build Commands
 
 Build for your platform of choice:
 
