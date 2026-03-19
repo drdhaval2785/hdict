@@ -1,5 +1,14 @@
 # hdict
 
+<p align="left">
+  <a href="https://apps.apple.com/in/app/hdict/id6759493062">
+    <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83&amp;releaseDate=1719878400" alt="Download on the App Store" height="40">
+  </a>
+  <a href="https://snapcraft.io/hdict">
+    <img src="https://snapcraft.io/static/images/badges/en/snap-store-black.svg" alt="Get it from the Snap Store" height="40">
+  </a>
+</p>
+
 A high-performance, feature-rich dictionary application built with Flutter. Optimized for speed, highly customizable, and designed for a premium user experience across all platforms.
 
 **Dedicated to Hiral.**
