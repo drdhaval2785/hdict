@@ -857,23 +857,6 @@ class _DictionaryManagementScreenState
           'Manage Dictionaries',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8.0),
-            child: TextButton.icon(
-              onPressed: _isLoading || _dictionaries.isEmpty ? null : _reindexAll,
-              icon: const Icon(Icons.refresh, size: 20, color: Colors.white),
-              label: const Text(
-                'Reindex All',
-                style: TextStyle(color: Colors.white),
-              ),
-              style: TextButton.styleFrom(
-                backgroundColor:
-                    Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-              ),
-            ),
-          ),
-        ],
       ),
       drawer: const AppDrawer(),
       persistentFooterButtons: [
@@ -991,6 +974,19 @@ class _DictionaryManagementScreenState
                         borderRadius: BorderRadius.circular(12),
                       ),
                       contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: OutlinedButton.icon(
+                    onPressed: _isLoading || _dictionaries.isEmpty ? null : _reindexAll,
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('Reindex All'),
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
                 ),
