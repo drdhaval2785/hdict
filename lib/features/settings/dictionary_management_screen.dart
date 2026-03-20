@@ -559,7 +559,6 @@ class _DictionaryManagementScreenState
   }
 
   Future<void> _importFolder() async {
-    debugPrint('DEBUG: _importFolder called');
     final String? folderPath = await FilePicker.platform.getDirectoryPath();
     if (folderPath == null) return;
     if (!mounted) return;
@@ -660,13 +659,10 @@ class _DictionaryManagementScreenState
         
         // Auto-assign to group if folder name was captured
         if (progress.dictId != null && progress.groupName != null) {
-          debugPrint('ImportFolder: Auto-assigning dictId ${progress.dictId} to group "${progress.groupName}"');
           await DictionaryGroupManager.addDictionaryToGroup(
             progress.groupName!,
             progress.dictId!,
           );
-        } else if (progress.dictId != null) {
-          debugPrint('ImportFolder: dictId ${progress.dictId} has NO groupName');
         }
 
         if (progress.isCompleted) {
