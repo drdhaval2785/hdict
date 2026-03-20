@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:file_selector/file_selector.dart';
+import 'package:file_picker/file_picker.dart';
 
 import 'package:hdict/core/manager/dictionary_manager.dart';
 import 'package:hdict/features/home/widgets/app_drawer.dart';
@@ -524,7 +525,7 @@ class _DictionaryManagementScreenState
   }
 
   Future<void> _importFolder() async {
-    final String? folderPath = await getDirectoryPath();
+    final String? folderPath = await FilePicker.platform.getDirectoryPath();
     if (folderPath == null) return;
     if (!mounted) return;
 
