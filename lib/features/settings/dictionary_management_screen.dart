@@ -117,6 +117,7 @@ class _DictionaryManagementScreenState
       final bool index = urlString['index'] ?? false;
       if (!mounted) return;
 
+      bool cancelled = false;
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -128,7 +129,13 @@ class _DictionaryManagementScreenState
               content: ValueListenableBuilder<ImportProgress>(
                 valueListenable: _progressNotifier,
                 builder: (context, progress, child) {
-                  return _buildProgressContent(progress);
+                  return _buildProgressContent(
+                    progress,
+                    onCancel: () {
+                      cancelled = true;
+                      Navigator.pop(context);
+                    },
+                  );
                 },
               ),
             ),
@@ -142,6 +149,7 @@ class _DictionaryManagementScreenState
           indexDefinitions: index,
         );
         await for (final progress in stream) {
+          if (cancelled) break;
           _progressNotifier.value = progress;
           if (progress.isCompleted) {
             if (progress.error != null) {
@@ -198,6 +206,7 @@ class _DictionaryManagementScreenState
       final bool index = result['index'] ?? false;
       if (urls.isEmpty || !mounted) return;
 
+      bool cancelled = false;
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -209,7 +218,13 @@ class _DictionaryManagementScreenState
               content: ValueListenableBuilder<ImportProgress>(
                 valueListenable: _progressNotifier,
                 builder: (context, progress, child) {
-                  return _buildProgressContent(progress);
+                  return _buildProgressContent(
+                    progress,
+                    onCancel: () {
+                      cancelled = true;
+                      Navigator.pop(context);
+                    },
+                  );
                 },
               ),
             ),
@@ -221,6 +236,7 @@ class _DictionaryManagementScreenState
       int failureCount = 0;
 
       for (int i = 0; i < urls.length; i++) {
+        if (cancelled) break;
         final url = urls[i];
         try {
           final stream = _dictionaryManager.downloadAndImportDictionaryStream(
@@ -229,6 +245,7 @@ class _DictionaryManagementScreenState
             sourceUrl: url,
           );
           await for (final progress in stream) {
+            if (cancelled) break;
             _progressNotifier.value = ImportProgress(
                message: urls.length > 1 ? '(${i + 1}/${urls.length}) ${progress.message}' : progress.message,
                value: progress.value,
@@ -378,6 +395,7 @@ class _DictionaryManagementScreenState
 
       if (!mounted) return;
 
+      bool cancelled = false;
       // Show progress dialog
       showDialog(
         context: context,
@@ -390,7 +408,13 @@ class _DictionaryManagementScreenState
               content: ValueListenableBuilder<ImportProgress>(
                 valueListenable: _progressNotifier,
                 builder: (context, progress, child) {
-                  return _buildProgressContent(progress);
+                  return _buildProgressContent(
+                    progress,
+                    onCancel: () {
+                      cancelled = true;
+                      Navigator.pop(context);
+                    },
+                  );
                 },
               ),
             ),
@@ -457,6 +481,7 @@ class _DictionaryManagementScreenState
         }
 
         await for (final progress in stream) {
+          if (cancelled) break;
           _progressNotifier.value = progress;
           if (progress.isCompleted && progress.error != null) {
             throw Exception(progress.error);
@@ -558,6 +583,7 @@ class _DictionaryManagementScreenState
 
     if (!mounted) return;
 
+      bool cancelled = false;
     // Show progress dialog
     showDialog(
       context: context,
@@ -570,7 +596,13 @@ class _DictionaryManagementScreenState
             content: ValueListenableBuilder<ImportProgress>(
               valueListenable: _progressNotifier,
               builder: (context, progress, child) {
-                return _buildProgressContent(progress);
+                return _buildProgressContent(
+                  progress,
+                  onCancel: () {
+                    cancelled = true;
+                    Navigator.pop(context);
+                  },
+                );
               },
             ),
           ),
@@ -587,6 +619,7 @@ class _DictionaryManagementScreenState
       );
 
       await for (final progress in stream) {
+        if (cancelled) break;
         _progressNotifier.value = progress;
         if (progress.isCompleted) {
           incompleteEntries = progress.incompleteEntries;
@@ -1065,6 +1098,7 @@ class _DictionaryManagementScreenState
         DeletionProgress(message: 'Starting deletion...', value: 0.0),
       );
 
+      bool cancelled = false;
       if (!mounted) return;
 
       showDialog(
@@ -1085,6 +1119,21 @@ class _DictionaryManagementScreenState
                         LinearProgressIndicator(value: progress.value),
                         const SizedBox(height: 16),
                         Text(progress.message, textAlign: TextAlign.center),
+                        if (!progress.isCompleted) ...[
+                          const SizedBox(height: 24),
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              cancelled = true;
+                              Navigator.pop(context);
+                            },
+                            icon: const Icon(Icons.cancel, size: 18),
+                            label: const Text('Cancel Operation'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.red,
+                              side: const BorderSide(color: Colors.red),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   );
@@ -1098,6 +1147,7 @@ class _DictionaryManagementScreenState
       try {
         final stream = _dictionaryManager.deleteDictionaryStream(dict['id']);
         await for (final progress in stream) {
+          if (cancelled) break;
           progressNotifier.value = progress;
         }
 
@@ -1168,6 +1218,7 @@ class _DictionaryManagementScreenState
 
     if (indexDefinitions != null) {
       if (!mounted) return;
+      bool cancelled = false;
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -1179,7 +1230,13 @@ class _DictionaryManagementScreenState
               content: ValueListenableBuilder<ImportProgress>(
                 valueListenable: _progressNotifier,
                 builder: (context, progress, child) {
-                  return _buildProgressContent(progress);
+                  return _buildProgressContent(
+                    progress,
+                    onCancel: () {
+                      cancelled = true;
+                      Navigator.pop(context);
+                    },
+                  );
                 },
               ),
             ),
@@ -1193,6 +1250,7 @@ class _DictionaryManagementScreenState
           indexDefinitions: indexDefinitions,
         );
         await for (final progress in stream) {
+          if (cancelled) break;
           _progressNotifier.value = progress;
           if (progress.isCompleted && progress.error != null) {
             throw Exception(progress.error);
@@ -1218,7 +1276,7 @@ class _DictionaryManagementScreenState
     }
   }
 
-  Widget _buildProgressContent(ImportProgress progress) {
+  Widget _buildProgressContent(ImportProgress progress, {VoidCallback? onCancel}) {
     return SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1240,6 +1298,18 @@ class _DictionaryManagementScreenState
               '${progress.headwordCount} headwords'
               '${(progress.definitionWordCount > 0) ? ', ${progress.definitionWordCount} definition words indexed' : ' indexed'}',
               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+          ],
+          if (onCancel != null && !progress.isCompleted) ...[
+            const SizedBox(height: 24),
+            OutlinedButton.icon(
+              onPressed: onCancel,
+              icon: const Icon(Icons.cancel, size: 18),
+              label: const Text('Cancel Operation'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.red,
+                side: const BorderSide(color: Colors.red),
+              ),
             ),
           ],
         ],
