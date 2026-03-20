@@ -21,6 +21,7 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
   String? _selectedSourceLanguage;
   String? _selectedTargetLanguage;
   bool _indexDefinitions = false;
+  final Set<String> _selectedUrls = {};
 
   @override
   void initState() {
@@ -285,6 +286,7 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
             setState(() {
               _selectedSourceLanguage = code;
               _selectedTargetLanguage = null;
+              _selectedUrls.clear();
             });
             FocusManager.instance.primaryFocus?.unfocus();
           },
@@ -316,6 +318,7 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
               : (String? value) {
             setState(() {
               _selectedTargetLanguage = value;
+              _selectedUrls.clear();
             });
           },
         ),
@@ -354,9 +357,38 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
         else ...[
           Padding(
             padding: const EdgeInsets.only(bottom: 8.0),
-            child: Text(
-              'Available Dictionaries (${_filteredDictionaries.length})',
-              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Available Dictionaries (${_filteredDictionaries.length})',
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+                  ),
+                ),
+                TextButton.icon(
+                  icon: const Icon(Icons.select_all, size: 18),
+                  label: Text(
+                    _filteredDictionaries.where((d) => d.getPreferredRelease() != null && !_downloadedUrls.contains(d.getPreferredRelease()!.url)).every((d) => _selectedUrls.contains(d.getPreferredRelease()!.url)) && _selectedUrls.isNotEmpty
+                        ? 'Deselect All'
+                        : 'Select All',
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      final availableUrls = _filteredDictionaries
+                          .map((d) => d.getPreferredRelease()?.url)
+                          .where((url) => url != null && !_downloadedUrls.contains(url))
+                          .cast<String>()
+                          .toList();
+
+                      if (availableUrls.every((url) => _selectedUrls.contains(url)) && availableUrls.isNotEmpty) {
+                        _selectedUrls.removeAll(availableUrls);
+                      } else {
+                        _selectedUrls.addAll(availableUrls);
+                      }
+                    });
+                  },
+                ),
+              ],
             ),
           ),
           Expanded(
@@ -438,17 +470,15 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
                                 ),
                               )
                             else
-                              ElevatedButton.icon(
-                                icon: const Icon(Icons.download, size: 18),
-                                label: const Text('Download'),
-                                style: ElevatedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                                onPressed: () {
-                                  Navigator.pop(context, {
-                                    'url': release.url,
-                                    'index': _indexDefinitions,
+                              Checkbox(
+                                value: _selectedUrls.contains(release.url),
+                                onChanged: (bool? checked) {
+                                  setState(() {
+                                    if (checked == true) {
+                                      _selectedUrls.add(release.url);
+                                    } else {
+                                      _selectedUrls.remove(release.url);
+                                    }
                                   });
                                 },
                               ),
@@ -461,6 +491,23 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
               },
             ),
           ),
+          if (_selectedUrls.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 16.0),
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.download),
+                label: Text('Download ${_selectedUrls.length} ${(_selectedUrls.length == 1) ? "Dictionary" : "Dictionaries"}'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.all(16.0),
+                ),
+                onPressed: () {
+                  Navigator.pop(context, {
+                    'urls': _selectedUrls.toList(),
+                    'index': _indexDefinitions,
+                  });
+                },
+              ),
+            ),
         ],
       ],
     );

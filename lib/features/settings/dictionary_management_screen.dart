@@ -193,10 +193,10 @@ class _DictionaryManagementScreenState
       builder: (context) => const StardictDownloadDialog(),
     );
 
-    if (result != null && result is Map && result['url'] != null) {
-      final String url = result['url'];
+    if (result != null && result is Map && result['urls'] != null) {
+      final List<String> urls = (result['urls'] as List).cast<String>();
       final bool index = result['index'] ?? false;
-      if (!mounted) return;
+      if (urls.isEmpty || !mounted) return;
 
       showDialog(
         context: context,
@@ -205,7 +205,7 @@ class _DictionaryManagementScreenState
           return PopScope(
             canPop: false,
             child: AlertDialog(
-              title: const Text('Downloading & Importing'),
+              title: Text(urls.length == 1 ? 'Downloading Dictionary' : 'Downloading ${urls.length} Dictionaries'),
               content: ValueListenableBuilder<ImportProgress>(
                 valueListenable: _progressNotifier,
                 builder: (context, progress, child) {
@@ -217,54 +217,72 @@ class _DictionaryManagementScreenState
         },
       );
 
-      try {
-        final stream = _dictionaryManager.downloadAndImportDictionaryStream(
-          url,
-          indexDefinitions: index,
-          sourceUrl: url,
-        );
-        await for (final progress in stream) {
-          _progressNotifier.value = progress;
-          if (progress.isCompleted) {
-            if (progress.error != null) {
-              throw Exception(progress.error);
+      int successCount = 0;
+      int failureCount = 0;
+
+      for (int i = 0; i < urls.length; i++) {
+        final url = urls[i];
+        try {
+          final stream = _dictionaryManager.downloadAndImportDictionaryStream(
+            url,
+            indexDefinitions: index,
+            sourceUrl: url,
+          );
+          await for (final progress in stream) {
+            _progressNotifier.value = ImportProgress(
+               message: urls.length > 1 ? '(${i + 1}/${urls.length}) ${progress.message}' : progress.message,
+               value: progress.value,
+               isCompleted: progress.isCompleted,
+               error: progress.error,
+               sampleWords: progress.sampleWords,
+               incompleteEntries: progress.incompleteEntries,
+            );
+            if (progress.isCompleted) {
+              if (progress.error != null) {
+                throw Exception(progress.error);
+              }
             }
           }
-        }
-
-        if (mounted) {
-          Navigator.pop(context); // Close progress dialog
-          final lastProgress = _progressNotifier.value;
-          final String sampleWordsText = lastProgress.sampleWords != null
-              ? '\n\nSample words: ${lastProgress.sampleWords!.join(', ')}'
-              : '';
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Dictionary downloaded and imported successfully$sampleWordsText',
-              ),
-              duration: const Duration(seconds: 5),
-            ),
-          );
-          await _loadDictionaries();
-        }
-      } catch (e) {
-        if (mounted) {
-          Navigator.pop(context); // Close progress dialog
-          final String errorStr = e.toString();
-          String message;
-          if (errorStr.contains('ALREADY_EXISTS:')) {
-            message = errorStr.split('ALREADY_EXISTS:').last.trim();
-          } else if (errorStr.contains('already in your library')) {
-            message = errorStr.replaceAll('Exception: ', '').trim();
-          } else {
-            message = 'Download/Import failed: $e';
+          successCount++;
+        } catch (e) {
+          failureCount++;
+          if (mounted) {
+            final String errorStr = e.toString();
+            String message;
+            if (errorStr.contains('ALREADY_EXISTS:')) {
+              message = errorStr.split('ALREADY_EXISTS:').last.trim();
+            } else if (errorStr.contains('already in your library')) {
+              message = errorStr.replaceAll('Exception: ', '').trim();
+            } else {
+              message = 'Download/Import failed: $e';
+            }
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text('Failed (${i + 1}/${urls.length}): $message')));
           }
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(message)));
         }
+      }
+
+      if (mounted) {
+        Navigator.pop(context); // Close progress dialog
+        
+        String msg;
+        if (urls.length == 1) {
+           msg = successCount == 1 ? 'Dictionary downloaded and imported successfully' : 'Failed to import dictionary';
+        } else {
+           msg = '$successCount successfully imported.';
+           if (failureCount > 0) {
+             msg += ' $failureCount failed.';
+           }
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+        await _loadDictionaries();
       }
     }
   }
