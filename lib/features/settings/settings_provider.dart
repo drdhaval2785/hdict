@@ -78,6 +78,7 @@ class SettingsProvider with ChangeNotifier {
   int _nextReviewPromptDate = 0;
   int _reviewPromptCount = 0;
   bool _hasGivenReview = false;
+  bool _reviewPromptedThisSession = false;
 
   AppThemeMode get appThemeMode => _appThemeMode;
   String get fontFamily => _fontFamily;
@@ -100,6 +101,7 @@ class SettingsProvider with ChangeNotifier {
   int get nextReviewPromptDate => _nextReviewPromptDate;
   int get reviewPromptCount => _reviewPromptCount;
   bool get hasGivenReview => _hasGivenReview;
+  bool get reviewPromptedThisSession => _reviewPromptedThisSession;
 
   /// Returns the background color, adapting to the theme if it's set to the default white.
   Color getEffectiveBackgroundColor(BuildContext context) {
@@ -320,6 +322,11 @@ class SettingsProvider with ChangeNotifier {
     _hasGivenReview = given;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyHasGivenReview, given);
+    notifyListeners();
+  }
+
+  void setReviewPromptedThisSession(bool prompted) {
+    _reviewPromptedThisSession = prompted;
     notifyListeners();
   }
 }

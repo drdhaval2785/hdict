@@ -495,11 +495,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     final settings = context.read<SettingsProvider>();
     
-    // In Debug Mode, we always bypass checks so you can test the UI
+    // Check if we already prompted in this session
+    if (settings.reviewPromptedThisSession) {
+      return;
+    }
+
+    // In Debug Mode, we always bypass most checks so you can test the UI,
+    // but we still respect the session flag and we don't spam if already given.
     if (!kDebugMode) {
       if (settings.hasGivenReview || settings.reviewPromptCount >= 5) {
         return;
       }
+    } else {
+      // In debug, if they already manually said they gave review, maybe stop? 
+      // But user said "for the session if the user avoids giving feedback in debug app mode"
     }
 
     await settings.initAppFirstLaunchDateIfNeeded();
@@ -511,14 +520,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
       final InAppReview inAppReview = InAppReview.instance;
       if (await inAppReview.isAvailable()) {
+        // Mark as prompted for this session BEFORE showing, so returning to home doesn't trigger it again
+        settings.setReviewPromptedThisSession(true);
+        
         await settings.incrementReviewPromptCountAndSetNextDate();
         await inAppReview.requestReview();
-      } else {
+      } else if (Platform.isLinux) {
         // Fallback for platforms where in-app review is not available natively e.g Linux (Snap Store)
-        if (Platform.isLinux) {
-          if (!mounted) return;
-          showDialog(
-            context: context,
+        if (!mounted) return;
+        settings.setReviewPromptedThisSession(true);
+        showDialog(
+          context: context,
             builder: (ctx) => AlertDialog(
               title: const Text('Enjoying hdict?'),
               content: const Text(
@@ -544,7 +556,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ],
             ),
           );
-        }
       }
     }
   }
