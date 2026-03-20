@@ -24,6 +24,10 @@ class _DictionaryGroupsScreenState extends State<DictionaryGroupsScreen> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     final dicts = await DictionaryManager.instance.getDictionaries();
+    
+    // Auto-generate groups for already downloaded dictionaries
+    await DictionaryGroupManager.autoGenerateGroupsFromDownloaded(dicts);
+    
     final groups = await DictionaryGroupManager.getGroups();
     
     setState(() {
@@ -151,15 +155,14 @@ class _DictionaryGroupsScreenState extends State<DictionaryGroupsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Dictionary Groups'),
-        actions: [
-           IconButton(
-             icon: const Icon(Icons.add),
-             onPressed: _createCustomGroup,
-             tooltip: 'Create Custom Group',
-           )
-        ],
       ),
       drawer: const AppDrawer(),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _createCustomGroup,
+        icon: const Icon(Icons.add),
+        label: const Text('Create Custom Group'),
+        tooltip: 'Create Custom Group',
+      ),
       body: _groups.isEmpty
           ? const Center(child: Text('No dictionary groups available.'))
           : ListView.builder(

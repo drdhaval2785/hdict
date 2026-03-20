@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hdict/core/manager/dictionary_manager.dart';
+import 'package:hdict/features/settings/services/stardict_service.dart';
 
 class DictionaryGroup {
   final String id;
@@ -108,5 +109,58 @@ class DictionaryGroupManager {
       if (ext.isEmpty || ext['is_enabled'] != 1) return false;
     }
     return true;
+  }
+
+  static Future<void> autoGenerateGroupsFromDownloaded(List<Map<String, dynamic>> installedDicts) async {
+    final groups = await getGroups();
+    // Gather all existing dictIds across all groups to prevent re-adding
+    final Set<int> groupedDictIds = {};
+    for (var group in groups) {
+      groupedDictIds.addAll(group.dictIds);
+    }
+
+    final StardictService stardictService = StardictService();
+    // Fallback: If not fetched yet, try fetching.
+    List<StardictDictionary> availableStardicts = await stardictService.fetchDictionaries();
+    if (availableStardicts.isEmpty) {
+        availableStardicts = await stardictService.refreshDictionaries();
+    }
+    if (availableStardicts.isEmpty) return;
+
+    bool groupsModified = false;
+
+    for (var dict in installedDicts) {
+      final sourceUrl = dict['source_url'] as String?;
+      final dictId = dict['id'] as int;
+
+      if (!groupedDictIds.contains(dictId) && sourceUrl != null && sourceUrl.isNotEmpty) {
+        // Try to match by url
+        StardictDictionary? match;
+        for (var stardict in availableStardicts) {
+            if (stardict.url == sourceUrl || stardict.releases.any((r) => r.url == sourceUrl)) {
+                 match = stardict;
+                 break;
+            }
+        }
+
+        if (match != null) {
+          final groupName = '${match.sourceLanguageCode}-${match.targetLanguageCode}';
+          final groupId = groupName.toLowerCase().replaceAll(' ', '_');
+
+          int extIndex = groups.indexWhere((g) => g.id == groupId);
+          if (extIndex >= 0) {
+            groups[extIndex].dictIds.add(dictId);
+          } else {
+            groups.add(DictionaryGroup(id: groupId, name: groupName, dictIds: [dictId]));
+          }
+          groupedDictIds.add(dictId);
+          groupsModified = true;
+        }
+      }
+    }
+
+    if (groupsModified) {
+      await saveGroups(groups);
+    }
   }
 }
