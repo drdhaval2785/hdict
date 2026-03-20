@@ -9,6 +9,8 @@ import 'package:hdict/features/settings/search_history_screen.dart';
 import 'package:hdict/features/settings/settings_screen.dart';
 import 'package:hdict/features/support/support_screen.dart';
 
+import 'package:hdict/features/settings/dictionary_groups_screen.dart';
+
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
 
@@ -100,6 +102,19 @@ class AppDrawer extends StatelessWidget {
                 context,
                 MaterialPageRoute(
                   builder: (context) => const DictionaryManagementScreen(),
+                ),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.collections_bookmark),
+            title: const Text('Dictionary Groups'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const DictionaryGroupsScreen(),
                 ),
               );
             },

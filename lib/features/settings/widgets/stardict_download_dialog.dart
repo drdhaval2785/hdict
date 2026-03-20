@@ -504,6 +504,7 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
                   Navigator.pop(context, {
                     'urls': _selectedUrls.toList(),
                     'index': _indexDefinitions,
+                    'groupName': '$_selectedSourceLanguage-$_selectedTargetLanguage',
                   });
                 },
               ),

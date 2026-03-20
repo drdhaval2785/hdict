@@ -4,6 +4,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:file_picker/file_picker.dart';
 
 import 'package:hdict/core/manager/dictionary_manager.dart';
+import 'package:hdict/core/manager/dictionary_group_manager.dart';
 import 'package:hdict/features/home/widgets/app_drawer.dart';
 import 'package:hdict/features/settings/widgets/stardict_download_dialog.dart';
 
@@ -205,6 +206,7 @@ class _DictionaryManagementScreenState
     if (result != null && result is Map && result['urls'] != null) {
       final List<String> urls = (result['urls'] as List).cast<String>();
       final bool index = result['index'] ?? false;
+      final String? groupName = result['groupName'] as String?;
       if (urls.isEmpty || !mounted) return;
 
       bool cancelled = false;
@@ -255,6 +257,9 @@ class _DictionaryManagementScreenState
                sampleWords: progress.sampleWords,
                incompleteEntries: progress.incompleteEntries,
             );
+            if (progress.dictId != null && groupName != null) {
+               await DictionaryGroupManager.addDictionaryToGroup(groupName, progress.dictId!);
+            }
             if (progress.isCompleted) {
               if (progress.error != null) {
                 throw Exception(progress.error);
