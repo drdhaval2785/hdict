@@ -170,6 +170,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             const Divider(),
             _buildSectionHeader(theme, 'Appearance'),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: SegmentedButton<AppThemeMode>(
+                segments: AppThemeMode.values
+                    .map((m) => ButtonSegment(value: m, label: Text(m.label)))
+                    .toList(),
+                selected: {settings.appThemeMode},
+                onSelectionChanged: (set) => settings.setAppThemeMode(set.first),
+              ),
+            ),
             ListTile(
               title: const Text('Font Family'),
               subtitle: Text(settings.fontFamily),
@@ -193,24 +203,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-            _buildColorTile(
-              context,
-              'Background Colour',
-              settings.backgroundColor,
-              (color) => settings.setBackgroundColor(color),
-            ),
-            _buildColorTile(
-              context,
-              'Text Colour (Content)',
-              settings.textColor,
-              (color) => settings.setTextColor(color),
-            ),
-            _buildColorTile(
-              context,
-              'Headword Colour',
-              settings.headwordColor,
-              (color) => settings.setHeadwordColor(color),
-            ),
+            if (settings.appThemeMode == AppThemeMode.custom) ...[
+              _buildColorTile(
+                context,
+                'Background Colour',
+                settings.backgroundColor,
+                (color) => settings.setBackgroundColor(color),
+              ),
+              _buildColorTile(
+                context,
+                'Text Colour (Content)',
+                settings.textColor,
+                (color) => settings.setTextColor(color),
+              ),
+              _buildColorTile(
+                context,
+                'Headword Colour',
+                settings.headwordColor,
+                (color) => settings.setHeadwordColor(color),
+              ),
+            ],
             const Divider(),
             _buildSectionHeader(theme, 'Dictionary Interaction'),
             SwitchListTile(

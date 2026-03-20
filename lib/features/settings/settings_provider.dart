@@ -18,7 +18,24 @@ enum SearchMode {
   }
 }
 
+enum AppThemeMode {
+  light('Light'),
+  dark('Dark'),
+  custom('Custom');
+
+  final String label;
+  const AppThemeMode(this.label);
+
+  static AppThemeMode fromString(String value) {
+    return AppThemeMode.values.firstWhere(
+      (e) => e.name == value,
+      orElse: () => AppThemeMode.custom,
+    );
+  }
+}
+
 class SettingsProvider with ChangeNotifier {
+  static const String _keyAppThemeMode = 'app_theme_mode';
   static const String _keyFontFamily = 'font_family';
   static const String _keyFontSize = 'font_size';
   static const String _keyBgColor = 'bg_color';
@@ -40,6 +57,7 @@ class SettingsProvider with ChangeNotifier {
   static const String _keyReviewPromptCount = 'review_prompt_count';
   static const String _keyHasGivenReview = 'has_given_review';
 
+  AppThemeMode _appThemeMode = AppThemeMode.custom;
   String _fontFamily = 'Roboto';
   double _fontSize = 16.0;
   Color _backgroundColor = Colors.white;
@@ -61,6 +79,7 @@ class SettingsProvider with ChangeNotifier {
   int _reviewPromptCount = 0;
   bool _hasGivenReview = false;
 
+  AppThemeMode get appThemeMode => _appThemeMode;
   String get fontFamily => _fontFamily;
   double get fontSize => _fontSize;
   Color get backgroundColor => _backgroundColor;
@@ -84,6 +103,9 @@ class SettingsProvider with ChangeNotifier {
 
   /// Returns the background color, adapting to the theme if it's set to the default white.
   Color getEffectiveBackgroundColor(BuildContext context) {
+    if (_appThemeMode == AppThemeMode.light) return Colors.white;
+    if (_appThemeMode == AppThemeMode.dark) return const Color(0xFF212121);
+    
     final Brightness brightness = Theme.of(context).brightness;
     if (_backgroundColor.toARGB32() == Colors.white.toARGB32()) {
       return brightness == Brightness.light
@@ -95,6 +117,9 @@ class SettingsProvider with ChangeNotifier {
 
   /// Returns the text color, adapting to the theme if it's set to the default black87.
   Color getEffectiveTextColor(BuildContext context) {
+    if (_appThemeMode == AppThemeMode.light) return Colors.black87;
+    if (_appThemeMode == AppThemeMode.dark) return Colors.white70;
+
     final Brightness brightness = Theme.of(context).brightness;
     if (_textColor.toARGB32() == Colors.black87.toARGB32()) {
       return brightness == Brightness.light ? Colors.black87 : Colors.white70;
@@ -104,6 +129,9 @@ class SettingsProvider with ChangeNotifier {
 
   /// Returns the headword color, adapting to the theme if it's set to the default brown.
   Color getEffectiveHeadwordColor(BuildContext context) {
+    if (_appThemeMode == AppThemeMode.light) return Colors.brown;
+    if (_appThemeMode == AppThemeMode.dark) return const Color(0xFFFFAB40);
+
     final Brightness brightness = Theme.of(context).brightness;
     if (_headwordColor.toARGB32() == Colors.brown.toARGB32()) {
       return brightness == Brightness.light
@@ -119,6 +147,8 @@ class SettingsProvider with ChangeNotifier {
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    _appThemeMode = AppThemeMode.fromString(
+        prefs.getString(_keyAppThemeMode) ?? 'custom');
     _fontFamily = prefs.getString(_keyFontFamily) ?? 'Roboto';
     _fontSize = prefs.getDouble(_keyFontSize) ?? 16.0;
     _backgroundColor = Color(prefs.getInt(_keyBgColor) ?? Colors.white.toARGB32());
@@ -143,6 +173,13 @@ class SettingsProvider with ChangeNotifier {
     _nextReviewPromptDate = prefs.getInt(_keyNextReviewPromptDate) ?? 0;
     _reviewPromptCount = prefs.getInt(_keyReviewPromptCount) ?? 0;
     _hasGivenReview = prefs.getBool(_keyHasGivenReview) ?? false;
+    notifyListeners();
+  }
+
+  Future<void> setAppThemeMode(AppThemeMode mode) async {
+    _appThemeMode = mode;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyAppThemeMode, mode.name);
     notifyListeners();
   }
 

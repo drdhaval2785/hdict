@@ -29,7 +29,11 @@ class MyApp extends StatelessWidget {
       title: 'hdict',
       theme: AppTheme.getTheme(Brightness.light, settings.fontFamily),
       darkTheme: AppTheme.getTheme(Brightness.dark, settings.fontFamily),
-      themeMode: ThemeMode.system,
+      themeMode: settings.appThemeMode == AppThemeMode.light
+          ? ThemeMode.light
+          : (settings.appThemeMode == AppThemeMode.dark
+              ? ThemeMode.dark
+              : ThemeMode.system),
       home: const HomeScreen(),
     );
   }
