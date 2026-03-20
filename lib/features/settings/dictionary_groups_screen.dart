@@ -79,39 +79,77 @@ class _DictionaryGroupsScreenState extends State<DictionaryGroupsScreen> {
   Future<void> _manageGroupDictionaries(DictionaryGroup group) async {
     final List<int> originalDictIds = List.from(group.dictIds);
     final List<int> selectedDictIds = List.from(group.dictIds);
+    String searchQuery = '';
 
     await showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            final filteredDicts = searchQuery.isEmpty
+                ? _allDictionaries
+                : _allDictionaries.where((dict) {
+                    return (dict['name'] as String)
+                        .toLowerCase()
+                        .contains(searchQuery.toLowerCase());
+                  }).toList();
+
             return AlertDialog(
               title: Text('Manage "${group.name}"'),
               content: SizedBox(
                 width: double.maxFinite,
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: _allDictionaries.length,
-                  itemBuilder: (context, index) {
-                    final dict = _allDictionaries[index];
-                    final dictId = dict['id'] as int;
-                    final isSelected = selectedDictIds.contains(dictId);
-                    
-                    return CheckboxListTile(
-                      title: Text(dict['name']),
-                      subtitle: Text('${dict['word_count']} headwords'),
-                      value: isSelected,
-                      onChanged: (bool? checked) {
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      decoration: InputDecoration(
+                        hintText: 'Search dictionaries...',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear),
+                                onPressed: () {
+                                  setDialogState(() {
+                                    searchQuery = '';
+                                  });
+                                },
+                              )
+                            : null,
+                      ),
+                      onChanged: (value) {
                         setDialogState(() {
-                          if (checked == true) {
-                            selectedDictIds.add(dictId);
-                          } else {
-                            selectedDictIds.remove(dictId);
-                          }
+                          searchQuery = value;
                         });
                       },
-                    );
-                  },
+                    ),
+                    const SizedBox(height: 8),
+                    Flexible(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: filteredDicts.length,
+                        itemBuilder: (context, index) {
+                          final dict = filteredDicts[index];
+                          final dictId = dict['id'] as int;
+                          final isSelected = selectedDictIds.contains(dictId);
+
+                          return CheckboxListTile(
+                            title: Text(dict['name']),
+                            subtitle: Text('${dict['word_count']} headwords'),
+                            value: isSelected,
+                            onChanged: (bool? checked) {
+                              setDialogState(() {
+                                if (checked == true) {
+                                  selectedDictIds.add(dictId);
+                                } else {
+                                  selectedDictIds.remove(dictId);
+                                }
+                              });
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ),
               actions: [

@@ -21,18 +21,46 @@ class DictionaryManagementScreen extends StatefulWidget {
 class _DictionaryManagementScreenState
     extends State<DictionaryManagementScreen> {
   final DictionaryManager _dictionaryManager = DictionaryManager();
+  final TextEditingController _searchController = TextEditingController();
   List<Map<String, dynamic>> _dictionaries = [];
+  List<Map<String, dynamic>> _filteredDictionaries = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _loadDictionaries();
+    _searchController.addListener(_onSearchChanged);
     if (widget.triggerSelectByLanguage) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _downloadFreedictDictionary();
       });
     }
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    _filterDictionaries();
+  }
+
+  void _filterDictionaries() {
+    final query = _searchController.text.toLowerCase();
+    setState(() {
+      if (query.isEmpty) {
+        _filteredDictionaries = List.from(_dictionaries);
+      } else {
+        _filteredDictionaries = _dictionaries.where((dict) {
+          final name = (dict['name'] as String).toLowerCase();
+          return name.contains(query);
+        }).toList();
+      }
+    });
   }
 
   Future<void> _loadDictionaries() async {
@@ -41,6 +69,7 @@ class _DictionaryManagementScreenState
       final dicts = await _dictionaryManager.getDictionaries();
       setState(() {
         _dictionaries = dicts;
+        _filterDictionaries();
       });
     } finally {
       setState(() => _isLoading = false);
@@ -722,6 +751,103 @@ class _DictionaryManagementScreenState
     ImportProgress(message: 'Starting...', value: 0.0),
   );
 
+  Future<void> _reindexAll() async {
+    if (_dictionaries.isEmpty) return;
+
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reindex All'),
+        content: const Text(
+          'This will re-index all installed dictionaries. Dictionaries previously indexed with definitions will keep that setting. "Headword Only" is the default for others.\n\nContinue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Reindex'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    bool cancelled = false;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: const Text('Re-indexing All'),
+            content: ValueListenableBuilder<ImportProgress>(
+              valueListenable: _progressNotifier,
+              builder: (context, progress, child) {
+                return _buildProgressContent(
+                  progress,
+                  onCancel: () {
+                    cancelled = true;
+                    Navigator.pop(context);
+                  },
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+
+    int successCount = 0;
+    for (int i = 0; i < _dictionaries.length; i++) {
+      if (cancelled) break;
+      final dict = _dictionaries[i];
+      final int dictId = dict['id'] as int;
+      final String name = dict['name'] as String;
+      final bool indexDefinitions = (dict['index_definitions'] ?? 0) == 1;
+
+      try {
+        final stream = _dictionaryManager.reindexDictionaryStream(
+          dictId,
+          indexDefinitions: indexDefinitions,
+        );
+
+        await for (final progress in stream) {
+          if (cancelled) break;
+          _progressNotifier.value = ImportProgress(
+            message:
+                '(${i + 1}/${_dictionaries.length}) $name: ${progress.message}',
+            value: progress.value,
+            isCompleted: progress.isCompleted,
+            error: progress.error,
+          );
+        }
+        successCount++;
+      } catch (e) {
+        debugPrint('Error re-indexing $name: $e');
+      }
+    }
+
+    if (mounted) {
+      final NavigatorState navigator = Navigator.of(context);
+      final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+      
+      navigator.pop(); // Close progress dialog
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Re-indexed $successCount/${_dictionaries.length} dictionaries',
+          ),
+        ),
+      );
+      await _loadDictionaries();
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -731,6 +857,23 @@ class _DictionaryManagementScreenState
           'Manage Dictionaries',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: TextButton.icon(
+              onPressed: _isLoading || _dictionaries.isEmpty ? null : _reindexAll,
+              icon: const Icon(Icons.refresh, size: 20, color: Colors.white),
+              label: const Text(
+                'Reindex All',
+                style: TextStyle(color: Colors.white),
+              ),
+              style: TextButton.styleFrom(
+                backgroundColor:
+                    Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+              ),
+            ),
+          ),
+        ],
       ),
       drawer: const AppDrawer(),
       persistentFooterButtons: [
@@ -832,9 +975,31 @@ class _DictionaryManagementScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: 'Search dictionaries...',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () => _searchController.clear(),
+                            )
+                          : null,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                   child: Text(
-                    'Drag to reorder (favorite first)',
+                    _filteredDictionaries.length == _dictionaries.length
+                        ? 'Drag to reorder (favorite first)'
+                        : 'Search results (${_filteredDictionaries.length})',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Colors.grey,
                       fontStyle: FontStyle.italic,
@@ -844,18 +1009,27 @@ class _DictionaryManagementScreenState
                 Expanded(
                   child: ReorderableListView.builder(
                     buildDefaultDragHandles: false,
-                    itemCount: _dictionaries.length,
+                    itemCount: _filteredDictionaries.length,
                     onReorder: (oldIndex, newIndex) async {
                       if (newIndex > oldIndex) newIndex -= 1;
+                      
+                      final item = _filteredDictionaries[oldIndex];
+                      final actualOldIndex = _dictionaries.indexOf(item);
+                      
+                      final targetItem = _filteredDictionaries[newIndex];
+                      final actualNewIndex = _dictionaries.indexOf(targetItem);
+
+                      if (actualOldIndex == -1 || actualNewIndex == -1) return;
 
                       final List<Map<String, dynamic>> updatedList = List.from(
                         _dictionaries,
                       );
-                      final item = updatedList.removeAt(oldIndex);
-                      updatedList.insert(newIndex, item);
+                      final movedItem = updatedList.removeAt(actualOldIndex);
+                      updatedList.insert(actualNewIndex, movedItem);
 
                       setState(() {
                         _dictionaries = updatedList;
+                        _filterDictionaries();
                       });
 
                       final sortedIds = updatedList
@@ -864,7 +1038,7 @@ class _DictionaryManagementScreenState
                       await _dictionaryManager.reorderDictionaries(sortedIds);
                     },
                     itemBuilder: (context, index) {
-                      final dict = _dictionaries[index];
+                      final dict = _filteredDictionaries[index];
                       return Card(
                         key: ValueKey(dict['id']),
                         margin: const EdgeInsets.symmetric(
