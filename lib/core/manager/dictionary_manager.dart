@@ -53,6 +53,9 @@ class ImportProgress {
   ///   "mydict (StarDict): missing .idx, .dict / .dict.dz"
   final List<String>? incompleteEntries;
 
+  /// The suggested group name for the dictionary.
+  final String? groupName;
+
   ImportProgress({
     required this.message,
     required this.value,
@@ -65,6 +68,7 @@ class ImportProgress {
     this.definitionWordCount = 0,
     this.dictionaryName,
     this.incompleteEntries,
+    this.groupName,
   });
 }
 
@@ -1326,6 +1330,7 @@ class DictionaryManager {
             sampleWords: progress.sampleWords,
             error: progress.error,
             dictionaryName: progress.dictionaryName ?? name,
+            groupName: progress.groupName ?? item.parentFolderName,
           );
           if (progress.isCompleted) break;
         }
@@ -1493,6 +1498,9 @@ class DictionaryManager {
         }
 
         await for (final progress in subStream) {
+          // The user wants the selected folder's name to be the group name.
+          final String groupName = p.basename(folderPath);
+
           yield ImportProgress(
             message: '[$currentDict/$totalDicts] ${progress.message}',
             value: 0.2 +
@@ -1503,7 +1511,11 @@ class DictionaryManager {
             sampleWords: progress.sampleWords,
             error: progress.error,
             dictionaryName: progress.dictionaryName ?? name,
+            groupName: progress.groupName ?? groupName,
           );
+          if (progress.dictId != null) {
+            hDebugPrint('DictionaryManager: Yielding dictId ${progress.dictId} with groupName "${progress.groupName ?? groupName}"');
+          }
           if (progress.isCompleted) break;
         }
       }

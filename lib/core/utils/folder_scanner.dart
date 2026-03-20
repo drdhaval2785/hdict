@@ -16,16 +16,21 @@ class DiscoveredDict {
   /// For DICTD: path to the companion `.dict` / `.dict.dz` file.
   final String? companionPath;
 
+  /// The name of the immediate parent folder.
+  final String? parentFolderName;
+
   const DiscoveredDict({
     required this.path,
     required this.format,
     this.companionPath,
+    this.parentFolderName,
   });
 
   Map<String, String?> toMap() => {
     'path': path,
     'format': format,
     'companionPath': companionPath,
+    'parentFolderName': parentFolderName,
   };
 }
 
@@ -40,10 +45,14 @@ class IncompleteDict {
   /// Human-readable list of missing mandatory files, e.g. `['.idx', '.dict']`.
   final List<String> missingFiles;
 
+  /// The name of the immediate parent folder.
+  final String? parentFolderName;
+
   const IncompleteDict({
     required this.name,
     required this.format,
     required this.missingFiles,
+    this.parentFolderName,
   });
 }
 
@@ -193,6 +202,10 @@ Future<FolderScanResult> scanFolderForDictionaries(
 
     final path = entity.path;
     final lowerPath = path.toLowerCase();
+    final parentName = p.basename(p.dirname(path));
+    // If it's a temp extraction dir, we might want the parent of that, 
+    // but the requirement "name of the folder which is the last" usually means the immediate parent.
+    // If the folder is "English-French/Dict1.ifo", group is "English-French".
 
     // -- StarDict: anchor = .ifo --------------------------------------------
     if (lowerPath.endsWith('.ifo') ||
@@ -224,24 +237,37 @@ Future<FolderScanResult> scanFolderForDictionaries(
       if (dictFile == null) missing.add('.dict / .dict.dz');
 
       if (missing.isEmpty) {
-        discovered.add(DiscoveredDict(path: path, format: 'stardict'));
+        discovered.add(DiscoveredDict(
+          path: path,
+          format: 'stardict',
+          parentFolderName: parentName,
+        ));
       } else {
         incomplete.add(IncompleteDict(
           name: p.basenameWithoutExtension(basePath),
           format: 'stardict',
           missingFiles: missing,
+          parentFolderName: parentName,
         ));
       }
     }
 
     // -- MDict: anchor = .mdx -----------------------------------------------
     else if (lowerPath.endsWith('.mdx')) {
-      discovered.add(DiscoveredDict(path: path, format: 'mdict'));
+      discovered.add(DiscoveredDict(
+        path: path,
+        format: 'mdict',
+        parentFolderName: parentName,
+      ));
     }
 
     // -- Slob: anchor = .slob -----------------------------------------------
     else if (lowerPath.endsWith('.slob')) {
-      discovered.add(DiscoveredDict(path: path, format: 'slob'));
+      discovered.add(DiscoveredDict(
+        path: path,
+        format: 'slob',
+        parentFolderName: parentName,
+      ));
     }
 
     // -- DICTD: anchor = .index ---------------------------------------------
@@ -254,12 +280,14 @@ Future<FolderScanResult> scanFolderForDictionaries(
           path: path,
           format: 'dictd',
           companionPath: dictFile,
+          parentFolderName: parentName,
         ));
       } else {
         incomplete.add(IncompleteDict(
           name: p.basenameWithoutExtension(basePath),
           format: 'dictd',
           missingFiles: ['.dict / .dict.dz'],
+          parentFolderName: parentName,
         ));
       }
     }
