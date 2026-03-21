@@ -59,12 +59,16 @@ class DictdReader {
 
   Future<List<String>> readEntries(List<({int offset, int length})> entries) async {
     if (_reader == null) throw Exception('Reader not opened');
-    final res = <String>[];
-    for (final e in entries) {
-      final s = await _reader!.readEntry(e.offset, e.length);
-      res.add(s);
+    
+    // Sort by offset to minimize seeker movement
+    final entriesWithIndex = entries.asMap().entries.toList()
+      ..sort((a, b) => a.value.offset.compareTo(b.value.offset));
+
+    final List<String?> results = List.filled(entries.length, null);
+    for (final item in entriesWithIndex) {
+      results[item.key] = await _reader!.readEntry(item.value.offset, item.value.length);
     }
-    return res;
+    return results.cast<String>();
   }
 
   Future<void> close() async {

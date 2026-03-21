@@ -3298,17 +3298,14 @@ class DictionaryManager {
       // 1. Check cache for fast path (plain .dict)
       final cached = _readerCache[dictId];
       if (cached is DictReader && !cached.isDz) {
-        // FAST PATH: truly parallel, no locks
-        final ioWatch = HPerf.start('fetchBatch_IO_Parallel[$format]');
-        final results = await Future.wait(
-          requests.map((req) {
-            return cached.readAtIndex(
-              req['offset'] as int,
-              req['length'] as int,
-            );
-          }),
-        );
-        HPerf.end(ioWatch, 'fetchBatch_IO_Parallel[$format]');
+        // FAST PATH: uses optimized sequential bulk read to avoid handle conflicts
+        final ioWatch = HPerf.start('fetchBatch_IO_Batch[$format]');
+        final entries = requests.map((req) => (
+          offset: req['offset'] as int,
+          length: req['length'] as int,
+        )).toList();
+        final results = await cached.readBulk(entries);
+        HPerf.end(ioWatch, 'fetchBatch_IO_Batch[$format]');
         HPerf.end(totalWatch, 'fetchBatch_Total[$format]');
         return results;
       }
@@ -3318,28 +3315,35 @@ class DictionaryManager {
         final reader = await _getReader(dictRecord);
         if (reader == null) return List<String?>.filled(requests.length, null);
 
-        final ioWatch = HPerf.start('fetchBatch_IO_Seq[$format]');
-        final batchResults = <String?>[];
-
-        // Perform all reads sequentially inside the lock
-        for (final req in requests) {
-          final word = req['word'] as String;
-          final offset = req['offset'] as int;
-          final length = req['length'] as int;
-
-          if (reader is MdictReader) {
-            batchResults.add(await reader.lookup(word));
-          } else if (reader is SlobReader) {
-            batchResults.add(await reader.getBlobContentById(offset));
-          } else if (reader is DictdReader) {
-            batchResults.add(await reader.readEntry(offset, length));
-          } else if (reader is DictReader) {
-            batchResults.add(await reader.readAtIndex(offset, length));
-          } else {
-            batchResults.add(null);
+        final ioWatch = HPerf.start('fetchBatch_IO_Batch[$format]');
+        
+        List<String?> batchResults;
+        if (reader is DictReader) {
+          final entries = requests.map((req) => (
+            offset: req['offset'] as int,
+            length: req['length'] as int,
+          )).toList();
+          batchResults = await reader.readBulk(entries);
+        } else if (reader is DictdReader) {
+          final entries = requests.map((req) => (
+            offset: req['offset'] as int,
+            length: req['length'] as int,
+          )).toList();
+          batchResults = await reader.readEntries(entries);
+        } else if (reader is SlobReader) {
+          final ids = requests.map((req) => req['offset'] as int).toList();
+          batchResults = await reader.getBlobsContentByIds(ids);
+        } else if (reader is MdictReader) {
+          // Fallback to sequential for Mdict for now
+          batchResults = [];
+          for (final req in requests) {
+            batchResults.add(await reader.lookup(req['word'] as String));
           }
+        } else {
+          batchResults = List.filled(requests.length, null);
         }
-        HPerf.end(ioWatch, 'fetchBatch_IO_Seq[$format]');
+
+        HPerf.end(ioWatch, 'fetchBatch_IO_Batch[$format]');
         return batchResults;
       });
 

@@ -109,9 +109,17 @@ class DictReader {
       return results;
     }
 
-    // For plain .dict, we can run them in parallel since File.openRead is stateless.
-    final futures = entries.map((e) => readAtIndex(e.offset, e.length));
-    return await Future.wait(futures);
+    // For plain .dict, we sort by offset to minimize seeker movement and avoid parallel handle conflicts.
+    // Our RandomAccessSource implementations use a single handle, so we MUST be sequential.
+    // We keep track of original indices to return results in requested order
+    final entriesWithIndex = entries.asMap().entries.toList()
+      ..sort((a, b) => a.value.offset.compareTo(b.value.offset));
+
+    final List<String?> results = List.filled(entries.length, null);
+    for (final item in entriesWithIndex) {
+      results[item.key] = await readAtIndex(item.value.offset, item.value.length);
+    }
+    return results.cast<String>();
   }
 
   /// Closes the file.
