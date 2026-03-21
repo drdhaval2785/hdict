@@ -6,7 +6,7 @@ import 'package:hdict/core/parser/idx_parser.dart';
 import 'package:hdict/core/parser/syn_parser.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
 import 'package:hdict/core/parser/random_access_source.dart';
-import 'package:dictd_reader/dictd_reader.dart' hide RandomAccessSource, FileRandomAccessSource;
+import 'package:dictd_reader/dictd_reader.dart';
 import 'package:hdict/core/utils/html_lookup_wrapper.dart';
 import 'package:path/path.dart' as p;
 

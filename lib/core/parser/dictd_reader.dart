@@ -60,7 +60,7 @@ class DictdReader {
     final res = <String>[];
     for (final e in entries) {
       final s = await _reader!.readEntry(e.offset, e.length);
-      res.add(s ?? '');
+      res.add(s);
     }
     return res;
   }

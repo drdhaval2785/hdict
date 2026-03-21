@@ -148,18 +148,16 @@ packages:
   dictd_reader:
     dependency: "direct main"
     description:
-      name: dictd_reader
-      sha256: afc8885fdc22771740ba374612f27ff61e10f0d1c1d8fdada7eb32219e566632
-      url: "https://pub.dev"
-    source: hosted
+      path: "../dictd_reader"
+      relative: true
+    source: path
     version: "0.1.2"
   dictzip_reader:
     dependency: "direct main"
     description:
-      name: dictzip_reader
-      sha256: "4ec9e095cc1df9b2590e6d20e71d2adeccf7a98d67bc47df0d2f49967b23775c"
-      url: "https://pub.dev"
-    source: hosted
+      path: "../dictzip_reader"
+      relative: true
+    source: path
     version: "0.1.2"
   docman:
     dependency: "direct main"

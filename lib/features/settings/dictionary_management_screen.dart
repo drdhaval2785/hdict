@@ -995,7 +995,7 @@ class _DictionaryManagementScreenState
     );
 
     if (confirm != true) return;
-    if (!mounted) return;
+    if (!context.mounted) return;
 
     bool cancelled = false;
     showDialog(

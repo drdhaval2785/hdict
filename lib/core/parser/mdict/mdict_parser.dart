@@ -187,7 +187,7 @@ class MdxParser {
     final recordBlockOffset = currentOffset;
 
     List<(int, int)>? recordBlockInfoList;
-    int? totalDecompressedSize;
+    int totalDecompressedSize = 0;
 
     if (readRecordBlockInfo) {
       int rbOffset = recordBlockOffset;
@@ -207,7 +207,6 @@ class MdxParser {
       await readRBNum(numberWidth); // rb size
 
       recordBlockInfoList = [];
-      totalDecompressedSize = 0;
       for (var i = 0; i < numRecordBlocks; i++) {
         final compressed = await readRBNum(numberWidth);
         final decompressed = await readRBNum(numberWidth);
@@ -351,7 +350,7 @@ class MdxParser {
       } else {
         var j = i;
         while (j < keyBlock.length && keyBlock[j] != 0) j++;
-        keyText = charset(_encoding)!.decode(keyBlock.sublist(i, j));
+        keyText = Charset.getByName(_encoding)!.decode(keyBlock.sublist(i, j));
         i = j + 1;
       }
       keyList.add((recordStart, keyText));
@@ -363,7 +362,7 @@ class MdxParser {
     if (_encoding == "UTF-16") {
       return Utf16Decoder().decodeUtf16Le(rawData);
     } else {
-      return charset(_encoding)!.decode(rawData);
+      return Charset.getByName(_encoding)!.decode(rawData);
     }
   }
 
@@ -387,7 +386,7 @@ class MdxParser {
     final tags = _parseHeader(content);
     String? encoding = tags["Encoding"] ?? (_mdx ? "UTF-8" : "UTF-16");
     if (["GBK", "GB2312"].contains(encoding)) encoding = "GB18030";
-    _encoding = encoding!;
+    _encoding = encoding;
 
     if (!tags.containsKey("Encrypted") || tags["Encrypted"] == "No") {
       _encrypt = 0;

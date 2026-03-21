@@ -3,7 +3,6 @@ import 'mdict/mdict_parser.dart';
 import 'package:hdict/core/parser/random_access_source.dart';
 import 'package:hdict/core/parser/saf_random_access_source.dart';
 import 'package:hdict/core/parser/bookmark_random_access_source.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io';
 
 /// Wrapper around the vendored MdxParser.

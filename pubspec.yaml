@@ -140,3 +140,9 @@ flutter_launcher_icons:
   linux:
     generate: true
     image_path: "assets/hdict_logo.png"
+
+dependency_overrides:
+  dictzip_reader:
+    path: ../dictzip_reader
+  dictd_reader:
+    path: ../dictd_reader

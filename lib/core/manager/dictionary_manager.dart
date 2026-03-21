@@ -1871,7 +1871,7 @@ class DictionaryManager {
     try {
       final ifoParser = IfoParser();
       await ifoParser.parse(ifoPath);
-      final bookName = ifoParser.bookName;
+      final bookName = ifoParser.bookName ?? p.basenameWithoutExtension(ifoPath);
 
       // Create bookmark for the folder or file
       final String? bookmark = await BookmarkManager.createBookmark(ifoPath);
