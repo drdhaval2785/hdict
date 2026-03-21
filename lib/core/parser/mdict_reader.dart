@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'mdict/mdict_parser.dart';
 import 'package:hdict/core/parser/random_access_source.dart';
 import 'package:hdict/core/parser/saf_random_access_source.dart';
 import 'package:hdict/core/parser/bookmark_random_access_source.dart';
@@ -48,7 +50,7 @@ class MdictReader {
       await _parser.initDict();
       _isInitialized = true;
     } catch (e) {
-      hDebugPrint('Error initializing MDict: $e');
+      debugPrint('Error initializing MDict: $e');
       rethrow;
     }
   }
@@ -63,7 +65,7 @@ class MdictReader {
       
       return await _parser.readOneMdx(info);
     } catch (e) {
-      hDebugPrint('Error looking up $word: $e');
+      debugPrint('Error looking up $word: $e');
       return null;
     }
   }

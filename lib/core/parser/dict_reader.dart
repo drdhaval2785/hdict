@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io';
 import 'dart:convert';
 import 'package:hdict/core/database/database_helper.dart';
-import 'package:dictzip_reader/dictzip_reader.dart';
+import 'package:dictzip_reader/dictzip_reader.dart' hide RandomAccessSource, FileRandomAccessSource;
 import 'package:path/path.dart' as p;
 import 'package:hdict/core/parser/random_access_source.dart';
 import 'package:hdict/core/parser/saf_random_access_source.dart';

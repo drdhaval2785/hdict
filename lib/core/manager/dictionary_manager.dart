@@ -17,7 +17,7 @@ import 'package:hdict/core/parser/syn_parser.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
 import 'package:hdict/core/parser/mdict_reader.dart';
 import 'package:hdict/core/parser/slob_reader.dart';
-import 'package:dictd_reader/dictd_reader.dart';
+import 'package:hdict/core/parser/dictd_reader.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_7zip/flutter_7zip.dart';
 import 'package:hdict/core/utils/folder_scanner.dart';
@@ -1731,21 +1731,24 @@ class DictionaryManager {
     final List<DiscoveredDict> discovered = [];
     final List<IncompleteDict> incomplete = [];
 
+    final result = FolderScanResult();
+
     // docman's DirectoryInfo for the tree URI
     final dir = await DocumentFile.fromUri(treeUri);
+    if (dir == null) return result;
     if (dir == null) return result;
 
     // We need to list files recursively. docman might not have a recursive list,
     // so we'll implement a simple one.
     Future<void> scan(DocumentFile d) async {
       final List<DocumentFile> entities = await d.listDocuments();
-      final String parentName = d.name ?? 'Root';
+      final String parentName = d.name;
 
       for (final entity in entities) {
         if (entity.isDirectory) {
           await scan(entity);
         } else {
-          final String name = entity.name ?? '';
+          final String name = entity.name;
           final String lowerName = name.toLowerCase();
           final String path = entity.uri.toString();
 
@@ -1755,7 +1758,7 @@ class DictionaryManager {
             bool hasIdx = false;
             bool hasDict = false;
             for (final f in entities) {
-              final n = f.name?.toLowerCase() ?? '';
+              final n = f.name.toLowerCase() ?? '';
               if (n.startsWith(baseName.toLowerCase())) {
                 if (n.endsWith('.idx')) hasIdx = true;
                 if (n.endsWith('.dict') || n.endsWith('.dict.dz'))
@@ -1765,7 +1768,7 @@ class DictionaryManager {
             if (hasIdx && hasDict) {
               String? idxUri, dictUri, synUri;
               for (final f in entities) {
-                final n = f.name?.toLowerCase() ?? '';
+                final n = f.name.toLowerCase() ?? '';
                 if (n.startsWith(baseName.toLowerCase())) {
                   if (n.endsWith('.idx')) idxUri = f.uri;
                   if (n.endsWith('.dict') || n.endsWith('.dict.dz')) dictUri = f.uri;
@@ -1821,7 +1824,7 @@ class DictionaryManager {
             final String baseName = name.substring(0, name.length - 6);
             String? dictPath;
             for (final f in entities) {
-              final n = f.name?.toLowerCase() ?? '';
+              final n = f.name.toLowerCase() ?? '';
               if (n.startsWith(baseName.toLowerCase()) &&
                   (n.endsWith('.dict') || n.endsWith('.dict.dz'))) {
                 dictPath = f.uri.toString();
@@ -2016,6 +2019,7 @@ class DictionaryManager {
         _IndexSlobArgs(
           dictId: dictId,
           slobPath: slobPath,
+          bookName: bookName,
           indexDefinitions: indexDefinitions,
           sourceType: 'linked',
           sourceBookmark: bookmark,
@@ -2066,6 +2070,7 @@ class DictionaryManager {
           dictId: dictId,
           indexPath: indexPath,
           dictPath: dictPath,
+          bookName: bookName,
           indexDefinitions: indexDefinitions,
           sourceType: 'linked',
           sourceBookmark: bookmark,
@@ -2568,7 +2573,7 @@ class DictionaryManager {
       );
 
       final idxParser = IdxParser(ifoParser);
-      final dictReader = DictReader(finalDictName, dictId: dictId);
+      final dictReader = await DictReader.fromPath(finalDictName, dictId: dictId);
       await dictReader.open();
 
       List<Map<String, dynamic>> batch = [];
@@ -2776,7 +2781,7 @@ class DictionaryManager {
     yield ImportProgress(message: 'Opening MDict file...', value: 0.05);
 
     try {
-      final reader = MdictReader(mdxPath);
+      final reader = await MdictReader.fromPath(mdxPath);
       await reader.open();
 
       final checksum = await _calculateChecksum(mdxPath);
@@ -3042,7 +3047,7 @@ class DictionaryManager {
     yield ImportProgress(message: 'Opening Slob file...', value: 0.05);
 
     try {
-      final reader = SlobReader(slobPath);
+      final reader = await SlobReader.fromPath(slobPath);
       await reader.open();
 
       final checksum = await _calculateChecksum(slobPath);
@@ -3197,7 +3202,7 @@ class DictionaryManager {
           } else if (reader is SlobReader) {
             res = await reader.getBlobContentById(offset);
           } else if (reader is DictdReader) {
-            res = await reader.readAtOffset(offset, length);
+            res = await reader.readEntry(offset, length);
           } else if (reader is DictReader) {
             res = await reader.readAtIndex(offset, length);
           }
@@ -3214,7 +3219,7 @@ class DictionaryManager {
           } else if (cached is SlobReader) {
             res = await cached.getBlobContentById(offset);
           } else if (cached is DictdReader) {
-            res = await cached.readAtOffset(offset, length);
+            res = await cached.readEntry(offset, length);
           } else if (cached is DictReader) {
             res = await cached.readAtIndex(offset, length);
           }
@@ -3291,7 +3296,7 @@ class DictionaryManager {
           } else if (reader is SlobReader) {
             batchResults.add(await reader.getBlobContentById(offset));
           } else if (reader is DictdReader) {
-            batchResults.add(await reader.readAtOffset(offset, length));
+            batchResults.add(await reader.readEntry(offset, length));
           } else if (reader is DictReader) {
             batchResults.add(await reader.readAtIndex(offset, length));
           } else {
@@ -3440,15 +3445,7 @@ class DictionaryManager {
 
           await Isolate.spawn(
             _indexEntry,
-            _IndexArgs(
-              dictId,
-              idxPath,
-              dictPath,
-              synPath,
-              indexDefinitions,
-              ifoParser,
-              receivePort.sendPort,
-              rootIsolateToken,
+            _IndexArgs(dictId, idxPath, dictPath, synPath, indexDefinitions, ifoParser, 'managed', null, receivePort.sendPort, rootIsolateToken,
             ),
           );
           break;
