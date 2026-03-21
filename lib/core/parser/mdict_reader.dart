@@ -3,6 +3,7 @@ import 'mdict/mdict_parser.dart';
 import 'package:hdict/core/parser/random_access_source.dart';
 import 'package:hdict/core/parser/saf_random_access_source.dart';
 import 'package:hdict/core/parser/bookmark_random_access_source.dart';
+import 'package:path/path.dart';
 import 'dart:io';
 
 /// Wrapper around the vendored MdxParser.
@@ -25,14 +26,16 @@ class MdictReader {
   }
 
   /// Factory to create an instance from a linked source (SAF or Bookmark).
-  static Future<MdictReader> fromLinkedSource(String source) async {
+  static Future<MdictReader> fromLinkedSource(String source, {String? targetPath, String? actualPath}) async {
+    final String path = actualPath ?? targetPath ?? source;
     if (Platform.isAndroid) {
-      return MdictReader(source, source: SafRandomAccessSource(source));
+      return MdictReader(path, source: SafRandomAccessSource(source));
     } else if (Platform.isIOS || Platform.isMacOS) {
-      return MdictReader(source, source: BookmarkRandomAccessSource(source));
+      return MdictReader(path, source: BookmarkRandomAccessSource(source, targetPath: targetPath));
     } else {
       // For Linux/Windows, linked source is just a direct path for now
-      return MdictReader(source, source: FileRandomAccessSource(source));
+      final String fullPath = targetPath != null ? join(source, targetPath) : source;
+      return MdictReader(fullPath, source: FileRandomAccessSource(fullPath));
     }
   }
 

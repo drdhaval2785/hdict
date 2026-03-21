@@ -210,7 +210,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
     final stream = idxParser.parse(args.idxPath);
     final dictReader =
         args.sourceType == 'linked' && args.sourceBookmark != null
-        ? await DictReader.fromLinkedSource(args.sourceBookmark!, targetPath: p.basename(args.dictPath))
+        ? await DictReader.fromLinkedSource(args.sourceBookmark!, targetPath: p.basename(args.dictPath), actualPath: args.dictPath)
         : await DictReader.fromPath(args.dictPath);
     await dictReader.open();
 
@@ -367,7 +367,7 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
 
   try {
     final reader = args.sourceType == 'linked' && args.sourceBookmark != null
-        ? await MdictReader.fromUri(args.sourceBookmark!)
+        ? await MdictReader.fromLinkedSource(args.sourceBookmark!, actualPath: args.mdxPath)
         : await MdictReader.fromPath(args.mdxPath);
     await reader.open();
 
@@ -456,7 +456,7 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
 
   try {
     final reader = args.sourceType == 'linked' && args.sourceBookmark != null
-        ? await SlobReader.fromUri(args.sourceBookmark!)
+        ? await SlobReader.fromLinkedSource(args.sourceBookmark!, actualPath: args.slobPath)
         : await SlobReader.fromPath(args.slobPath);
     await reader.open();
 
@@ -576,7 +576,7 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
     final dictdParser = DictdParser();
     final dictdReader =
         args.sourceType == 'linked' && args.sourceBookmark != null
-        ? await DictdReader.fromLinkedSource(args.sourceBookmark!, targetPath: p.basename(args.dictPath))
+        ? await DictdReader.fromLinkedSource(args.sourceBookmark!, targetPath: p.basename(args.dictPath), actualPath: args.dictPath)
         : await DictdReader.fromPath(args.dictPath);
     await dictdReader.open();
     final indexStream = dictdParser.parseIndex(args.indexPath);
@@ -872,9 +872,9 @@ class DictionaryManager {
     dynamic reader;
     if (sourceType == 'linked' && sourceBookmark != null) {
       if (format == 'mdict') {
-        reader = await MdictReader.fromLinkedSource(sourceBookmark);
+        reader = await MdictReader.fromLinkedSource(sourceBookmark, actualPath: rawPath);
       } else if (format == 'slob') {
-        reader = await SlobReader.fromLinkedSource(sourceBookmark);
+        reader = await SlobReader.fromLinkedSource(sourceBookmark, actualPath: rawPath);
       } else if (format == 'stardict') {
         final String dictPath = await _dbHelper.resolvePath(rawPath);
         final basePath = p.withoutExtension(dictPath);
@@ -886,13 +886,13 @@ class DictionaryManager {
           '.dict.xz',
         ]);
         if (actualDictPath == null) return null;
-        reader = await DictReader.fromLinkedSource(sourceBookmark, targetPath: p.basename(actualDictPath));
+        reader = await DictReader.fromLinkedSource(sourceBookmark, targetPath: p.basename(actualDictPath), actualPath: actualDictPath);
       } else if (format == 'dictd') {
         final String indexPath = await _dbHelper.resolvePath(rawPath);
         final basePath = p.withoutExtension(indexPath);
         final actualDictPath = _resolveLocalFile(basePath, ['.dict.dz', '.dict']);
         if (actualDictPath == null) return null;
-        reader = await DictdReader.fromLinkedSource(sourceBookmark, targetPath: p.basename(actualDictPath));
+        reader = await DictdReader.fromLinkedSource(sourceBookmark, targetPath: p.basename(actualDictPath), actualPath: actualDictPath);
       }
     } else {
       final String dictPath = await _dbHelper.resolvePath(rawPath);

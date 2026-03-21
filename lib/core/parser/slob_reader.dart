@@ -5,6 +5,7 @@ import 'package:hdict/core/parser/saf_random_access_source.dart';
 import 'package:hdict/core/parser/bookmark_random_access_source.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:convert';
+import 'package:path/path.dart';
 import 'dart:io';
 
 /// Wrapper around the `slob_reader` package.
@@ -25,13 +26,15 @@ class SlobReader {
   }
 
   /// Factory to create an instance from a linked source (SAF or Bookmark).
-  static Future<SlobReader> fromLinkedSource(String source) async {
+  static Future<SlobReader> fromLinkedSource(String source, {String? targetPath, String? actualPath}) async {
+    final String path = actualPath ?? targetPath ?? source;
     if (Platform.isAndroid) {
-      return SlobReader(source, source: SafRandomAccessSource(source));
+      return SlobReader(path, source: SafRandomAccessSource(source));
     } else if (Platform.isIOS || Platform.isMacOS) {
-      return SlobReader(source, source: BookmarkRandomAccessSource(source));
+      return SlobReader(path, source: BookmarkRandomAccessSource(source, targetPath: targetPath));
     } else {
-      return SlobReader(source, source: FileRandomAccessSource(source));
+      final String fullPath = targetPath != null ? join(source, targetPath) : source;
+      return SlobReader(fullPath, source: FileRandomAccessSource(fullPath));
     }
   }
 

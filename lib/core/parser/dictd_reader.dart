@@ -30,8 +30,9 @@ class DictdReader {
     return reader;
   }
 
-  static Future<DictdReader> fromLinkedSource(String source, {String? targetPath}) async {
-    final reader = DictdReader(source);
+  static Future<DictdReader> fromLinkedSource(String source, {String? targetPath, String? actualPath}) async {
+    final String path = actualPath ?? targetPath ?? source;
+    final reader = DictdReader(path);
     if (!kIsWeb && Platform.isAndroid) {
       await reader.openSource(SafRandomAccessSource(source));
     } else if (!kIsWeb && (Platform.isIOS || Platform.isMacOS)) {

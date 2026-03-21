@@ -30,13 +30,14 @@ class DictReader {
   }
 
   /// Factory to create an instance from a linked source (SAF or Bookmark).
-  static Future<DictReader> fromLinkedSource(String source, {String? targetPath}) async {
+  static Future<DictReader> fromLinkedSource(String source, {String? targetPath, String? actualPath}) async {
+    final String path = actualPath ?? targetPath ?? source;
     if (Platform.isAndroid) {
       // For SAF on Android, 'source' is usually the URI of the specific file
       // but if we move to folder-based SAF, we might need targetPath too.
-      return DictReader(source, source: SafRandomAccessSource(source));
+      return DictReader(path, source: SafRandomAccessSource(source));
     } else if (Platform.isIOS || Platform.isMacOS) {
-      return DictReader(source, source: BookmarkRandomAccessSource(source, targetPath: targetPath));
+      return DictReader(path, source: BookmarkRandomAccessSource(source, targetPath: targetPath));
     } else {
       // For Linux/Windows, linked source is just a direct path for now
       final String fullPath = targetPath != null ? p.join(source, targetPath) : source;
