@@ -1,18 +1,43 @@
-import 'package:hdict/core/utils/logger.dart';
-import 'package:dict_reader/dict_reader.dart';
+import 'package:hdict/core/parser/random_access_source.dart';
+import 'package:hdict/core/parser/saf_random_access_source.dart';
+import 'package:hdict/core/parser/bookmark_random_access_source.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io';
 
-/// Wrapper around the `dict_reader` package.
+/// Wrapper around the vendored MdxParser.
 ///
 /// Provides a unified interface for reading MDict (.mdx/.mdd) dictionaries.
-/// Only supported on native platforms.
+/// Supported on native platforms via [RandomAccessSource].
 class MdictReader {
   final String mdxPath;
-  late DictReader _reader;
+  final RandomAccessSource source;
+  late MdxParser _parser;
   bool _isInitialized = false;
 
-  MdictReader(this.mdxPath) {
-    _reader = DictReader(mdxPath);
+  MdictReader(this.mdxPath, {required this.source}) {
+    _parser = MdxParser(source, mdxPath);
+  }
+
+  /// Factory to create an MdictReader from a local file path.
+  static Future<MdictReader> fromPath(String path) async {
+    return MdictReader(path, source: FileRandomAccessSource(path));
+  }
+
+  /// Factory to create an instance from a linked source (SAF or Bookmark).
+  static Future<MdictReader> fromLinkedSource(String source) async {
+    if (Platform.isAndroid) {
+      return MdictReader(source, source: SafRandomAccessSource(source));
+    } else if (Platform.isIOS || Platform.isMacOS) {
+      return MdictReader(source, source: BookmarkRandomAccessSource(source));
+    } else {
+      // For Linux/Windows, linked source is just a direct path for now
+      return MdictReader(source, source: FileRandomAccessSource(source));
+    }
+  }
+
+  /// Factory to create an MdictReader from an Android SAF URI.
+  static Future<MdictReader> fromUri(String uri) async {
+    return MdictReader(uri, source: SafRandomAccessSource(uri));
   }
 
   /// Opens the MDX file.
@@ -20,7 +45,7 @@ class MdictReader {
     if (kIsWeb) throw UnsupportedError('MDict is not supported on Web.');
     if (_isInitialized) return;
     try {
-      await _reader.initDict();
+      await _parser.initDict();
       _isInitialized = true;
     } catch (e) {
       hDebugPrint('Error initializing MDict: $e');
@@ -28,24 +53,15 @@ class MdictReader {
     }
   }
 
-  /// Returns the dictionary book name from MDX metadata, or null if unavailable.
-  Future<String?> bookName() async {
-    // dict_reader doesn't directly expose book name easily in a single call
-    // often it's in the header, but for now we fallback to filename in manager.
-    return null;
-  }
-
   /// Looks up the HTML definition for a word.
-  /// Returns null if the word is not found.
   Future<String?> lookup(String word) async {
     if (kIsWeb) throw UnsupportedError('MDict is not supported on Web.');
     if (!_isInitialized) await open();
     try {
-      final info = await _reader.locate(word);
+      final info = await _parser.locate(word);
       if (info == null) return null;
       
-      final data = await _reader.readOneMdx(info);
-      return data;
+      return await _parser.readOneMdx(info);
     } catch (e) {
       hDebugPrint('Error looking up $word: $e');
       return null;
@@ -57,7 +73,7 @@ class MdictReader {
     if (kIsWeb) throw UnsupportedError('MDict is not supported on Web.');
     if (!_isInitialized) await open();
     try {
-      return _reader.search(prefix, limit: limit);
+      return await _parser.search(prefix, limit: limit);
     } catch (_) {
       return [];
     }
@@ -67,7 +83,7 @@ class MdictReader {
   Future<void> close() async {
     if (kIsWeb) return;
     try {
-      await _reader.close();
+      await _parser.close();
       _isInitialized = false;
     } catch (_) {}
   }

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:file_selector/file_selector.dart';
 import 'package:file_picker/file_picker.dart';
 
 import 'package:hdict/core/manager/dictionary_manager.dart';
 import 'package:hdict/core/manager/dictionary_group_manager.dart';
+import 'package:hdict/core/parser/bookmark_manager.dart';
+import 'package:docman/docman.dart';
 import 'package:hdict/features/home/widgets/app_drawer.dart';
 import 'package:hdict/features/settings/widgets/stardict_download_dialog.dart';
 
@@ -756,6 +759,215 @@ class _DictionaryManagementScreenState
     }
   }
 
+  Future<void> _linkFolder() async {
+    String? folderPath;
+    try {
+      if (Platform.isAndroid) {
+        final tree = await Docman.pickDocumentTree();
+        folderPath = tree?.uri.toString();
+      } else {
+        folderPath = await FilePicker.platform.getDirectoryPath();
+      }
+    } catch (e) {
+      debugPrint('Error picking folder: $e');
+      return;
+    }
+    if (folderPath == null) return;
+    if (!mounted) return;
+
+    bool indexDefinitions = false;
+    final dynamic importConfig = await showDialog<dynamic>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Link Folder'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Linking "$folderPath" for dictionaries. Files will not be copied.',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                    const SizedBox(height: 16),
+                    CheckboxListTile(
+                      title: const Text('Index words in definitions'),
+                      subtitle: const Text(
+                        'Enables searching inside meanings (takes more time/space)',
+                      ),
+                      value: indexDefinitions,
+                      onChanged: (val) {
+                        setDialogState(() {
+                          indexDefinitions = val ?? false;
+                        });
+                      },
+                      controlAffinity: ListTileControlAffinity.leading,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, indexDefinitions),
+                  child: const Text('Proceed'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (importConfig == null) return;
+    indexDefinitions = importConfig as bool;
+
+    if (!mounted) return;
+
+    bool cancelled = false;
+    // Show progress dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: const Text('Linking from Folder'),
+            content: ValueListenableBuilder<ImportProgress>(
+              valueListenable: _progressNotifier,
+              builder: (context, progress, child) {
+                return _buildProgressContent(
+                  progress,
+                  onCancel: () {
+                    cancelled = true;
+                    Navigator.pop(context);
+                  },
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+
+    try {
+      List<String>? incompleteEntries;
+
+      final stream = _dictionaryManager.linkFolderStream(
+        folderPath,
+        indexDefinitions: indexDefinitions,
+      );
+
+      await for (final progress in stream) {
+        if (cancelled) break;
+        _progressNotifier.value = progress;
+        
+        // Auto-assign to group if folder name was captured
+        if (progress.dictId != null && progress.groupName != null) {
+          await DictionaryGroupManager.addDictionaryToGroup(
+            progress.groupName!,
+            progress.dictId!,
+          );
+        }
+
+        if (progress.isCompleted) {
+          incompleteEntries = progress.incompleteEntries;
+          if (progress.error != null) {
+            throw Exception(progress.error);
+          }
+        }
+      }
+
+      if (mounted) {
+        Navigator.pop(context); // Close progress dialog
+        await _loadDictionaries();
+        if (!mounted) return;
+
+        // Show incomplete-entries dialog if any dictionaries were skipped
+        if (incompleteEntries != null && incompleteEntries.isNotEmpty) {
+          await showDialog<void>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Some Dictionaries Skipped'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'The following dictionaries could not be linked because '
+                      'they are missing required files:',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                    const SizedBox(height: 12),
+                    ...incompleteEntries!.map(
+                      (msg) => Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.warning_amber_rounded,
+                              color: Colors.orange,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                msg,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Folder linked successfully.'),
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close progress dialog
+        final String errorStr = e.toString();
+        String message;
+        if (errorStr.contains('ALREADY_EXISTS:')) {
+          message = errorStr.split('ALREADY_EXISTS:').last.trim();
+        } else if (errorStr.contains('already in your library')) {
+          message = errorStr.replaceAll('Exception: ', '').trim();
+        } else {
+          message = 'Folder linking failed: $e';
+        }
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      }
+    }
+  }
+
   final ValueNotifier<ImportProgress> _progressNotifier = ValueNotifier(
     ImportProgress(message: 'Starting...', value: 0.0),
   );
@@ -892,6 +1104,13 @@ class _DictionaryManagementScreenState
                 ),
                 const SizedBox(width: 8),
                 _buildFooterButton(
+                  onPressed: _isLoading ? null : _linkFolder,
+                  icon: Icons.link,
+                  label: 'Link Folder',
+                  isPrimary: false,
+                ),
+                const SizedBox(width: 8),
+                _buildFooterButton(
                   onPressed: _isLoading ? null : _downloadDictionary,
                   icon: Icons.public,
                   label: 'Download from Web',
@@ -934,6 +1153,15 @@ class _DictionaryManagementScreenState
                 const SizedBox(height: 8),
                 Row(
                   children: [
+                    Expanded(
+                      child: _buildFooterButton(
+                        onPressed: _isLoading ? null : _linkFolder,
+                        icon: Icons.link,
+                        label: 'Link Folder',
+                        isPrimary: false,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: _buildFooterButton(
                         onPressed: _isLoading ? null : _downloadDictionary,

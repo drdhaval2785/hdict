@@ -5,6 +5,8 @@ import 'package:hdict/core/parser/ifo_parser.dart';
 import 'package:hdict/core/parser/idx_parser.dart';
 import 'package:hdict/core/parser/syn_parser.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
+import 'package:hdict/core/parser/random_access_source.dart';
+import 'package:hdict/core/parser/file_random_access_source.dart';
 import 'package:dictd_reader/dictd_reader.dart';
 import 'package:hdict/core/utils/html_lookup_wrapper.dart';
 import 'package:path/path.dart' as p;
@@ -97,7 +99,7 @@ author=Tester
     });
 
     test('DictReader reads data correctly', () async {
-      final reader = DictReader(dictPath);
+      final reader = DictReader(dictPath, source: FileRandomAccessSource(dictPath));
 
       // Read Entry 1
       final def1 = await reader.readEntry(0, 11);

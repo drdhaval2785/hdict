@@ -100,7 +100,7 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       version:
-          28, // Version 28: Migrated FTS5 to contentful to fix deletion leaks
+          29, // Version 29: Added source_type and source_bookmark for linking
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onOpen: _onOpen,
@@ -231,7 +231,9 @@ class DatabaseHelper {
         css TEXT,
         definition_word_count INTEGER DEFAULT 0,
         checksum TEXT,
-        source_url TEXT
+        source_url TEXT,
+        source_type TEXT DEFAULT 'managed',
+        source_bookmark TEXT
       )
     ''');
 
@@ -726,6 +728,19 @@ class DatabaseHelper {
         hDebugPrint('Migration error (version 28): $e');
       }
     }
+
+    if (oldVersion < 29) {
+      try {
+        await db.execute(
+          "ALTER TABLE dictionaries ADD COLUMN source_type TEXT DEFAULT 'managed'",
+        );
+        await db.execute(
+          'ALTER TABLE dictionaries ADD COLUMN source_bookmark TEXT',
+        );
+      } catch (e) {
+        hDebugPrint('Migration error (version 29): $e');
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -836,12 +851,14 @@ class DatabaseHelper {
     String? typeSequence,
     String? checksum,
     String? sourceUrl,
+    String sourceType = 'managed',
+    String? sourceBookmark,
   }) async {
     final db = await database;
 
     // For native, store a path relative to Documents if possible
     String storedPath = path;
-    if (!kIsWeb && path.contains('dictionaries/')) {
+    if (!kIsWeb && path.contains('dictionaries/') && sourceType == 'managed') {
       storedPath = path.substring(path.indexOf('dictionaries/'));
     }
 
@@ -855,6 +872,8 @@ class DatabaseHelper {
       'css': null,
       'checksum': checksum,
       'source_url': sourceUrl,
+      'source_type': sourceType,
+      'source_bookmark': sourceBookmark,
     });
   }
 

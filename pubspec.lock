@@ -26,7 +26,7 @@ packages:
     source: hosted
     version: "2.13.0"
   blockchain_utils:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: blockchain_utils
       sha256: "9129a7b13e50c692387b69f24ca82c06360a75094dd0d286e21430c5b1492707"
@@ -50,7 +50,7 @@ packages:
     source: hosted
     version: "1.4.1"
   charset:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: charset
       sha256: "27802032a581e01ac565904ece8c8962564b1070690794f0072f6865958ce8b9"
@@ -149,18 +149,26 @@ packages:
     dependency: "direct main"
     description:
       name: dictd_reader
-      sha256: e4c008149f7887b007df903cb7341c4d067213cf08559bfcfb1a5661cf805685
+      sha256: afc8885fdc22771740ba374612f27ff61e10f0d1c1d8fdada7eb32219e566632
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.1"
+    version: "0.1.2"
   dictzip_reader:
     dependency: "direct main"
     description:
       name: dictzip_reader
-      sha256: "940baea73343b9e421281b615ab11da1de44ae83edfd1d33c1467a6ec059d382"
+      sha256: "4ec9e095cc1df9b2590e6d20e71d2adeccf7a98d67bc47df0d2f49967b23775c"
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.1"
+    version: "0.1.2"
+  docman:
+    dependency: "direct main"
+    description:
+      name: docman
+      sha256: ae25239f40a01617afc3180b55e4909ec383a0777b06a4fd487d53e9916e3e49
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.2.0"
   fake_async:
     dependency: transitive
     description:
@@ -641,6 +649,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.0"
+  saf_stream:
+    dependency: "direct main"
+    description:
+      name: saf_stream
+      sha256: "6fa5179bf5c8f5f99b183286df6236b23de33c1e874d69ce1fe565a63f95f62b"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.0"
   shared_preferences:
     dependency: "direct main"
     description:
@@ -706,10 +722,10 @@ packages:
     dependency: "direct main"
     description:
       name: slob_reader
-      sha256: "62c428dcb0e1926c4efc527d43ce7f46f960ab5493d074b86e0f63535ecf07aa"
+      sha256: f44c8027130aef8505143abebaaac874affbdf3fb69a8a08f0aefd6eba1d7267
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.4"
+    version: "0.1.5"
   source_span:
     dependency: transitive
     description:

@@ -38,6 +38,8 @@ dependencies:
   crypto: ^3.0.7
   flutter_html: ^3.0.0
   file_selector: ^1.1.0
+  blockchain_utils: ^5.4.0
+  charset: ^2.0.1
   flutter_7zip:
     git:
       url: https://github.com/wgh136/flutter_7zip.git
@@ -51,9 +53,11 @@ dependencies:
   flutter_colorpicker: ^1.1.0
   provider: ^6.1.5+1
   intl: ^0.20.2
-  dictzip_reader: ^0.1.1
-  dictd_reader: ^0.1.1
-  slob_reader: ^0.1.4
+  dictzip_reader: ^0.1.2
+  dictd_reader: ^0.1.2
+  slob_reader: ^0.1.5
+  docman: ^1.2.0
+  saf_stream: ^2.0.0
   flutter_markdown_plus: ^1.0.7
   in_app_review: ^2.0.11
   file_picker: ^10.3.10

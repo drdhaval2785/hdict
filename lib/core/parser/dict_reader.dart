@@ -4,6 +4,9 @@ import 'dart:convert';
 import 'package:hdict/core/database/database_helper.dart';
 import 'package:dictzip_reader/dictzip_reader.dart';
 import 'package:path/path.dart' as p;
+import 'package:hdict/core/parser/random_access_source.dart';
+import 'package:hdict/core/parser/saf_random_access_source.dart';
+import 'package:hdict/core/parser/bookmark_random_access_source.dart';
 
 /// Reads definitions from a StarDict .dict or .dict.dz file at specified offsets and lengths.
 ///
@@ -15,11 +18,33 @@ import 'package:path/path.dart' as p;
 /// chunk-based random access; its internal chunk cache is mutable, so the caller
 /// must still serialize concurrent accesses.
 class DictReader {
-  final File? file;
+  final RandomAccessSource source;
   final String path;
   final int? dictId;
 
-  DictReader(this.path, {this.dictId}) : file = kIsWeb ? null : File(path);
+  DictReader(this.path, {required this.source, this.dictId});
+
+  /// Factory to create a DictReader from a local file path.
+  static Future<DictReader> fromPath(String path, {int? dictId}) async {
+    return DictReader(path, source: FileRandomAccessSource(path), dictId: dictId);
+  }
+
+  /// Factory to create an instance from a linked source (SAF or Bookmark).
+  static Future<DictReader> fromLinkedSource(String source) async {
+    if (Platform.isAndroid) {
+      return DictReader(source, source: SafRandomAccessSource(source));
+    } else if (Platform.isIOS || Platform.isMacOS) {
+      return DictReader(source, source: BookmarkRandomAccessSource(source));
+    } else {
+      // For Linux/Windows, linked source is just a direct path for now
+      return DictReader(source, source: FileRandomAccessSource(source));
+    }
+  }
+
+  /// Factory to create a DictReader from an Android SAF URI.
+  static Future<DictReader> fromUri(String uri, {int? dictId}) async {
+    return DictReader(uri, source: SafRandomAccessSource(uri), dictId: dictId);
+  }
 
   DictzipReader? _dzReader;
 
@@ -33,10 +58,9 @@ class DictReader {
   Future<void> open() async {
     if (kIsWeb) return;
     if (isDz) {
-      _dzReader = DictzipReader(path);
+      _dzReader = DictzipReader(source: source);
       await _dzReader!.open();
     }
-    // Plain .dict: nothing to open — readAtIndex uses File.openRead per call.
   }
 
   /// Reads [length] bytes starting at [offset].
@@ -59,11 +83,7 @@ class DictReader {
       return await _dzReader!.read(offset, length);
     }
 
-    // Plain .dict: File.openRead(start, end) opens a fresh OS read-stream.
-    // No shared state → concurrent calls are safe and truly parallel.
-    final bytes = await file!
-        .openRead(offset, offset + length)
-        .fold<List<int>>([], (buf, chunk) => buf..addAll(chunk));
+    final bytes = await source.read(offset, length);
     return utf8.decode(bytes, allowMalformed: true);
   }
 
@@ -99,7 +119,7 @@ class DictReader {
       await _dzReader?.close();
       _dzReader = null;
     }
-    // Plain .dict: nothing to close.
+    await source.close();
   }
 
   /// Reads the definition at the given offset and length.

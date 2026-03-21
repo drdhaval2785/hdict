@@ -5,9 +5,10 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:hdict/core/database/database_helper.dart';
 import 'package:dictd_reader/dictd_reader.dart';
-import 'package:hdict/core/parser/ifo_parser.dart';
 import 'package:hdict/core/parser/idx_parser.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
+import 'package:hdict/core/parser/random_access_source.dart';
+import 'package:hdict/core/parser/file_random_access_source.dart';
 
 import 'package:flutter/services.dart';
 
@@ -99,7 +100,7 @@ void main() {
       await File(indexPath).writeAsString('hello\tA\tL\ntest\tL\tS\n');
       await File(dictPath).writeAsString('hello worlddefinition of test');
 
-      final reader = DictdReader(dictPath);
+      final reader = DictdReader(dictPath, source: FileRandomAccessSource(dictPath));
       await reader.open();
       final parser = DictdParser();
       final entries = await parser.parseIndex(indexPath).toList();
@@ -145,7 +146,7 @@ void main() {
 
       final ifo = IfoParser();
       await ifo.parse(ifoPath);
-      final reader = DictReader(dictPath);
+      final reader = DictReader(dictPath, source: FileRandomAccessSource(dictPath));
       final idx = IdxParser(ifo);
       final entries = await idx.parse(idxPath).toList();
 

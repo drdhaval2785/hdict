@@ -1,7 +1,11 @@
 import 'package:slob_reader/slob_reader.dart' as lib;
 export 'package:slob_reader/slob_reader.dart' show SlobBlob;
+import 'package:hdict/core/parser/random_access_source.dart';
+import 'package:hdict/core/parser/saf_random_access_source.dart';
+import 'package:hdict/core/parser/bookmark_random_access_source.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:convert';
+import 'dart:io';
 
 /// Wrapper around the `slob_reader` package.
 ///
@@ -9,16 +13,38 @@ import 'dart:convert';
 /// Only supported on native platforms.
 class SlobReader {
   final String path;
+  final RandomAccessSource source;
   lib.SlobReader? _reader;
   bool _isInitialized = false;
 
-  SlobReader(this.path);
+  SlobReader(this.path, {required this.source});
+
+  /// Factory to create a SlobReader from a local file path.
+  static Future<SlobReader> fromPath(String path) async {
+    return SlobReader(path, source: FileRandomAccessSource(path));
+  }
+
+  /// Factory to create an instance from a linked source (SAF or Bookmark).
+  static Future<SlobReader> fromLinkedSource(String source) async {
+    if (Platform.isAndroid) {
+      return SlobReader(source, source: SafRandomAccessSource(source));
+    } else if (Platform.isIOS || Platform.isMacOS) {
+      return SlobReader(source, source: BookmarkRandomAccessSource(source));
+    } else {
+      return SlobReader(source, source: FileRandomAccessSource(source));
+    }
+  }
+
+  /// Factory to create a SlobReader from an Android SAF URI.
+  static Future<SlobReader> fromUri(String uri) async {
+    return SlobReader(uri, source: SafRandomAccessSource(uri));
+  }
 
   /// Opens the Slob file.
   Future<void> open() async {
     if (kIsWeb) throw UnsupportedError('Slob is not supported on Web.');
     if (_isInitialized) return;
-    _reader = await lib.SlobReader.open(path);
+    _reader = await lib.SlobReader.openSource(source);
     _isInitialized = true;
   }
 
