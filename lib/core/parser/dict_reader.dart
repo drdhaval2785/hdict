@@ -58,8 +58,8 @@ class DictReader {
   Future<void> open() async {
     if (kIsWeb) return;
     if (isDz) {
-      _dzReader = DictzipReader(source);
-      await _dzReader!.open();
+      _dzReader = DictzipReader(null);
+      await _dzReader!.openSource(source);
     }
   }
 

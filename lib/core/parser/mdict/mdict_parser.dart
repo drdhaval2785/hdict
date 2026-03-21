@@ -73,7 +73,6 @@ int _readNumber(Uint8List buffer, int numberWidth, [int start = 0]) {
 class MdxParser {
   final RandomAccessSource source;
   final String _path;
-  final Map<String, (String, String)> _stylesheet = {};
 
   late int numEntries;
   late int _numberWidth;
@@ -89,7 +88,6 @@ class MdxParser {
 
   late Map<String, String> header;
 
-  void Function()? _onHeaderRead;
   void Function()? _onRecordBlockInfoRead;
 
   MdxParser(this.source, this._path) {
