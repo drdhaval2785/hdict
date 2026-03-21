@@ -1977,12 +1977,43 @@ class DictionaryManager {
 
       // --- 1. Process direct (linkable) dictionaries -----------------------
       int currentLinked = 0;
+      // --- 1. Deduplication and Existence Checks ---------------------------
+      final existingDicts = await getDictionaries();
+      final Set<String> alreadyInLibraryPaths = existingDicts.map((d) => d['path'] as String).toSet();
+      final Set<String> alreadyInLibraryNames = existingDicts.map((d) => (d['name'] as String).toLowerCase()).toSet();
+      final Set<String> alreadyInLibraryBookmarks = existingDicts
+          .where((d) => d['source_bookmark'] != null)
+          .map((d) => d['source_bookmark'] as String)
+          .toSet();
+      final Set<String> processedInThisSessionPaths = {};
+      final Set<String> processedInThisSessionNames = {};
+
       final totalLinked = scanResult.discovered.length;
       final totalTasks = totalLinked + scanResult.foundArchives.length;
 
       for (final item in scanResult.discovered) {
         currentLinked++;
         final name = p.basenameWithoutExtension(item.path);
+        final lowerName = name.toLowerCase();
+
+        // Check if path or name already in library
+        bool exists = alreadyInLibraryPaths.contains(item.path) || 
+                      alreadyInLibraryBookmarks.contains(item.path) ||
+                      alreadyInLibraryNames.contains(lowerName);
+
+        if (exists) {
+          incompleteEntries.add('$name: ALREADY_EXISTS');
+          yield ImportProgress(
+            message: 'Skipping $name (Already in library)',
+            value: (totalTasks == 0) ? 0.0 : currentLinked / totalTasks,
+          );
+          continue;
+        }
+        
+        // Mark as encountered to skip in archives
+        processedInThisSessionPaths.add(item.path);
+        processedInThisSessionNames.add(lowerName);
+
         yield ImportProgress(
           message: 'Linking dictionary $currentLinked of $totalLinked: $name',
           value: (totalTasks == 0) ? 0.0 : (currentLinked - 1) / totalTasks * 0.4,
@@ -2013,7 +2044,10 @@ class DictionaryManager {
         await for (final progress in subStream) {
           if (progress.isCompleted) {
             if (progress.error == null) {
-              linkedEntries.add(progress.dictionaryName ?? name);
+              final finalName = progress.dictionaryName ?? name;
+              linkedEntries.add(finalName);
+              // Update with final name if different, though basename is primary for deduplication
+              if (finalName != name) processedInThisSessionNames.add(finalName);
             } else {
               incompleteEntries.add('$name (${item.format}): ${progress.error}');
             }
@@ -2062,6 +2096,26 @@ class DictionaryManager {
 
           for (final innerItem in innerScan.discovered) {
             final innerName = p.basenameWithoutExtension(innerItem.path);
+            final innerLowerName = innerName.toLowerCase();
+
+            bool innerExists = alreadyInLibraryPaths.contains(innerItem.path) ||
+                               alreadyInLibraryNames.contains(innerLowerName) ||
+                               processedInThisSessionPaths.contains(innerItem.path) ||
+                               processedInThisSessionNames.contains(innerLowerName);
+
+            if (innerExists) {
+              incompleteEntries.add('$innerName (from $archiveName): ALREADY_EXISTS');
+              yield ImportProgress(
+                message: 'Skipping $innerName from archive (Already exists)',
+                value: (totalTasks == 0) ? 1.0 : (totalLinked + currentArchive) / totalTasks,
+              );
+              continue;
+            }
+
+            // Track for further deduplication
+            processedInThisSessionPaths.add(innerItem.path);
+            processedInThisSessionNames.add(innerLowerName);
+
             Stream<ImportProgress> importSubStream;
             switch (innerItem.format) {
               case 'mdict':
@@ -2100,7 +2154,9 @@ class DictionaryManager {
             await for (final progress in importSubStream) {
               if (progress.isCompleted) {
                 if (progress.error == null) {
-                  importedEntries.add(progress.dictionaryName ?? innerName);
+                  final finalInnerName = progress.dictionaryName ?? innerName;
+                  importedEntries.add(finalInnerName);
+                  if (finalInnerName != innerName) processedInThisSessionNames.add(finalInnerName);
                 } else {
                   incompleteEntries.add('$innerName (from $archiveName): ${progress.error}');
                 }
