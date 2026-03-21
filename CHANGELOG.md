@@ -2,10 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.7] - 2026-03-20
+  
+### Added
+- **Dictionary Grouping**: Users can now create and manage dictionary groups for easier enabling/disabling of multiple dictionaries at once ([#21](https://github.com/drdhaval2785/hdict/issues/21)).
+- **Automatic Folder Groups**: When using "Import Folder", a default group is automatically created and named after the source folder ([#27](https://github.com/drdhaval2785/hdict/issues/27)).
+- **Bulk Reindexing**: Added a "Reindex All" button in Settings to reindex all installed dictionaries simultaneously ([#26](https://github.com/drdhaval2785/hdict/issues/26)).
+- **Searchable Dictionary List**: Added a search bar in the dictionary management screen for quickly filtering large lists of dictionaries ([#25](https://github.com/drdhaval2785/hdict/issues/25)).
+- **Multiple Concurrent Downloads**: Enabled checkbox selection in the "Select by Language" screen to download multiple dictionaries at once ([#22](https://github.com/drdhaval2785/hdict/issues/22)).
+- **Cancellation Support**: Added "Cancel" buttons to progress bars for long-running tasks like dictionary downloads and indexing.
+- **Explicit Theme Modes**: Added settings to choose between Light, Dark, and System theme modes ([#18](https://github.com/drdhaval2785/hdict/issues/18)).
+- **Review Prompt Throttling**: Refined rating request logic to prevent excessive prompting; now limited to every 15 days in production and once per session in debug mode ([#18](https://github.com/drdhaval2785/hdict/issues/18)).
+- **Online Dictionary Auto-grouping**: Automatically organizes "Search by Language" utility based dictionaries into logical groups.
+
+### Fixed
+- **iOS Folder Import**: Fixed a crash on iOS simulator when attempting to use "Import Folder" ([#24](https://github.com/drdhaval2785/hdict/issues/24)).
+- **Android Support**: Fixed an issue preventing external URLs from opening and added necessary boundary padding for better layout on Android devices.
+- **UI & Layout**: Corrected renderflow errors in the download dialog and improved visibility for dark/light modes.
+- **Documentation**: Extensively updated README with App Store/Snap Store links and segregated developer information.
+- **Licensing**: Updated project license to GNU GPLv3.0.
+
 ## [1.4.6] - 2026-03-17
   
 ### Added
 - **Database optimization**: Database optimization option given to users in Settings to vacuum the database and free up space.
+- **Search History Improvements**: Optimized search history interaction by linking entries directly to searched words.
  
 ## [1.4.5] - 2026-03-16
   
