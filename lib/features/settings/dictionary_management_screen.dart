@@ -974,8 +974,9 @@ class _DictionaryManagementScreenState
   Future<void> _reindexAll() async {
     if (_dictionaries.isEmpty) return;
 
+    final localContext = context;
     final bool? confirm = await showDialog<bool>(
-      context: context,
+      context: localContext,
       builder: (context) => AlertDialog(
         title: const Text('Reindex All'),
         content: const Text(
@@ -995,12 +996,11 @@ class _DictionaryManagementScreenState
     );
 
     if (confirm != true) return;
-    if (!context.mounted) return;
+    if (!localContext.mounted) return;
 
     bool cancelled = false;
-    // ignore: use_build_context_synchronously
     showDialog(
-      context: context,
+      context: localContext,
       barrierDismissible: false,
       builder: (context) {
         return PopScope(
