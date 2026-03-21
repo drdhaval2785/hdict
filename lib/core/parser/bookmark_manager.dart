@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
 
@@ -20,7 +21,7 @@ class BookmarkManager {
         });
         return path;
       } on PlatformException catch (e) {
-        print('Error resolving bookmark: $e');
+        debugPrint('Error resolving bookmark: $e');
         return null;
       }
     }
@@ -35,7 +36,7 @@ class BookmarkManager {
           'bookmark': bookmark,
         });
       } on PlatformException catch (e) {
-        print('Error stopping access: $e');
+        debugPrint('Error stopping access: $e');
       }
     }
   }
@@ -51,7 +52,7 @@ class BookmarkManager {
         });
         return bookmark;
       } on PlatformException catch (e) {
-        print('Error creating bookmark: $e');
+        debugPrint('Error creating bookmark: $e');
         return null;
       }
     }

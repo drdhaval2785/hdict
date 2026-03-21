@@ -1,10 +1,8 @@
 import "dart:convert";
-import "dart:isolate";
 import "dart:typed_data";
 import "package:blockchain_utils/crypto/crypto/hash/hash.dart";
-import "package:encoding/encoding.dart";
+import "package:charset/charset.dart";
 import "package:collection/collection.dart";
-import "package:html_unescape/html_unescape.dart";
 import "package:hdict/core/parser/random_access_source.dart";
 import "dart:io"; // for zlib
 
@@ -355,7 +353,7 @@ class MdxParser {
       } else {
         var j = i;
         while (j < keyBlock.length && keyBlock[j] != 0) j++;
-        keyText = encoding(_encoding)!.decode(keyBlock.sublist(i, j));
+        keyText = charset(_encoding)!.decode(keyBlock.sublist(i, j));
         i = j + 1;
       }
       keyList.add((recordStart, keyText));
@@ -367,7 +365,7 @@ class MdxParser {
     if (_encoding == "UTF-16") {
       return Utf16Decoder().decodeUtf16Le(rawData);
     } else {
-      return encoding(_encoding)!.decode(rawData);
+      return charset(_encoding)!.decode(rawData);
     }
   }
 

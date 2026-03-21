@@ -55,6 +55,16 @@ class DictdReader {
     return await _reader!.readEntry(offset, length);
   }
 
+  Future<List<String>> readEntries(List<({int offset, int length})> entries) async {
+    if (_reader == null) throw Exception('Reader not opened');
+    final res = <String>[];
+    for (final e in entries) {
+      final s = await _reader!.readEntry(e.offset, e.length);
+      res.add(s ?? '');
+    }
+    return res;
+  }
+
   Future<void> close() async {
     await _reader?.close();
   }

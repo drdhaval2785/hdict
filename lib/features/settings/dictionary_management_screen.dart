@@ -6,7 +6,6 @@ import 'package:file_picker/file_picker.dart';
 
 import 'package:hdict/core/manager/dictionary_manager.dart';
 import 'package:hdict/core/manager/dictionary_group_manager.dart';
-import 'package:hdict/core/parser/bookmark_manager.dart';
 import 'package:docman/docman.dart';
 import 'package:hdict/features/home/widgets/app_drawer.dart';
 import 'package:hdict/features/settings/widgets/stardict_download_dialog.dart';

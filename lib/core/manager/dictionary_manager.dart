@@ -21,10 +21,7 @@ import 'package:hdict/core/parser/dictd_reader.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_7zip/flutter_7zip.dart';
 import 'package:hdict/core/utils/folder_scanner.dart';
-import 'package:docman/docman.dart' hide DocumentInfo;
-import 'package:hdict/core/parser/random_access_source.dart';
-import 'package:hdict/core/parser/saf_random_access_source.dart';
-import 'package:hdict/core/parser/bookmark_random_access_source.dart';
+import 'package:docman/docman.dart';
 import 'package:hdict/core/parser/bookmark_manager.dart';
 
 // Top-level functions for compute
@@ -1731,11 +1728,10 @@ class DictionaryManager {
     final List<DiscoveredDict> discovered = [];
     final List<IncompleteDict> incomplete = [];
 
-    final result = FolderScanResult();
+    final result = FolderScanResult(discovered: discovered, incomplete: incomplete);
 
     // docman's DirectoryInfo for the tree URI
     final dir = await DocumentFile.fromUri(treeUri);
-    if (dir == null) return result;
     if (dir == null) return result;
 
     // We need to list files recursively. docman might not have a recursive list,
@@ -1758,7 +1754,7 @@ class DictionaryManager {
             bool hasIdx = false;
             bool hasDict = false;
             for (final f in entities) {
-              final n = f.name.toLowerCase() ?? '';
+              final n = f.name.toLowerCase();
               if (n.startsWith(baseName.toLowerCase())) {
                 if (n.endsWith('.idx')) hasIdx = true;
                 if (n.endsWith('.dict') || n.endsWith('.dict.dz'))
@@ -1768,7 +1764,7 @@ class DictionaryManager {
             if (hasIdx && hasDict) {
               String? idxUri, dictUri, synUri;
               for (final f in entities) {
-                final n = f.name.toLowerCase() ?? '';
+                final n = f.name.toLowerCase();
                 if (n.startsWith(baseName.toLowerCase())) {
                   if (n.endsWith('.idx')) idxUri = f.uri;
                   if (n.endsWith('.dict') || n.endsWith('.dict.dz')) dictUri = f.uri;
@@ -1824,7 +1820,7 @@ class DictionaryManager {
             final String baseName = name.substring(0, name.length - 6);
             String? dictPath;
             for (final f in entities) {
-              final n = f.name.toLowerCase() ?? '';
+              final n = f.name.toLowerCase();
               if (n.startsWith(baseName.toLowerCase()) &&
                   (n.endsWith('.dict') || n.endsWith('.dict.dz'))) {
                 dictPath = f.uri.toString();
@@ -2393,6 +2389,8 @@ class DictionaryManager {
               : null,
           indexDefinitions,
           ifoParser,
+          'managed',
+          null,
           receivePort.sendPort,
           rootIsolateToken,
         ),
