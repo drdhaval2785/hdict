@@ -8,7 +8,7 @@ class AppDelegate: FlutterAppDelegate {
   override func applicationDidFinishLaunching(_ notification: Notification) {
     let controller = mainFlutterWindow?.contentViewController as! FlutterViewController
     let bookmarkChannel = FlutterMethodChannel(name: "com.drdhaval2785.hdict/bookmarks",
-                                              binaryMessenger: controller.binaryMessenger)
+                                              binaryMessenger: controller.engine.binaryMessenger)
     
     bookmarkChannel.setMethodCallHandler({
       [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) -> Void in
