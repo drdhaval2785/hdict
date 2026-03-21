@@ -2026,7 +2026,7 @@ class DictionaryManager {
       final String? bookmark = await BookmarkManager.createBookmark(mdxPath);
       if (bookmark == null) throw Exception('Failed to create bookmark');
 
-      final reader = await MdictReader.fromLinkedSource(bookmark);
+      final reader = await MdictReader.fromLinkedSource(bookmark, actualPath: mdxPath);
       await reader.open();
       // MDict book name usually comes from the header or filename
       final bookName = p.basenameWithoutExtension(mdxPath);

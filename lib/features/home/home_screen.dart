@@ -159,7 +159,7 @@ class HomeScreen extends StatefulWidget {
 
       // Preserve newlines for non-mdict formats by converting to <br>
       // while collapsing other multiple spaces.
-      if (format != 'mdict') {
+      if (format != 'mdict' && format != 'stardict') {
         processed = processed.replaceAll('\r\n', '\n').replaceAllMapped(
           RegExp(r'\s+'),
           (match) {

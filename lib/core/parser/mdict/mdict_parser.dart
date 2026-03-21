@@ -91,7 +91,7 @@ class MdxParser {
   void Function()? _onRecordBlockInfoRead;
 
   MdxParser(this.source, this._path) {
-    _mdx = _path.substring(_path.lastIndexOf(".")) == ".mdx";
+    _mdx = _path.toLowerCase().endsWith(".mdx");
   }
 
   Future<void> initDict({
