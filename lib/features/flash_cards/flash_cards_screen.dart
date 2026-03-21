@@ -134,7 +134,8 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
           if (dictPath.endsWith('.ifo')) {
             dictPath = dictPath.replaceAll('.ifo', '.dict');
           }
-          final reader = DictReader(dictPath, dictId: meta['dict_id']);
+          final reader = await DictReader.fromPath(dictPath, dictId: meta['dict_id']);
+          await reader.open();
           final meaning = await reader.readEntry(
             meta['offset'],
             meta['length'],

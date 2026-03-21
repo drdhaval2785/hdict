@@ -100,8 +100,8 @@ void main() {
       await File(indexPath).writeAsString('hello\tA\tL\ntest\tL\tS\n');
       await File(dictPath).writeAsString('hello worlddefinition of test');
 
-      final reader = DictdReader(dictPath, source: FileRandomAccessSource(dictPath));
-      await reader.open();
+      final reader = DictdReader(dictPath);
+      await reader.openSource(FileRandomAccessSource(dictPath));
       final parser = DictdParser();
       final entries = await parser.parseIndex(indexPath).toList();
 

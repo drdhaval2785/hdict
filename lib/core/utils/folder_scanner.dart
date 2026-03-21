@@ -19,11 +19,15 @@ class DiscoveredDict {
   /// The name of the immediate parent folder.
   final String? parentFolderName;
 
+  /// Holds mapped URIs for all constituent files when using Android SAF.
+  final Map<String, String>? safUris;
+
   const DiscoveredDict({
     required this.path,
     required this.format,
     this.companionPath,
     this.parentFolderName,
+    this.safUris,
   });
 
   Map<String, String?> toMap() => {

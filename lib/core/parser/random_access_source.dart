@@ -1,16 +1,26 @@
-import 'dart:io';
+import 'package:slob_reader/slob_reader.dart' as slob;
+import 'package:dictd_reader/dictd_reader.dart' as dictd;
+import 'package:dictzip_reader/dictzip_reader.dart' as dictzip;
 import 'dart:typed_data';
+import 'dart:io';
 
 /// Abstract source that provides random-access read capability.
-/// This matches the interface expected by slob_reader ^0.1.5 and dictd_reader ^0.1.2.
-abstract class RandomAccessSource {
+/// This matches the interface expected by slob_reader, dictd_reader, and dictzip_reader.
+abstract class RandomAccessSource
+    implements
+        slob.RandomAccessSource,
+        dictd.RandomAccessSource,
+        dictzip.RandomAccessSource {
   /// Reads [length] bytes starting at [offset].
+  @override
   Future<Uint8List> read(int offset, int length);
 
   /// Returns the total size of the data source in bytes.
+  @override
   Future<int> get length;
 
   /// Releases any system resources.
+  @override
   Future<void> close();
 }
 

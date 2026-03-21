@@ -763,7 +763,7 @@ class _DictionaryManagementScreenState
     String? folderPath;
     try {
       if (Platform.isAndroid) {
-        final tree = await Docman.pickDocumentTree();
+        final tree = await DocMan.pick.directory();
         folderPath = tree?.uri.toString();
       } else {
         folderPath = await FilePicker.platform.getDirectoryPath();

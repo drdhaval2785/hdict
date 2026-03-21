@@ -1732,17 +1732,18 @@ class DictionaryManager {
     final List<IncompleteDict> incomplete = [];
 
     // docman's DirectoryInfo for the tree URI
-    final dir = DirectoryInfo(Uri.parse(treeUri));
+    final dir = await DocumentFile.fromUri(treeUri);
+    if (dir == null) return result;
 
     // We need to list files recursively. docman might not have a recursive list,
     // so we'll implement a simple one.
-    Future<void> scan(DirectoryInfo d) async {
-      final List<DocumentInfo> entities = await d.listFiles();
+    Future<void> scan(DocumentFile d) async {
+      final List<DocumentFile> entities = await d.listDocuments();
       final String parentName = d.name ?? 'Root';
 
       for (final entity in entities) {
         if (entity.isDirectory) {
-          await scan(DirectoryInfo(entity.uri));
+          await scan(entity);
         } else {
           final String name = entity.name ?? '';
           final String lowerName = name.toLowerCase();
@@ -1762,11 +1763,26 @@ class DictionaryManager {
               }
             }
             if (hasIdx && hasDict) {
+              String? idxUri, dictUri, synUri;
+              for (final f in entities) {
+                final n = f.name?.toLowerCase() ?? '';
+                if (n.startsWith(baseName.toLowerCase())) {
+                  if (n.endsWith('.idx')) idxUri = f.uri;
+                  if (n.endsWith('.dict') || n.endsWith('.dict.dz')) dictUri = f.uri;
+                  if (n.endsWith('.syn')) synUri = f.uri;
+                }
+              }
               discovered.add(
                 DiscoveredDict(
                   path: path,
                   format: 'stardict',
                   parentFolderName: parentName,
+                  safUris: {
+                    'ifo': path,
+                    if (idxUri != null) 'idx': idxUri,
+                    if (dictUri != null) 'dict': dictUri,
+                    if (synUri != null) 'syn': synUri,
+                  },
                 ),
               );
             } else {
@@ -1840,6 +1856,14 @@ class DictionaryManager {
     return FolderScanResult(discovered: discovered, incomplete: incomplete);
   }
 
+  String? _resolveLocalFile(String basePath, List<String> extensions) {
+    for (final ext in extensions) {
+      final f = File('$basePath$ext');
+      if (f.existsSync()) return f.path;
+    }
+    return null;
+  }
+
   Stream<ImportProgress> _linkStarDict(
     String ifoPath, {
     bool indexDefinitions = false,
@@ -1855,21 +1879,21 @@ class DictionaryManager {
       if (bookmark == null) throw Exception('Failed to create bookmark');
 
       final basePath = p.withoutExtension(ifoPath);
-      final idxPath = _findFile(basePath, [
+      final idxPath = _resolveLocalFile(basePath, [
         '.idx',
         '.idx.gz',
         '.idx.dz',
         '.idx.bz2',
         '.idx.xz',
       ])!;
-      final dictPath = _findFile(basePath, [
+      final dictPath = _resolveLocalFile(basePath, [
         '.dict',
         '.dict.dz',
         '.dict.gz',
         '.dict.bz2',
         '.dict.xz',
       ])!;
-      final synPath = _findFile(basePath, [
+      final synPath = _resolveLocalFile(basePath, [
         '.syn',
         '.syn.gz',
         '.syn.dz',
@@ -1878,8 +1902,8 @@ class DictionaryManager {
       ]);
 
       final dictId = await _dbHelper.insertDictionary(
-        name: bookName,
-        path: ifoPath, // Anchor path
+        bookName,
+        ifoPath, // Anchor path
         format: 'stardict',
         sourceType: 'linked',
         sourceBookmark: bookmark,
@@ -1931,8 +1955,8 @@ class DictionaryManager {
       final bookName = p.basenameWithoutExtension(mdxPath);
 
       final dictId = await _dbHelper.insertDictionary(
-        name: bookName,
-        path: mdxPath,
+        bookName,
+        mdxPath,
         format: 'mdict',
         sourceType: 'linked',
         sourceBookmark: bookmark,
@@ -1979,8 +2003,8 @@ class DictionaryManager {
 
       final bookName = p.basenameWithoutExtension(slobPath);
       final dictId = await _dbHelper.insertDictionary(
-        name: bookName,
-        path: slobPath,
+        bookName,
+        slobPath,
         format: 'slob',
         sourceType: 'linked',
         sourceBookmark: bookmark,
@@ -2028,8 +2052,8 @@ class DictionaryManager {
 
       final bookName = p.basenameWithoutExtension(indexPath);
       final dictId = await _dbHelper.insertDictionary(
-        name: bookName,
-        path: indexPath,
+        bookName,
+        indexPath,
         format: 'dictd',
         sourceType: 'linked',
         sourceBookmark: bookmark,
@@ -2064,1566 +2088,1549 @@ class DictionaryManager {
     }
   }
 
-    Stream<ImportProgress> importMultipleFilesWebStream(
-      List<({String name, Uint8List bytes})> files, {
-      bool indexDefinitions = false,
-    }) async* {
-      yield ImportProgress(message: 'Preparing web workspace...', value: 0.0);
+  Stream<ImportProgress> importMultipleFilesWebStream(
+    List<({String name, Uint8List bytes})> files, {
+    bool indexDefinitions = false,
+  }) async* {
+    yield ImportProgress(message: 'Preparing web workspace...', value: 0.0);
 
-      try {
-        Map<String, Uint8List> allFiles = {};
-        int processedFiles = 0;
+    try {
+      Map<String, Uint8List> allFiles = {};
+      int processedFiles = 0;
 
-        for (final file in files) {
-          yield ImportProgress(
-            message: 'Extracting/Processing ${file.name}...',
-            value: (processedFiles / files.length) * 0.4,
+      for (final file in files) {
+        yield ImportProgress(
+          message: 'Extracting/Processing ${file.name}...',
+          value: (processedFiles / files.length) * 0.4,
+        );
+
+        final lowerName = file.name.toLowerCase();
+        if (lowerName.endsWith('.zip')) {
+          final archive = ZipDecoder().decodeBytes(file.bytes);
+          for (final f in archive) {
+            if (f.isFile)
+              allFiles[f.name] = Uint8List.fromList(f.content as List<int>);
+          }
+        } else if (lowerName.endsWith('.tar.gz') ||
+            lowerName.endsWith('.tgz')) {
+          final archive = TarDecoder().decodeBytes(
+            GZipDecoder().decodeBytes(file.bytes),
           );
-
-          final lowerName = file.name.toLowerCase();
-          if (lowerName.endsWith('.zip')) {
-            final archive = ZipDecoder().decodeBytes(file.bytes);
-            for (final f in archive) {
-              if (f.isFile)
-                allFiles[f.name] = Uint8List.fromList(f.content as List<int>);
-            }
-          } else if (lowerName.endsWith('.tar.gz') ||
-              lowerName.endsWith('.tgz')) {
-            final archive = TarDecoder().decodeBytes(
-              GZipDecoder().decodeBytes(file.bytes),
-            );
-            for (final f in archive) {
-              if (f.isFile)
-                allFiles[f.name] = Uint8List.fromList(f.content as List<int>);
-            }
-          } else if (lowerName.endsWith('.tar.bz2') ||
-              lowerName.endsWith('.tbz2')) {
-            final archive = TarDecoder().decodeBytes(
-              BZip2Decoder().decodeBytes(file.bytes),
-            );
-            for (final f in archive) {
-              if (f.isFile)
-                allFiles[f.name] = Uint8List.fromList(f.content as List<int>);
-            }
-          } else if (lowerName.endsWith('.tar.xz')) {
-            final archive = TarDecoder().decodeBytes(
-              XZDecoder().decodeBytes(file.bytes),
-            );
-            for (final f in archive) {
-              if (f.isFile)
-                allFiles[f.name] = Uint8List.fromList(f.content as List<int>);
-            }
-          } else if (lowerName.endsWith('.tar')) {
-            final archive = TarDecoder().decodeBytes(file.bytes);
-            for (final f in archive) {
-              if (f.isFile)
-                allFiles[f.name] = Uint8List.fromList(f.content as List<int>);
-            }
-          } else {
-            allFiles[file.name] = file.bytes;
+          for (final f in archive) {
+            if (f.isFile)
+              allFiles[f.name] = Uint8List.fromList(f.content as List<int>);
           }
-          processedFiles++;
-        }
-
-        // Find all dictionary entry points in the extracted file map.
-        final ifoNames = allFiles.keys
-            .where((n) => n.toLowerCase().endsWith('.ifo'))
-            .toList();
-        final mdxNames = allFiles.keys
-            .where((n) => n.toLowerCase().endsWith('.mdx'))
-            .toList();
-        final slobNames = allFiles.keys
-            .where((n) => n.toLowerCase().endsWith('.slob'))
-            .toList();
-
-        if (ifoNames.isEmpty && mdxNames.isEmpty && slobNames.isEmpty) {
-          throw Exception(
-            'No supported dictionary files (.ifo, .mdx, .slob) found in archive.',
+        } else if (lowerName.endsWith('.tar.bz2') ||
+            lowerName.endsWith('.tbz2')) {
+          final archive = TarDecoder().decodeBytes(
+            BZip2Decoder().decodeBytes(file.bytes),
           );
-        }
-
-        // --- StarDict dictionaries ---
-        int totalDicts = ifoNames.length + mdxNames.length + slobNames.length;
-        int currentDict = 0;
-
-        for (final ifoName in ifoNames) {
-          currentDict++;
-          yield ImportProgress(
-            message:
-                'Importing dictionary $currentDict of $totalDicts: ${p.basenameWithoutExtension(ifoName)}',
-            value: 0.5 + (currentDict - 1) / totalDicts * 0.5,
-            dictionaryName: p.basenameWithoutExtension(ifoName),
+          for (final f in archive) {
+            if (f.isFile)
+              allFiles[f.name] = Uint8List.fromList(f.content as List<int>);
+          }
+        } else if (lowerName.endsWith('.tar.xz')) {
+          final archive = TarDecoder().decodeBytes(
+            XZDecoder().decodeBytes(file.bytes),
           );
-
-          try {
-            final stream = _processDictionaryFilesWeb(
-              ifoName,
-              allFiles,
-              indexDefinitions: indexDefinitions,
-            );
-            await for (final progress in stream) {
-              yield ImportProgress(
-                message: '[$currentDict/$totalDicts] ${progress.message}',
-                value:
-                    0.5 +
-                    ((currentDict - 1) + (progress.value)) / totalDicts * 0.5,
-                dictionaryName:
-                    progress.dictionaryName ??
-                    p.basenameWithoutExtension(ifoName),
-              );
-              if (progress.isCompleted) break;
-            }
-          } catch (e) {
-            hDebugPrint('Web error importing $ifoName: $e');
+          for (final f in archive) {
+            if (f.isFile)
+              allFiles[f.name] = Uint8List.fromList(f.content as List<int>);
           }
+        } else if (lowerName.endsWith('.tar')) {
+          final archive = TarDecoder().decodeBytes(file.bytes);
+          for (final f in archive) {
+            if (f.isFile)
+              allFiles[f.name] = Uint8List.fromList(f.content as List<int>);
+          }
+        } else {
+          allFiles[file.name] = file.bytes;
         }
+        processedFiles++;
+      }
 
-        // --- MDict dictionaries (extracted from archive) ---
-        // MDict import on Web requires a real file path, which isn't possible
-        // in a web context. Surface a clear error instead of silently skipping.
-        for (final mdxName in mdxNames) {
-          currentDict++;
-          yield ImportProgress(
-            message:
-                '[$currentDict/$totalDicts] MDict (.mdx) files inside archives are not supported on Web. '
-                'Please import the .mdx file directly using "Import File".',
-            value: 0.5 + (currentDict - 1) / totalDicts * 0.5,
-            error: 'MDict inside archive not supported on Web',
-            isCompleted: totalDicts == currentDict,
-            dictionaryName: p.basenameWithoutExtension(mdxName),
+      // Find all dictionary entry points in the extracted file map.
+      final ifoNames = allFiles.keys
+          .where((n) => n.toLowerCase().endsWith('.ifo'))
+          .toList();
+      final mdxNames = allFiles.keys
+          .where((n) => n.toLowerCase().endsWith('.mdx'))
+          .toList();
+      final slobNames = allFiles.keys
+          .where((n) => n.toLowerCase().endsWith('.slob'))
+          .toList();
+
+      if (ifoNames.isEmpty && mdxNames.isEmpty && slobNames.isEmpty) {
+        throw Exception(
+          'No supported dictionary files (.ifo, .mdx, .slob) found in archive.',
+        );
+      }
+
+      // --- StarDict dictionaries ---
+      int totalDicts = ifoNames.length + mdxNames.length + slobNames.length;
+      int currentDict = 0;
+
+      for (final ifoName in ifoNames) {
+        currentDict++;
+        yield ImportProgress(
+          message:
+              'Importing dictionary $currentDict of $totalDicts: ${p.basenameWithoutExtension(ifoName)}',
+          value: 0.5 + (currentDict - 1) / totalDicts * 0.5,
+          dictionaryName: p.basenameWithoutExtension(ifoName),
+        );
+
+        try {
+          final stream = _processDictionaryFilesWeb(
+            ifoName,
+            allFiles,
+            indexDefinitions: indexDefinitions,
           );
-          hDebugPrint('Web: skipped MDict $mdxName — not supported in archive');
-        }
-
-        // --- Slob dictionaries (extracted from archive) ---
-        // Same limitation as MDict on Web — needs a file path.
-        for (final slobName in slobNames) {
-          currentDict++;
-          yield ImportProgress(
-            message:
-                '[$currentDict/$totalDicts] Slob (.slob) files inside archives are not supported on Web. '
-                'Please import the .slob file directly using "Import File".',
-            value: 0.5 + (currentDict - 1) / totalDicts * 0.5,
-            error: 'Slob inside archive not supported on Web',
-            isCompleted: totalDicts == currentDict,
-            dictionaryName: p.basenameWithoutExtension(slobName),
-          );
-          hDebugPrint('Web: skipped Slob $slobName — not supported in archive');
-        }
-
-        yield ImportProgress(
-          message: 'All web imports complete.',
-          value: 1.0,
-          isCompleted: true,
-        );
-      } catch (e) {
-        yield ImportProgress(
-          message: 'Web error: $e',
-          value: 0.0,
-          error: e.toString(),
-          isCompleted: true,
-        );
-      }
-    }
-
-    /// Shared logic for processing dictionary files and saving them permanently on Native.
-    Stream<ImportProgress> _processDictionaryFiles(
-      String ifoPath, {
-      bool indexDefinitions = false,
-    }) async* {
-      try {
-        yield ImportProgress(
-          message: 'Processing dictionary files...',
-          value: 0.55,
-        );
-
-        final actualIfoPath = await _maybeDecompress(ifoPath);
-        final checksum = await _calculateChecksum(actualIfoPath);
-
-        final existing = await _dbHelper.getDictionaryByChecksum(checksum);
-        if (existing != null) {
-          yield ImportProgress(
-            message:
-                'Dictionary "${existing['name']}" is already in your library.',
-            value: 1.0,
-            error: 'ALREADY_EXISTS',
-            isCompleted: true,
-          );
-          return;
-        }
-
-        final basePath = p.withoutExtension(actualIfoPath);
-
-        // Robust file finding: checking local directory first
-        String? findLocalFile(List<String> extensions) {
-          for (final ext in extensions) {
-            final path = '$basePath$ext';
-            if (File(path).existsSync()) {
-              return path;
-            }
-          }
-          return null;
-        }
-
-        String? idxPath = findLocalFile([
-          '.idx',
-          '.idx.gz',
-          '.idx.dz',
-          '.idx.bz2',
-          '.idx.xz',
-        ]);
-        if (idxPath == null)
-          throw Exception('No .idx file found for ${p.basename(ifoPath)}');
-
-        String? dictPath = findLocalFile([
-          '.dict',
-          '.dict.dz',
-          '.dict.gz',
-          '.dict.bz2',
-          '.dict.xz',
-        ]);
-        if (dictPath == null)
-          throw Exception('No .dict file found for ${p.basename(ifoPath)}');
-
-        String? synPath = findLocalFile([
-          '.syn',
-          '.syn.gz',
-          '.syn.dz',
-          '.syn.bz2',
-          '.syn.xz',
-        ]);
-
-        final ifoParser = IfoParser();
-        await ifoParser.parse(actualIfoPath);
-        final bookName = ifoParser.bookName ?? 'Unknown Dictionary';
-
-        yield ImportProgress(
-          message: 'Saving dictionary files...',
-          value: 0.75,
-          dictionaryName: bookName,
-        );
-
-        // Native: Move to permanent location
-        final appDocDir = await getApplicationDocumentsDirectory();
-        final dictsDir = Directory(p.join(appDocDir.path, 'dictionaries'));
-        if (!await dictsDir.exists()) await dictsDir.create(recursive: true);
-
-        final timestamp = DateTime.now().millisecondsSinceEpoch;
-        final permanentDir = Directory(
-          p.join(dictsDir.path, 'dict_$timestamp'),
-        );
-        await permanentDir.create(recursive: true);
-
-        // For the .idx and .syn files (small), decompress if needed so IdxParser / SynParser
-        // can read them as plain bytes. For .dict/.dict.dz we keep the file as-is since
-        // DictReader now handles .dict.dz directly via DictzipReader (no disk decompression).
-        final preparedIdxPath = await _maybeDecompress(idxPath);
-        final preparedSynPath = synPath != null
-            ? await _maybeDecompress(synPath)
-            : null;
-
-        // Copy the .dict or .dict.dz file without decompressing it.
-        final finalDictPath = p.join(permanentDir.path, p.basename(dictPath));
-        await File(dictPath).copy(finalDictPath);
-        await File(
-          preparedIdxPath,
-        ).copy(p.join(permanentDir.path, p.basename(preparedIdxPath)));
-        await File(
-          actualIfoPath,
-        ).copy(p.join(permanentDir.path, p.basename(actualIfoPath)));
-        if (preparedSynPath != null) {
-          await File(
-            preparedSynPath,
-          ).copy(p.join(permanentDir.path, p.basename(preparedSynPath)));
-        }
-
-        final dictId = await _dbHelper.insertDictionary(
-          bookName,
-          finalDictPath,
-          indexDefinitions: indexDefinitions,
-          typeSequence: ifoParser.sameTypeSequence,
-          checksum: checksum,
-          sourceUrl: _currentImportSourceUrl,
-        );
-
-        yield ImportProgress(
-          message: 'Indexing words...',
-          value: 0.85,
-          dictionaryName: bookName,
-        );
-
-        final receivePort = ReceivePort();
-        final rootIsolateToken = RootIsolateToken.instance!;
-
-        await Isolate.spawn(
-          _indexEntry,
-          _IndexArgs(
-            dictId,
-            p.join(permanentDir.path, p.basename(preparedIdxPath)),
-            finalDictPath,
-            preparedSynPath != null
-                ? p.join(permanentDir.path, p.basename(preparedSynPath))
-                : null,
-            indexDefinitions,
-            ifoParser,
-            receivePort.sendPort,
-            rootIsolateToken,
-          ),
-        );
-
-        int finalHeadwordCount = 0;
-        int finalDefWordCount = 0;
-
-        await for (final message in receivePort) {
-          if (message is ImportProgress) {
-            if (message.error != null) {
-              receivePort.close();
-              if (message.error == 'ALREADY_EXISTS') {
-                throw Exception('ALREADY_EXISTS: ${message.message}');
-              }
-              throw Exception(message.error);
-            }
-            if (message.isCompleted) {
-              finalHeadwordCount = message.headwordCount;
-              finalDefWordCount = message.definitionWordCount;
-              receivePort.close();
-              break;
-            }
-            yield message;
-          }
-        }
-
-        final sampleWords = await _dbHelper.getSampleWords(dictId);
-
-        yield ImportProgress(
-          message: 'Import complete!',
-          value: 1.0,
-          isCompleted: true,
-          dictId: dictId,
-          ifoPath: p.join(permanentDir.path, p.basename(actualIfoPath)),
-          sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
-          headwordCount: finalHeadwordCount,
-          definitionWordCount: finalDefWordCount,
-          dictionaryName: bookName,
-        );
-      } catch (e, s) {
-        hDebugPrint('Error in _processDictionaryFiles: $e\n$s');
-        yield ImportProgress(
-          message: 'Error: $e',
-          value: 0.0,
-          error: e.toString(),
-          isCompleted: true,
-        );
-      }
-    }
-
-    Future<Uint8List> _maybeDecompressWeb(String name, Uint8List bytes) async {
-      if (name.endsWith('.gz') || name.endsWith('.dz')) {
-        return Uint8List.fromList(await compute(_decompressGzip, bytes));
-      }
-      if (name.endsWith('.bz2')) {
-        return Uint8List.fromList(await compute(_decompressBZip2, bytes));
-      }
-      if (name.endsWith('.xz')) {
-        return Uint8List.fromList(await compute(_decompressXZ, bytes));
-      }
-      return bytes;
-    }
-
-    String _getDecompressedName(String name) {
-      if (name.endsWith('.gz') || name.endsWith('.dz')) {
-        return name.substring(0, name.length - 3);
-      }
-      if (name.endsWith('.bz2')) {
-        return name.substring(0, name.length - 4);
-      }
-      if (name.endsWith('.xz')) {
-        return name.substring(0, name.length - 3);
-      }
-      return name;
-    }
-
-    /// Web-specific processing logic using bytes and SQLite virtual filesystem.
-    Stream<ImportProgress> _processDictionaryFilesWeb(
-      String ifoName,
-      Map<String, Uint8List> files, {
-      bool indexDefinitions = false,
-    }) async* {
-      try {
-        yield ImportProgress(message: 'Processing web files...', value: 0.5);
-
-        final ifoBytes = files[ifoName]!;
-        // IFO files are usually not compressed, but let's be safe
-        final decompressedIfoBytes = await _maybeDecompressWeb(
-          ifoName,
-          ifoBytes,
-        );
-        final ifoContent = utf8.decode(
-          decompressedIfoBytes,
-          allowMalformed: true,
-        );
-        final ifoParser = IfoParser();
-        ifoParser.parseContent(ifoContent);
-
-        final bookName = ifoParser.bookName ?? 'Unknown Web Dictionary';
-        final basePath = p.withoutExtension(ifoName);
-
-        // Find required components in the map
-        String? idxName;
-        for (final name in files.keys) {
-          if (name.startsWith(basePath) && name.contains('.idx')) {
-            idxName = name;
-            break;
-          }
-        }
-        if (idxName == null) throw Exception('Missing .idx file');
-
-        String? dictName;
-        for (final name in files.keys) {
-          if (name.startsWith(basePath) && name.contains('.dict')) {
-            dictName = name;
-            break;
-          }
-        }
-        if (dictName == null) throw Exception('Missing .dict file');
-
-        String? synName;
-        for (final name in files.keys) {
-          if (name.startsWith(basePath) && name.contains('.syn')) {
-            synName = name;
-            break;
-          }
-        }
-
-        // Decompress components
-        yield ImportProgress(
-          message: 'Decompressing components...',
-          value: 0.55,
-          dictionaryName: bookName,
-        );
-        final decompressedIdxBytes = await _maybeDecompressWeb(
-          idxName,
-          files[idxName]!,
-        );
-        final decompressedDictBytes = await _maybeDecompressWeb(
-          dictName,
-          files[dictName]!,
-        );
-        final decompressedSynBytes = synName != null
-            ? await _maybeDecompressWeb(synName, files[synName]!)
-            : null;
-
-        final finalIfoName = _getDecompressedName(p.basename(ifoName));
-        final finalIdxName = _getDecompressedName(p.basename(idxName));
-        final finalDictName = _getDecompressedName(p.basename(dictName));
-        final finalSynName = synName != null
-            ? _getDecompressedName(p.basename(synName))
-            : null;
-
-        final dictId = await _dbHelper.insertDictionary(
-          bookName,
-          finalDictName,
-          indexDefinitions: indexDefinitions,
-          typeSequence: ifoParser.sameTypeSequence,
-          sourceUrl: _currentImportSourceUrl,
-        );
-
-        // Save files to virtual filesystem (SQLite 'files' table)
-        yield ImportProgress(
-          message: 'Saving files to database...',
-          value: 0.6,
-          dictionaryName: bookName,
-        );
-        await _dbHelper.saveFile(dictId, finalIfoName, decompressedIfoBytes);
-        await _dbHelper.saveFile(dictId, finalIdxName, decompressedIdxBytes);
-        await _dbHelper.saveFile(dictId, finalDictName, decompressedDictBytes);
-        if (finalSynName != null && decompressedSynBytes != null) {
-          await _dbHelper.saveFile(dictId, finalSynName, decompressedSynBytes);
-        }
-
-        // Indexing on Web (sequential for simplicity/stability)
-        yield ImportProgress(
-          message: 'Indexing words (Web)...',
-          value: 0.7,
-          dictionaryName: bookName,
-        );
-
-        final idxParser = IdxParser(ifoParser);
-        final dictReader = DictReader(finalDictName, dictId: dictId);
-        await dictReader.open();
-
-        List<Map<String, dynamic>> batch = [];
-        List<({int offset, int length, String content})> wordOffsets = [];
-        int headwordCount = 0;
-        int defWordCount = 0;
-
-        final idxStream = idxParser.parseFromBytes(decompressedIdxBytes);
-        await for (final entry in idxStream) {
-          final String word = entry['word'];
-          final offset = entry['offset'] as int;
-          final length = entry['length'] as int;
-
-          // When indexing definitions, we have the bytes directly available in decompressedDictBytes
-          String content = '';
-          if (indexDefinitions) {
-            if (offset + length <= decompressedDictBytes.length) {
-              content = utf8.decode(
-                decompressedDictBytes.sublist(offset, offset + length),
-                allowMalformed: true,
-              );
-            }
-          }
-
-          batch.add({
-            'word': word,
-            'content': content,
-            'dict_id': dictId,
-            'offset': offset,
-            'length': length,
-          });
-
-          headwordCount++;
-          if (content.isNotEmpty) {
-            defWordCount += content
-                .split(RegExp(r'\s+'))
-                .where((s) => s.isNotEmpty)
-                .length;
-          }
-
-          wordOffsets.add((offset: offset, length: length, content: content));
-
-          if (batch.length >= 1000) {
-            await _dbHelper.batchInsertWords(dictId, batch);
-            batch.clear();
+          await for (final progress in stream) {
             yield ImportProgress(
-              message: 'Indexing $headwordCount words...',
+              message: '[$currentDict/$totalDicts] ${progress.message}',
               value:
-                  0.7 +
-                  (headwordCount /
-                      (ifoParser.wordCount == 0
-                          ? 100000
-                          : ifoParser.wordCount) *
-                      0.2),
-              headwordCount: headwordCount,
-              dictionaryName: bookName,
+                  0.5 +
+                  ((currentDict - 1) + (progress.value)) / totalDicts * 0.5,
+              dictionaryName:
+                  progress.dictionaryName ??
+                  p.basenameWithoutExtension(ifoName),
             );
+            if (progress.isCompleted) break;
           }
-        }
-        if (batch.isNotEmpty) await _dbHelper.batchInsertWords(dictId, batch);
-
-        // SYN support for Web
-        if (finalSynName != null && decompressedSynBytes != null) {
-          yield ImportProgress(message: 'Indexing synonyms...', value: 0.9);
-          final synParser = SynParser();
-          final synStream = synParser.parseFromBytes(decompressedSynBytes);
-          List<Map<String, dynamic>> synBatch = [];
-          await for (final syn in synStream) {
-            final originalIndex = syn['original_word_index'] as int;
-            if (originalIndex < wordOffsets.length) {
-              final originalInfo = wordOffsets[originalIndex];
-              synBatch.add({
-                'word': syn['word'],
-                'content': originalInfo.content,
-                'dict_id': dictId,
-                'offset': originalInfo.offset,
-                'length': originalInfo.length,
-              });
-              headwordCount++;
-            }
-            if (synBatch.length >= 1000) {
-              await _dbHelper.batchInsertWords(dictId, synBatch);
-              synBatch.clear();
-            }
-          }
-          if (synBatch.isNotEmpty)
-            await _dbHelper.batchInsertWords(dictId, synBatch);
-        }
-
-        await dictReader.close();
-        await _dbHelper.updateDictionaryWordCount(dictId, headwordCount);
-
-        final sampleWords = await _dbHelper.getSampleWords(dictId);
-
-        yield ImportProgress(
-          message: 'Import complete (Web)!',
-          value: 1.0,
-          isCompleted: true,
-          dictId: dictId,
-          sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
-          headwordCount: headwordCount,
-          definitionWordCount: defWordCount,
-          dictionaryName: bookName,
-        );
-      } catch (e, s) {
-        hDebugPrint('Web import error: $e\n$s');
-        yield ImportProgress(
-          message: 'Web import error: $e',
-          value: 0.0,
-          error: e.toString(),
-          isCompleted: true,
-        );
-      }
-    }
-
-    Future<List<Map<String, dynamic>>> getDictionaries() async {
-      return await _dbHelper.getDictionaries();
-    }
-
-    Future<void> toggleDictionaryEnabled(int id, bool isEnabled) async {
-      await _dbHelper.updateDictionaryEnabled(id, isEnabled);
-    }
-
-    Future<void> updateDictionaryIndexDefinitions(
-      int id,
-      bool indexDefinitions,
-    ) async {
-      await _dbHelper.updateDictionaryIndexDefinitions(id, indexDefinitions);
-    }
-
-    Stream<DeletionProgress> deleteDictionaryStream(int id) async* {
-      yield DeletionProgress(message: 'Starting deletion...', value: 0.1);
-
-      String? dictName;
-      if (!kIsWeb) {
-        final dict = await _dbHelper.getDictionaryById(id);
-        if (dict != null) {
-          dictName = dict['name'] as String?;
-          final rawPath = dict['path'] as String?;
-          if (rawPath != null) {
-            yield DeletionProgress(
-              message: 'Deleting dictionary files...',
-              value: 0.3,
-            );
-            try {
-              final String resolvedPath = await _dbHelper.resolvePath(rawPath);
-              final file = File(resolvedPath);
-              final dir = file.parent;
-
-              if (await dir.exists()) {
-                final dirName = p.basename(dir.path);
-                if (dirName.startsWith('dict_') ||
-                    dirName.startsWith('mdict_') ||
-                    dirName.startsWith('dictd_') ||
-                    dirName.startsWith('slob_')) {
-                  await dir.delete(recursive: true);
-                  hDebugPrint(
-                    'Deleted physical dictionary directory: ${dir.path}',
-                  );
-                }
-              }
-            } catch (e) {
-              hDebugPrint('Failed to delete physical dictionary directory: $e');
-            }
-          }
+        } catch (e) {
+          hDebugPrint('Web error importing $ifoName: $e');
         }
       }
 
-      yield DeletionProgress(message: 'Removing from database...', value: 0.6);
-      await _dbHelper.deleteDictionary(id);
+      // --- MDict dictionaries (extracted from archive) ---
+      // MDict import on Web requires a real file path, which isn't possible
+      // in a web context. Surface a clear error instead of silently skipping.
+      for (final mdxName in mdxNames) {
+        currentDict++;
+        yield ImportProgress(
+          message:
+              '[$currentDict/$totalDicts] MDict (.mdx) files inside archives are not supported on Web. '
+              'Please import the .mdx file directly using "Import File".',
+          value: 0.5 + (currentDict - 1) / totalDicts * 0.5,
+          error: 'MDict inside archive not supported on Web',
+          isCompleted: totalDicts == currentDict,
+          dictionaryName: p.basenameWithoutExtension(mdxName),
+        );
+        hDebugPrint('Web: skipped MDict $mdxName — not supported in archive');
+      }
 
-      yield DeletionProgress(message: 'Optimizing database...', value: 0.9);
+      // --- Slob dictionaries (extracted from archive) ---
+      // Same limitation as MDict on Web — needs a file path.
+      for (final slobName in slobNames) {
+        currentDict++;
+        yield ImportProgress(
+          message:
+              '[$currentDict/$totalDicts] Slob (.slob) files inside archives are not supported on Web. '
+              'Please import the .slob file directly using "Import File".',
+          value: 0.5 + (currentDict - 1) / totalDicts * 0.5,
+          error: 'Slob inside archive not supported on Web',
+          isCompleted: totalDicts == currentDict,
+          dictionaryName: p.basenameWithoutExtension(slobName),
+        );
+        hDebugPrint('Web: skipped Slob $slobName — not supported in archive');
+      }
 
-      yield DeletionProgress(
-        message: dictName != null
-            ? 'Deleted "$dictName"'
-            : 'Dictionary deleted',
+      yield ImportProgress(
+        message: 'All web imports complete.',
         value: 1.0,
         isCompleted: true,
       );
+    } catch (e) {
+      yield ImportProgress(
+        message: 'Web error: $e',
+        value: 0.0,
+        error: e.toString(),
+        isCompleted: true,
+      );
     }
+  }
 
-    Future<void> deleteDictionary(int id) async {
-      await for (final _ in deleteDictionaryStream(id)) {}
-    }
+  /// Shared logic for processing dictionary files and saving them permanently on Native.
+  Stream<ImportProgress> _processDictionaryFiles(
+    String ifoPath, {
+    bool indexDefinitions = false,
+  }) async* {
+    try {
+      yield ImportProgress(
+        message: 'Processing dictionary files...',
+        value: 0.55,
+      );
 
-    Future<void> reorderDictionaries(List<int> sortedIds) async {
-      await _dbHelper.reorderDictionaries(sortedIds);
-    }
+      final actualIfoPath = await _maybeDecompress(ifoPath);
+      final checksum = await _calculateChecksum(actualIfoPath);
 
-    // ── MDict Import ────────────────────────────────────────────────────────────
-
-    /// Imports a MDict (.mdx) file on native platforms.
-    Stream<ImportProgress> importMdictStream(
-      String mdxPath, {
-      String? mddPath,
-      bool indexDefinitions = false,
-    }) async* {
-      if (kIsWeb) {
+      final existing = await _dbHelper.getDictionaryByChecksum(checksum);
+      if (existing != null) {
         yield ImportProgress(
-          message: 'Error: MDict import is not supported on Web.',
-          value: 0.0,
-          error: 'Web unsupported',
+          message:
+              'Dictionary "${existing['name']}" is already in your library.',
+          value: 1.0,
+          error: 'ALREADY_EXISTS',
           isCompleted: true,
         );
         return;
       }
 
-      yield ImportProgress(message: 'Opening MDict file...', value: 0.05);
+      final basePath = p.withoutExtension(actualIfoPath);
 
-      try {
-        final reader = MdictReader(mdxPath);
-        await reader.open();
-
-        final checksum = await _calculateChecksum(mdxPath);
-        final existing = await _dbHelper.getDictionaryByChecksum(checksum);
-        if (existing != null) {
-          await reader.close();
-          yield ImportProgress(
-            message:
-                'MDict dictionary "${existing['name']}" is already in your library.',
-            value: 1.0,
-            error: 'ALREADY_EXISTS',
-            isCompleted: true,
-          );
-          return;
-        }
-
-        // Use the filename (without extension) as a fallback book name
-        final bookName = p.basenameWithoutExtension(mdxPath);
-
-        yield ImportProgress(
-          message: 'Copying to permanent storage...',
-          value: 0.15,
-        );
-
-        final appDocDir = await getApplicationDocumentsDirectory();
-        final dictsDir = Directory(p.join(appDocDir.path, 'dictionaries'));
-        if (!await dictsDir.exists()) await dictsDir.create(recursive: true);
-
-        final timestamp = DateTime.now().millisecondsSinceEpoch;
-        final permanentDir = Directory(
-          p.join(dictsDir.path, 'mdict_$timestamp'),
-        );
-        await permanentDir.create(recursive: true);
-
-        final finalMdxPath = p.join(permanentDir.path, p.basename(mdxPath));
-        await File(mdxPath).copy(finalMdxPath);
-
-        // Also copy the companion .mdd file if it exists
-        final mddSourcePath =
-            mddPath ??
-            mdxPath.replaceAll(RegExp(r'\.mdx$', caseSensitive: false), '.mdd');
-        if (await File(mddSourcePath).exists()) {
-          final finalMddPath = p.join(
-            permanentDir.path,
-            p.basename(mddSourcePath),
-          );
-          await File(mddSourcePath).copy(finalMddPath);
-        }
-
-        await reader.close();
-
-        yield ImportProgress(message: 'Registering dictionary...', value: 0.3);
-        final dictId = await _dbHelper.insertDictionary(
-          bookName,
-          finalMdxPath,
-          indexDefinitions: indexDefinitions,
-          format: 'mdict',
-          typeSequence: null,
-          checksum: checksum,
-          sourceUrl: _currentImportSourceUrl,
-        );
-
-        yield ImportProgress(message: 'Indexing headwords...', value: 0.5);
-
-        final receivePort = ReceivePort();
-        final rootIsolateToken = RootIsolateToken.instance!;
-
-        await Isolate.spawn(
-          _indexMdictEntry,
-          _IndexMdictArgs(
-            dictId: dictId,
-            mdxPath: finalMdxPath,
-            indexDefinitions: indexDefinitions,
-            bookName: bookName,
-            sendPort: receivePort.sendPort,
-            rootIsolateToken: rootIsolateToken,
-          ),
-        );
-
-        int finalHeadwordCount = 0;
-        await for (final message in receivePort) {
-          if (message is ImportProgress) {
-            if (message.error != null) {
-              receivePort.close();
-              if (message.error == 'ALREADY_EXISTS') {
-                throw Exception('ALREADY_EXISTS: ${message.message}');
-              }
-              throw Exception(message.error);
-            }
-            if (message.isCompleted) {
-              finalHeadwordCount = message.headwordCount;
-              receivePort.close();
-              break;
-            }
-            yield message;
+      // Robust file finding: checking local directory first
+      String? findLocalFile(List<String> extensions) {
+        for (final ext in extensions) {
+          final path = '$basePath$ext';
+          if (File(path).existsSync()) {
+            return path;
           }
         }
-
-        final sampleWords = await _dbHelper.getSampleWords(dictId);
-
-        yield ImportProgress(
-          message: 'MDict import complete!',
-          value: 1.0,
-          isCompleted: true,
-          dictId: dictId,
-          sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
-          headwordCount: finalHeadwordCount,
-          dictionaryName: bookName,
-        );
-      } catch (e, s) {
-        hDebugPrint('MDict import error: $e\n$s');
-        yield ImportProgress(
-          message: 'MDict import error: $e',
-          value: 0.0,
-          error: e.toString(),
-          isCompleted: true,
-        );
-      }
-    }
-
-    // ── DICTD Import ────────────────────────────────────────────────────────────
-
-    /// Imports a DICTD dictionary (`.index` + `.dict` or `.dict.dz`).
-    /// [indexPath] is the `.index` file; [dictPath] may be `.dict` or `.dict.dz`.
-    Stream<ImportProgress> importDictdStream(
-      String indexPath,
-      String dictPath, {
-      bool indexDefinitions = false,
-    }) async* {
-      if (kIsWeb) {
-        yield ImportProgress(
-          message: 'Error: DICTD import is not supported on Web.',
-          value: 0.0,
-          error: 'Web unsupported',
-          isCompleted: true,
-        );
-        return;
+        return null;
       }
 
-      yield ImportProgress(message: 'Setting up DICTD import...', value: 0.05);
+      String? idxPath = findLocalFile([
+        '.idx',
+        '.idx.gz',
+        '.idx.dz',
+        '.idx.bz2',
+        '.idx.xz',
+      ]);
+      if (idxPath == null)
+        throw Exception('No .idx file found for ${p.basename(ifoPath)}');
 
-      try {
-        final checksum = await _calculateChecksum(indexPath);
-        final existing = await _dbHelper.getDictionaryByChecksum(checksum);
-        if (existing != null) {
-          yield ImportProgress(
-            message:
-                'DICTD dictionary "${existing['name']}" is already in your library.',
-            value: 1.0,
-            error: 'ALREADY_EXISTS',
-            isCompleted: true,
-          );
-          return;
-        }
+      String? dictPath = findLocalFile([
+        '.dict',
+        '.dict.dz',
+        '.dict.gz',
+        '.dict.bz2',
+        '.dict.xz',
+      ]);
+      if (dictPath == null)
+        throw Exception('No .dict file found for ${p.basename(ifoPath)}');
 
-        final bookName = p
-            .basenameWithoutExtension(indexPath)
-            .replaceAll(RegExp(r'\.dict$'), '');
+      String? synPath = findLocalFile([
+        '.syn',
+        '.syn.gz',
+        '.syn.dz',
+        '.syn.bz2',
+        '.syn.xz',
+      ]);
 
-        yield ImportProgress(
-          message: 'Copying to permanent storage...',
-          value: 0.2,
-        );
+      final ifoParser = IfoParser();
+      await ifoParser.parse(actualIfoPath);
+      final bookName = ifoParser.bookName ?? 'Unknown Dictionary';
 
-        final appDocDir = await getApplicationDocumentsDirectory();
-        final dictsDir = Directory(p.join(appDocDir.path, 'dictionaries'));
-        if (!await dictsDir.exists()) await dictsDir.create(recursive: true);
+      yield ImportProgress(
+        message: 'Saving dictionary files...',
+        value: 0.75,
+        dictionaryName: bookName,
+      );
 
-        final timestamp = DateTime.now().millisecondsSinceEpoch;
-        final permanentDir = Directory(
-          p.join(dictsDir.path, 'dictd_$timestamp'),
-        );
-        await permanentDir.create(recursive: true);
+      // Native: Move to permanent location
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final dictsDir = Directory(p.join(appDocDir.path, 'dictionaries'));
+      if (!await dictsDir.exists()) await dictsDir.create(recursive: true);
 
-        final finalDictPath = p.join(permanentDir.path, p.basename(dictPath));
-        final finalIndexPath = p.join(permanentDir.path, p.basename(indexPath));
-        await File(dictPath).copy(finalDictPath);
-        await File(indexPath).copy(finalIndexPath);
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final permanentDir = Directory(p.join(dictsDir.path, 'dict_$timestamp'));
+      await permanentDir.create(recursive: true);
 
-        yield ImportProgress(message: 'Registering dictionary...', value: 0.35);
-        final dictId = await _dbHelper.insertDictionary(
-          bookName,
+      // For the .idx and .syn files (small), decompress if needed so IdxParser / SynParser
+      // can read them as plain bytes. For .dict/.dict.dz we keep the file as-is since
+      // DictReader now handles .dict.dz directly via DictzipReader (no disk decompression).
+      final preparedIdxPath = await _maybeDecompress(idxPath);
+      final preparedSynPath = synPath != null
+          ? await _maybeDecompress(synPath)
+          : null;
+
+      // Copy the .dict or .dict.dz file without decompressing it.
+      final finalDictPath = p.join(permanentDir.path, p.basename(dictPath));
+      await File(dictPath).copy(finalDictPath);
+      await File(
+        preparedIdxPath,
+      ).copy(p.join(permanentDir.path, p.basename(preparedIdxPath)));
+      await File(
+        actualIfoPath,
+      ).copy(p.join(permanentDir.path, p.basename(actualIfoPath)));
+      if (preparedSynPath != null) {
+        await File(
+          preparedSynPath,
+        ).copy(p.join(permanentDir.path, p.basename(preparedSynPath)));
+      }
+
+      final dictId = await _dbHelper.insertDictionary(
+        bookName,
+        finalDictPath,
+        indexDefinitions: indexDefinitions,
+        typeSequence: ifoParser.sameTypeSequence,
+        checksum: checksum,
+        sourceUrl: _currentImportSourceUrl,
+      );
+
+      yield ImportProgress(
+        message: 'Indexing words...',
+        value: 0.85,
+        dictionaryName: bookName,
+      );
+
+      final receivePort = ReceivePort();
+      final rootIsolateToken = RootIsolateToken.instance!;
+
+      await Isolate.spawn(
+        _indexEntry,
+        _IndexArgs(
+          dictId,
+          p.join(permanentDir.path, p.basename(preparedIdxPath)),
           finalDictPath,
-          indexDefinitions: indexDefinitions,
-          format: 'dictd',
-          typeSequence: null,
-          checksum: checksum,
-          sourceUrl: _currentImportSourceUrl,
-        );
+          preparedSynPath != null
+              ? p.join(permanentDir.path, p.basename(preparedSynPath))
+              : null,
+          indexDefinitions,
+          ifoParser,
+          receivePort.sendPort,
+          rootIsolateToken,
+        ),
+      );
 
-        yield ImportProgress(message: 'Indexing DICTD words...', value: 0.45);
+      int finalHeadwordCount = 0;
+      int finalDefWordCount = 0;
 
-        final receivePort = ReceivePort();
-        final rootIsolateToken = RootIsolateToken.instance!;
-
-        await Isolate.spawn(
-          _indexDictdEntry,
-          _IndexDictdArgs(
-            dictId: dictId,
-            indexPath: finalIndexPath,
-            dictPath: finalDictPath,
-            indexDefinitions: indexDefinitions,
-            bookName: bookName,
-            sendPort: receivePort.sendPort,
-            rootIsolateToken: rootIsolateToken,
-          ),
-        );
-
-        int finalHeadwordCount = 0;
-        int finalDefWordCount = 0;
-        await for (final message in receivePort) {
-          if (message is ImportProgress) {
-            if (message.error != null) {
-              receivePort.close();
-              throw Exception(message.error);
+      await for (final message in receivePort) {
+        if (message is ImportProgress) {
+          if (message.error != null) {
+            receivePort.close();
+            if (message.error == 'ALREADY_EXISTS') {
+              throw Exception('ALREADY_EXISTS: ${message.message}');
             }
-            if (message.isCompleted) {
-              finalHeadwordCount = message.headwordCount;
-              finalDefWordCount = message.definitionWordCount;
-              receivePort.close();
-              break;
-            }
-            yield message;
+            throw Exception(message.error);
+          }
+          if (message.isCompleted) {
+            finalHeadwordCount = message.headwordCount;
+            finalDefWordCount = message.definitionWordCount;
+            receivePort.close();
+            break;
+          }
+          yield message;
+        }
+      }
+
+      final sampleWords = await _dbHelper.getSampleWords(dictId);
+
+      yield ImportProgress(
+        message: 'Import complete!',
+        value: 1.0,
+        isCompleted: true,
+        dictId: dictId,
+        ifoPath: p.join(permanentDir.path, p.basename(actualIfoPath)),
+        sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
+        headwordCount: finalHeadwordCount,
+        definitionWordCount: finalDefWordCount,
+        dictionaryName: bookName,
+      );
+    } catch (e, s) {
+      hDebugPrint('Error in _processDictionaryFiles: $e\n$s');
+      yield ImportProgress(
+        message: 'Error: $e',
+        value: 0.0,
+        error: e.toString(),
+        isCompleted: true,
+      );
+    }
+  }
+
+  Future<Uint8List> _maybeDecompressWeb(String name, Uint8List bytes) async {
+    if (name.endsWith('.gz') || name.endsWith('.dz')) {
+      return Uint8List.fromList(await compute(_decompressGzip, bytes));
+    }
+    if (name.endsWith('.bz2')) {
+      return Uint8List.fromList(await compute(_decompressBZip2, bytes));
+    }
+    if (name.endsWith('.xz')) {
+      return Uint8List.fromList(await compute(_decompressXZ, bytes));
+    }
+    return bytes;
+  }
+
+  String _getDecompressedName(String name) {
+    if (name.endsWith('.gz') || name.endsWith('.dz')) {
+      return name.substring(0, name.length - 3);
+    }
+    if (name.endsWith('.bz2')) {
+      return name.substring(0, name.length - 4);
+    }
+    if (name.endsWith('.xz')) {
+      return name.substring(0, name.length - 3);
+    }
+    return name;
+  }
+
+  /// Web-specific processing logic using bytes and SQLite virtual filesystem.
+  Stream<ImportProgress> _processDictionaryFilesWeb(
+    String ifoName,
+    Map<String, Uint8List> files, {
+    bool indexDefinitions = false,
+  }) async* {
+    try {
+      yield ImportProgress(message: 'Processing web files...', value: 0.5);
+
+      final ifoBytes = files[ifoName]!;
+      // IFO files are usually not compressed, but let's be safe
+      final decompressedIfoBytes = await _maybeDecompressWeb(ifoName, ifoBytes);
+      final ifoContent = utf8.decode(
+        decompressedIfoBytes,
+        allowMalformed: true,
+      );
+      final ifoParser = IfoParser();
+      ifoParser.parseContent(ifoContent);
+
+      final bookName = ifoParser.bookName ?? 'Unknown Web Dictionary';
+      final basePath = p.withoutExtension(ifoName);
+
+      // Find required components in the map
+      String? idxName;
+      for (final name in files.keys) {
+        if (name.startsWith(basePath) && name.contains('.idx')) {
+          idxName = name;
+          break;
+        }
+      }
+      if (idxName == null) throw Exception('Missing .idx file');
+
+      String? dictName;
+      for (final name in files.keys) {
+        if (name.startsWith(basePath) && name.contains('.dict')) {
+          dictName = name;
+          break;
+        }
+      }
+      if (dictName == null) throw Exception('Missing .dict file');
+
+      String? synName;
+      for (final name in files.keys) {
+        if (name.startsWith(basePath) && name.contains('.syn')) {
+          synName = name;
+          break;
+        }
+      }
+
+      // Decompress components
+      yield ImportProgress(
+        message: 'Decompressing components...',
+        value: 0.55,
+        dictionaryName: bookName,
+      );
+      final decompressedIdxBytes = await _maybeDecompressWeb(
+        idxName,
+        files[idxName]!,
+      );
+      final decompressedDictBytes = await _maybeDecompressWeb(
+        dictName,
+        files[dictName]!,
+      );
+      final decompressedSynBytes = synName != null
+          ? await _maybeDecompressWeb(synName, files[synName]!)
+          : null;
+
+      final finalIfoName = _getDecompressedName(p.basename(ifoName));
+      final finalIdxName = _getDecompressedName(p.basename(idxName));
+      final finalDictName = _getDecompressedName(p.basename(dictName));
+      final finalSynName = synName != null
+          ? _getDecompressedName(p.basename(synName))
+          : null;
+
+      final dictId = await _dbHelper.insertDictionary(
+        bookName,
+        finalDictName,
+        indexDefinitions: indexDefinitions,
+        typeSequence: ifoParser.sameTypeSequence,
+        sourceUrl: _currentImportSourceUrl,
+      );
+
+      // Save files to virtual filesystem (SQLite 'files' table)
+      yield ImportProgress(
+        message: 'Saving files to database...',
+        value: 0.6,
+        dictionaryName: bookName,
+      );
+      await _dbHelper.saveFile(dictId, finalIfoName, decompressedIfoBytes);
+      await _dbHelper.saveFile(dictId, finalIdxName, decompressedIdxBytes);
+      await _dbHelper.saveFile(dictId, finalDictName, decompressedDictBytes);
+      if (finalSynName != null && decompressedSynBytes != null) {
+        await _dbHelper.saveFile(dictId, finalSynName, decompressedSynBytes);
+      }
+
+      // Indexing on Web (sequential for simplicity/stability)
+      yield ImportProgress(
+        message: 'Indexing words (Web)...',
+        value: 0.7,
+        dictionaryName: bookName,
+      );
+
+      final idxParser = IdxParser(ifoParser);
+      final dictReader = DictReader(finalDictName, dictId: dictId);
+      await dictReader.open();
+
+      List<Map<String, dynamic>> batch = [];
+      List<({int offset, int length, String content})> wordOffsets = [];
+      int headwordCount = 0;
+      int defWordCount = 0;
+
+      final idxStream = idxParser.parseFromBytes(decompressedIdxBytes);
+      await for (final entry in idxStream) {
+        final String word = entry['word'];
+        final offset = entry['offset'] as int;
+        final length = entry['length'] as int;
+
+        // When indexing definitions, we have the bytes directly available in decompressedDictBytes
+        String content = '';
+        if (indexDefinitions) {
+          if (offset + length <= decompressedDictBytes.length) {
+            content = utf8.decode(
+              decompressedDictBytes.sublist(offset, offset + length),
+              allowMalformed: true,
+            );
           }
         }
 
-        final sampleWords = await _dbHelper.getSampleWords(dictId);
-
-        yield ImportProgress(
-          message: 'DICTD import complete!',
-          value: 1.0,
-          isCompleted: true,
-          dictId: dictId,
-          sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
-          headwordCount: finalHeadwordCount,
-          definitionWordCount: finalDefWordCount,
-          dictionaryName: bookName,
-        );
-      } catch (e, s) {
-        hDebugPrint('DICTD import error: $e\n$s');
-        yield ImportProgress(
-          message: 'DICTD import error: $e',
-          value: 0.0,
-          error: e.toString(),
-          isCompleted: true,
-        );
-      }
-    }
-
-    // ── Slob Import ─────────────────────────────────────────────────────────────
-
-    /// Imports a Slob (.slob) dictionary on native platforms.
-    Stream<ImportProgress> importSlobStream(
-      String slobPath, {
-      bool indexDefinitions = false,
-    }) async* {
-      if (kIsWeb) {
-        yield ImportProgress(
-          message: 'Error: Slob import is not supported on Web.',
-          value: 0.0,
-          error: 'Web unsupported',
-          isCompleted: true,
-        );
-        return;
-      }
-
-      yield ImportProgress(message: 'Opening Slob file...', value: 0.05);
-
-      try {
-        final reader = SlobReader(slobPath);
-        await reader.open();
-
-        final checksum = await _calculateChecksum(slobPath);
-        final existing = await _dbHelper.getDictionaryByChecksum(checksum);
-        if (existing != null) {
-          await reader.close();
-          yield ImportProgress(
-            message:
-                'Slob dictionary "${existing['name']}" is already in your library.',
-            value: 1.0,
-            error: 'ALREADY_EXISTS',
-            isCompleted: true,
-          );
-          return;
-        }
-
-        final bookName = reader.bookName.isNotEmpty
-            ? reader.bookName
-            : p.basenameWithoutExtension(slobPath);
-
-        yield ImportProgress(
-          message: 'Copying to permanent storage...',
-          value: 0.15,
-        );
-
-        final appDocDir = await getApplicationDocumentsDirectory();
-        final dictsDir = Directory(p.join(appDocDir.path, 'dictionaries'));
-        if (!await dictsDir.exists()) await dictsDir.create(recursive: true);
-
-        final timestamp = DateTime.now().millisecondsSinceEpoch;
-        final permanentDir = Directory(
-          p.join(dictsDir.path, 'slob_$timestamp'),
-        );
-        await permanentDir.create(recursive: true);
-
-        final finalSlobPath = p.join(permanentDir.path, p.basename(slobPath));
-        await File(slobPath).copy(finalSlobPath);
-
-        await reader.close();
-
-        yield ImportProgress(message: 'Registering dictionary...', value: 0.3);
-        final dictId = await _dbHelper.insertDictionary(
-          bookName,
-          finalSlobPath,
-          indexDefinitions: indexDefinitions,
-          format: 'slob',
-          typeSequence: null,
-          checksum: checksum,
-          sourceUrl: _currentImportSourceUrl,
-        );
-
-        yield ImportProgress(message: 'Indexing Slob blobs...', value: 0.45);
-
-        final receivePort = ReceivePort();
-        final rootIsolateToken = RootIsolateToken.instance!;
-
-        await Isolate.spawn(
-          _indexSlobEntry,
-          _IndexSlobArgs(
-            dictId: dictId,
-            slobPath: finalSlobPath,
-            indexDefinitions: indexDefinitions,
-            bookName: bookName,
-            sendPort: receivePort.sendPort,
-            rootIsolateToken: rootIsolateToken,
-          ),
-        );
-
-        int finalHeadwordCount = 0;
-        int finalDefWordCount = 0;
-        await for (final message in receivePort) {
-          if (message is ImportProgress) {
-            if (message.error != null) {
-              receivePort.close();
-              throw Exception(message.error);
-            }
-            if (message.isCompleted) {
-              finalHeadwordCount = message.headwordCount;
-              finalDefWordCount = message.definitionWordCount;
-              receivePort.close();
-              break;
-            }
-            yield message;
-          }
-        }
-
-        final sampleWords = await _dbHelper.getSampleWords(dictId);
-
-        yield ImportProgress(
-          message: 'Slob import complete!',
-          value: 1.0,
-          isCompleted: true,
-          dictId: dictId,
-          sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
-          headwordCount: finalHeadwordCount,
-          definitionWordCount: finalDefWordCount,
-          dictionaryName: bookName,
-        );
-      } catch (e, s) {
-        hDebugPrint('Slob import error: $e\n$s');
-        yield ImportProgress(
-          message: 'Slob import error: $e',
-          value: 0.0,
-          error: e.toString(),
-          isCompleted: true,
-        );
-      } finally {
-        // Any cleanup if needed
-      }
-    }
-
-    // ── Definition Lookup Dispatch ──────────────────────────────────────────────
-
-    /// Fetches the definition for a word entry from the correct format reader.
-    ///
-    /// [dictRecord] is the full dictionary row from the DB (includes `format`, `path`).
-    /// [word] is the headword string (used for MDict lookup).
-    /// [offset] and [length] are the values stored in `word_index`.
-    Future<String?> fetchDefinition(
-      Map<String, dynamic> dictRecord,
-      String word,
-      int offset,
-      int length,
-    ) async {
-      if (kIsWeb) return null;
-      final format = (dictRecord['format'] as String?) ?? 'stardict';
-
-      final fetchWatch = HPerf.start('fetchDef_Total[$format]');
-      String? result;
-
-      try {
-        final int? dictId = dictRecord['id'] as int?;
-        if (dictId == null) return null;
-
-        // Fast path: plain .dict readers use File.openRead — fully stateless, one
-        // fresh OS stream per call, no shared seek position. Concurrent reads are
-        // safe without any lock once the reader is cached.
-        final cached = _readerCache[dictId];
-        if (cached is DictReader && !cached.isDz) {
-          // Already cached and stateless — read directly, no lock.
-          final ioWatch = HPerf.start('fetchDef_IO[$format]');
-          result = await cached.readAtIndex(offset, length);
-          HPerf.end(ioWatch, 'fetchDef_IO[$format]');
-        } else if (cached == null) {
-          // First access for this dict: take the lock to create + cache the reader.
-          result = await _synchronized(dictId, () async {
-            final reader = await _getReader(dictRecord);
-            final ioWatch = HPerf.start('fetchDef_IO[$format]');
-            String? res;
-            if (reader is DictReader && !reader.isDz) {
-              res = await reader.readAtIndex(offset, length);
-            } else if (reader is MdictReader) {
-              res = await reader.lookup(word);
-            } else if (reader is SlobReader) {
-              res = await reader.getBlobContentById(offset);
-            } else if (reader is DictdReader) {
-              res = await reader.readAtOffset(offset, length);
-            } else if (reader is DictReader) {
-              res = await reader.readAtIndex(offset, length);
-            }
-            HPerf.end(ioWatch, 'fetchDef_IO[$format]');
-            return res;
-          });
-        } else {
-          // Reader cached but stateful (MDict, Slob, DictD, or .dict.dz) — lock.
-          result = await _synchronized(dictId, () async {
-            final ioWatch = HPerf.start('fetchDef_IO[$format]');
-            String? res;
-            if (cached is MdictReader) {
-              res = await cached.lookup(word);
-            } else if (cached is SlobReader) {
-              res = await cached.getBlobContentById(offset);
-            } else if (cached is DictdReader) {
-              res = await cached.readAtOffset(offset, length);
-            } else if (cached is DictReader) {
-              res = await cached.readAtIndex(offset, length);
-            }
-            HPerf.end(ioWatch, 'fetchDef_IO[$format]');
-            return res;
-          });
-        }
-      } catch (e) {
-        hDebugPrint('Error fetching definition ($format): $e');
-      }
-
-      HPerf.end(fetchWatch, 'fetchDef_Total[$format]');
-
-      // We already recorded actual IO time inside the lock,
-      // so Queue time is just (Total - IO).
-      return result;
-    }
-
-    /// Fetches multiple definitions from the SAME dictionary in a single batch.
-    ///
-    /// For stateful readers (.dz, .mdx, .slob), this acquires the lock ONCE and
-    /// performs all reads sequentially. This eliminates queue contention overhead
-    /// and maximizes the benefit of internal chunk caches (e.g. DictzipLocalReader).
-    ///
-    /// For stateless readers (plain .dict), it fires all reads in parallel since
-    /// they don't share state or need a lock.
-    Future<List<String?>> fetchDefinitionsBatch(
-      Map<String, dynamic> dictRecord,
-      List<Map<String, dynamic>> requests,
-    ) async {
-      if (kIsWeb || requests.isEmpty) return List.filled(requests.length, null);
-
-      final format = (dictRecord['format'] as String?) ?? 'stardict';
-      final int? dictId = dictRecord['id'] as int?;
-      if (dictId == null) return List.filled(requests.length, null);
-
-      final totalWatch = HPerf.start('fetchBatch_Total[$format]');
-
-      try {
-        // 1. Check cache for fast path (plain .dict)
-        final cached = _readerCache[dictId];
-        if (cached is DictReader && !cached.isDz) {
-          // FAST PATH: truly parallel, no locks
-          final ioWatch = HPerf.start('fetchBatch_IO_Parallel[$format]');
-          final results = await Future.wait(
-            requests.map((req) {
-              return cached.readAtIndex(
-                req['offset'] as int,
-                req['length'] as int,
-              );
-            }),
-          );
-          HPerf.end(ioWatch, 'fetchBatch_IO_Parallel[$format]');
-          HPerf.end(totalWatch, 'fetchBatch_Total[$format]');
-          return results;
-        }
-
-        // 2. Stateful readers (or first access): acquire lock ONCE for the whole batch
-        final results = await _synchronized(dictId, () async {
-          final reader = await _getReader(dictRecord);
-          if (reader == null)
-            return List<String?>.filled(requests.length, null);
-
-          final ioWatch = HPerf.start('fetchBatch_IO_Seq[$format]');
-          final batchResults = <String?>[];
-
-          // Perform all reads sequentially inside the lock
-          for (final req in requests) {
-            final word = req['word'] as String;
-            final offset = req['offset'] as int;
-            final length = req['length'] as int;
-
-            if (reader is MdictReader) {
-              batchResults.add(await reader.lookup(word));
-            } else if (reader is SlobReader) {
-              batchResults.add(await reader.getBlobContentById(offset));
-            } else if (reader is DictdReader) {
-              batchResults.add(await reader.readAtOffset(offset, length));
-            } else if (reader is DictReader) {
-              batchResults.add(await reader.readAtIndex(offset, length));
-            } else {
-              batchResults.add(null);
-            }
-          }
-          HPerf.end(ioWatch, 'fetchBatch_IO_Seq[$format]');
-          return batchResults;
+        batch.add({
+          'word': word,
+          'content': content,
+          'dict_id': dictId,
+          'offset': offset,
+          'length': length,
         });
 
-        HPerf.end(totalWatch, 'fetchBatch_Total[$format]');
-        return results;
-      } catch (e) {
-        hDebugPrint('Error in fetchDefinitionsBatch ($format): $e');
-        HPerf.end(totalWatch, 'fetchBatch_Total[$format]');
-        return List.filled(requests.length, null);
+        headwordCount++;
+        if (content.isNotEmpty) {
+          defWordCount += content
+              .split(RegExp(r'\s+'))
+              .where((s) => s.isNotEmpty)
+              .length;
+        }
+
+        wordOffsets.add((offset: offset, length: length, content: content));
+
+        if (batch.length >= 1000) {
+          await _dbHelper.batchInsertWords(dictId, batch);
+          batch.clear();
+          yield ImportProgress(
+            message: 'Indexing $headwordCount words...',
+            value:
+                0.7 +
+                (headwordCount /
+                    (ifoParser.wordCount == 0 ? 100000 : ifoParser.wordCount) *
+                    0.2),
+            headwordCount: headwordCount,
+            dictionaryName: bookName,
+          );
+        }
+      }
+      if (batch.isNotEmpty) await _dbHelper.batchInsertWords(dictId, batch);
+
+      // SYN support for Web
+      if (finalSynName != null && decompressedSynBytes != null) {
+        yield ImportProgress(message: 'Indexing synonyms...', value: 0.9);
+        final synParser = SynParser();
+        final synStream = synParser.parseFromBytes(decompressedSynBytes);
+        List<Map<String, dynamic>> synBatch = [];
+        await for (final syn in synStream) {
+          final originalIndex = syn['original_word_index'] as int;
+          if (originalIndex < wordOffsets.length) {
+            final originalInfo = wordOffsets[originalIndex];
+            synBatch.add({
+              'word': syn['word'],
+              'content': originalInfo.content,
+              'dict_id': dictId,
+              'offset': originalInfo.offset,
+              'length': originalInfo.length,
+            });
+            headwordCount++;
+          }
+          if (synBatch.length >= 1000) {
+            await _dbHelper.batchInsertWords(dictId, synBatch);
+            synBatch.clear();
+          }
+        }
+        if (synBatch.isNotEmpty)
+          await _dbHelper.batchInsertWords(dictId, synBatch);
+      }
+
+      await dictReader.close();
+      await _dbHelper.updateDictionaryWordCount(dictId, headwordCount);
+
+      final sampleWords = await _dbHelper.getSampleWords(dictId);
+
+      yield ImportProgress(
+        message: 'Import complete (Web)!',
+        value: 1.0,
+        isCompleted: true,
+        dictId: dictId,
+        sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
+        headwordCount: headwordCount,
+        definitionWordCount: defWordCount,
+        dictionaryName: bookName,
+      );
+    } catch (e, s) {
+      hDebugPrint('Web import error: $e\n$s');
+      yield ImportProgress(
+        message: 'Web import error: $e',
+        value: 0.0,
+        error: e.toString(),
+        isCompleted: true,
+      );
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getDictionaries() async {
+    return await _dbHelper.getDictionaries();
+  }
+
+  Future<void> toggleDictionaryEnabled(int id, bool isEnabled) async {
+    await _dbHelper.updateDictionaryEnabled(id, isEnabled);
+  }
+
+  Future<void> updateDictionaryIndexDefinitions(
+    int id,
+    bool indexDefinitions,
+  ) async {
+    await _dbHelper.updateDictionaryIndexDefinitions(id, indexDefinitions);
+  }
+
+  Stream<DeletionProgress> deleteDictionaryStream(int id) async* {
+    yield DeletionProgress(message: 'Starting deletion...', value: 0.1);
+
+    String? dictName;
+    if (!kIsWeb) {
+      final dict = await _dbHelper.getDictionaryById(id);
+      if (dict != null) {
+        dictName = dict['name'] as String?;
+        final rawPath = dict['path'] as String?;
+        if (rawPath != null) {
+          yield DeletionProgress(
+            message: 'Deleting dictionary files...',
+            value: 0.3,
+          );
+          try {
+            final String resolvedPath = await _dbHelper.resolvePath(rawPath);
+            final file = File(resolvedPath);
+            final dir = file.parent;
+
+            if (await dir.exists()) {
+              final dirName = p.basename(dir.path);
+              if (dirName.startsWith('dict_') ||
+                  dirName.startsWith('mdict_') ||
+                  dirName.startsWith('dictd_') ||
+                  dirName.startsWith('slob_')) {
+                await dir.delete(recursive: true);
+                hDebugPrint(
+                  'Deleted physical dictionary directory: ${dir.path}',
+                );
+              }
+            }
+          } catch (e) {
+            hDebugPrint('Failed to delete physical dictionary directory: $e');
+          }
+        }
       }
     }
 
-    Stream<ImportProgress> reIndexDictionariesStream() async* {
+    yield DeletionProgress(message: 'Removing from database...', value: 0.6);
+    await _dbHelper.deleteDictionary(id);
+
+    yield DeletionProgress(message: 'Optimizing database...', value: 0.9);
+
+    yield DeletionProgress(
+      message: dictName != null ? 'Deleted "$dictName"' : 'Dictionary deleted',
+      value: 1.0,
+      isCompleted: true,
+    );
+  }
+
+  Future<void> deleteDictionary(int id) async {
+    await for (final _ in deleteDictionaryStream(id)) {}
+  }
+
+  Future<void> reorderDictionaries(List<int> sortedIds) async {
+    await _dbHelper.reorderDictionaries(sortedIds);
+  }
+
+  // ── MDict Import ────────────────────────────────────────────────────────────
+
+  /// Imports a MDict (.mdx) file on native platforms.
+  Stream<ImportProgress> importMdictStream(
+    String mdxPath, {
+    String? mddPath,
+    bool indexDefinitions = false,
+  }) async* {
+    if (kIsWeb) {
+      yield ImportProgress(
+        message: 'Error: MDict import is not supported on Web.',
+        value: 0.0,
+        error: 'Web unsupported',
+        isCompleted: true,
+      );
+      return;
+    }
+
+    yield ImportProgress(message: 'Opening MDict file...', value: 0.05);
+
+    try {
+      final reader = MdictReader(mdxPath);
+      await reader.open();
+
+      final checksum = await _calculateChecksum(mdxPath);
+      final existing = await _dbHelper.getDictionaryByChecksum(checksum);
+      if (existing != null) {
+        await reader.close();
+        yield ImportProgress(
+          message:
+              'MDict dictionary "${existing['name']}" is already in your library.',
+          value: 1.0,
+          error: 'ALREADY_EXISTS',
+          isCompleted: true,
+        );
+        return;
+      }
+
+      // Use the filename (without extension) as a fallback book name
+      final bookName = p.basenameWithoutExtension(mdxPath);
+
+      yield ImportProgress(
+        message: 'Copying to permanent storage...',
+        value: 0.15,
+      );
+
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final dictsDir = Directory(p.join(appDocDir.path, 'dictionaries'));
+      if (!await dictsDir.exists()) await dictsDir.create(recursive: true);
+
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final permanentDir = Directory(p.join(dictsDir.path, 'mdict_$timestamp'));
+      await permanentDir.create(recursive: true);
+
+      final finalMdxPath = p.join(permanentDir.path, p.basename(mdxPath));
+      await File(mdxPath).copy(finalMdxPath);
+
+      // Also copy the companion .mdd file if it exists
+      final mddSourcePath =
+          mddPath ??
+          mdxPath.replaceAll(RegExp(r'\.mdx$', caseSensitive: false), '.mdd');
+      if (await File(mddSourcePath).exists()) {
+        final finalMddPath = p.join(
+          permanentDir.path,
+          p.basename(mddSourcePath),
+        );
+        await File(mddSourcePath).copy(finalMddPath);
+      }
+
+      await reader.close();
+
+      yield ImportProgress(message: 'Registering dictionary...', value: 0.3);
+      final dictId = await _dbHelper.insertDictionary(
+        bookName,
+        finalMdxPath,
+        indexDefinitions: indexDefinitions,
+        format: 'mdict',
+        typeSequence: null,
+        checksum: checksum,
+        sourceUrl: _currentImportSourceUrl,
+      );
+
+      yield ImportProgress(message: 'Indexing headwords...', value: 0.5);
+
+      final receivePort = ReceivePort();
+      final rootIsolateToken = RootIsolateToken.instance!;
+
+      await Isolate.spawn(
+        _indexMdictEntry,
+        _IndexMdictArgs(
+          dictId: dictId,
+          mdxPath: finalMdxPath,
+          indexDefinitions: indexDefinitions,
+          bookName: bookName,
+          sendPort: receivePort.sendPort,
+          rootIsolateToken: rootIsolateToken,
+        ),
+      );
+
+      int finalHeadwordCount = 0;
+      await for (final message in receivePort) {
+        if (message is ImportProgress) {
+          if (message.error != null) {
+            receivePort.close();
+            if (message.error == 'ALREADY_EXISTS') {
+              throw Exception('ALREADY_EXISTS: ${message.message}');
+            }
+            throw Exception(message.error);
+          }
+          if (message.isCompleted) {
+            finalHeadwordCount = message.headwordCount;
+            receivePort.close();
+            break;
+          }
+          yield message;
+        }
+      }
+
+      final sampleWords = await _dbHelper.getSampleWords(dictId);
+
+      yield ImportProgress(
+        message: 'MDict import complete!',
+        value: 1.0,
+        isCompleted: true,
+        dictId: dictId,
+        sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
+        headwordCount: finalHeadwordCount,
+        dictionaryName: bookName,
+      );
+    } catch (e, s) {
+      hDebugPrint('MDict import error: $e\n$s');
+      yield ImportProgress(
+        message: 'MDict import error: $e',
+        value: 0.0,
+        error: e.toString(),
+        isCompleted: true,
+      );
+    }
+  }
+
+  // ── DICTD Import ────────────────────────────────────────────────────────────
+
+  /// Imports a DICTD dictionary (`.index` + `.dict` or `.dict.dz`).
+  /// [indexPath] is the `.index` file; [dictPath] may be `.dict` or `.dict.dz`.
+  Stream<ImportProgress> importDictdStream(
+    String indexPath,
+    String dictPath, {
+    bool indexDefinitions = false,
+  }) async* {
+    if (kIsWeb) {
+      yield ImportProgress(
+        message: 'Error: DICTD import is not supported on Web.',
+        value: 0.0,
+        error: 'Web unsupported',
+        isCompleted: true,
+      );
+      return;
+    }
+
+    yield ImportProgress(message: 'Setting up DICTD import...', value: 0.05);
+
+    try {
+      final checksum = await _calculateChecksum(indexPath);
+      final existing = await _dbHelper.getDictionaryByChecksum(checksum);
+      if (existing != null) {
+        yield ImportProgress(
+          message:
+              'DICTD dictionary "${existing['name']}" is already in your library.',
+          value: 1.0,
+          error: 'ALREADY_EXISTS',
+          isCompleted: true,
+        );
+        return;
+      }
+
+      final bookName = p
+          .basenameWithoutExtension(indexPath)
+          .replaceAll(RegExp(r'\.dict$'), '');
+
+      yield ImportProgress(
+        message: 'Copying to permanent storage...',
+        value: 0.2,
+      );
+
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final dictsDir = Directory(p.join(appDocDir.path, 'dictionaries'));
+      if (!await dictsDir.exists()) await dictsDir.create(recursive: true);
+
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final permanentDir = Directory(p.join(dictsDir.path, 'dictd_$timestamp'));
+      await permanentDir.create(recursive: true);
+
+      final finalDictPath = p.join(permanentDir.path, p.basename(dictPath));
+      final finalIndexPath = p.join(permanentDir.path, p.basename(indexPath));
+      await File(dictPath).copy(finalDictPath);
+      await File(indexPath).copy(finalIndexPath);
+
+      yield ImportProgress(message: 'Registering dictionary...', value: 0.35);
+      final dictId = await _dbHelper.insertDictionary(
+        bookName,
+        finalDictPath,
+        indexDefinitions: indexDefinitions,
+        format: 'dictd',
+        typeSequence: null,
+        checksum: checksum,
+        sourceUrl: _currentImportSourceUrl,
+      );
+
+      yield ImportProgress(message: 'Indexing DICTD words...', value: 0.45);
+
+      final receivePort = ReceivePort();
+      final rootIsolateToken = RootIsolateToken.instance!;
+
+      await Isolate.spawn(
+        _indexDictdEntry,
+        _IndexDictdArgs(
+          dictId: dictId,
+          indexPath: finalIndexPath,
+          dictPath: finalDictPath,
+          indexDefinitions: indexDefinitions,
+          bookName: bookName,
+          sendPort: receivePort.sendPort,
+          rootIsolateToken: rootIsolateToken,
+        ),
+      );
+
+      int finalHeadwordCount = 0;
+      int finalDefWordCount = 0;
+      await for (final message in receivePort) {
+        if (message is ImportProgress) {
+          if (message.error != null) {
+            receivePort.close();
+            throw Exception(message.error);
+          }
+          if (message.isCompleted) {
+            finalHeadwordCount = message.headwordCount;
+            finalDefWordCount = message.definitionWordCount;
+            receivePort.close();
+            break;
+          }
+          yield message;
+        }
+      }
+
+      final sampleWords = await _dbHelper.getSampleWords(dictId);
+
+      yield ImportProgress(
+        message: 'DICTD import complete!',
+        value: 1.0,
+        isCompleted: true,
+        dictId: dictId,
+        sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
+        headwordCount: finalHeadwordCount,
+        definitionWordCount: finalDefWordCount,
+        dictionaryName: bookName,
+      );
+    } catch (e, s) {
+      hDebugPrint('DICTD import error: $e\n$s');
+      yield ImportProgress(
+        message: 'DICTD import error: $e',
+        value: 0.0,
+        error: e.toString(),
+        isCompleted: true,
+      );
+    }
+  }
+
+  // ── Slob Import ─────────────────────────────────────────────────────────────
+
+  /// Imports a Slob (.slob) dictionary on native platforms.
+  Stream<ImportProgress> importSlobStream(
+    String slobPath, {
+    bool indexDefinitions = false,
+  }) async* {
+    if (kIsWeb) {
+      yield ImportProgress(
+        message: 'Error: Slob import is not supported on Web.',
+        value: 0.0,
+        error: 'Web unsupported',
+        isCompleted: true,
+      );
+      return;
+    }
+
+    yield ImportProgress(message: 'Opening Slob file...', value: 0.05);
+
+    try {
+      final reader = SlobReader(slobPath);
+      await reader.open();
+
+      final checksum = await _calculateChecksum(slobPath);
+      final existing = await _dbHelper.getDictionaryByChecksum(checksum);
+      if (existing != null) {
+        await reader.close();
+        yield ImportProgress(
+          message:
+              'Slob dictionary "${existing['name']}" is already in your library.',
+          value: 1.0,
+          error: 'ALREADY_EXISTS',
+          isCompleted: true,
+        );
+        return;
+      }
+
+      final bookName = reader.bookName.isNotEmpty
+          ? reader.bookName
+          : p.basenameWithoutExtension(slobPath);
+
+      yield ImportProgress(
+        message: 'Copying to permanent storage...',
+        value: 0.15,
+      );
+
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final dictsDir = Directory(p.join(appDocDir.path, 'dictionaries'));
+      if (!await dictsDir.exists()) await dictsDir.create(recursive: true);
+
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final permanentDir = Directory(p.join(dictsDir.path, 'slob_$timestamp'));
+      await permanentDir.create(recursive: true);
+
+      final finalSlobPath = p.join(permanentDir.path, p.basename(slobPath));
+      await File(slobPath).copy(finalSlobPath);
+
+      await reader.close();
+
+      yield ImportProgress(message: 'Registering dictionary...', value: 0.3);
+      final dictId = await _dbHelper.insertDictionary(
+        bookName,
+        finalSlobPath,
+        indexDefinitions: indexDefinitions,
+        format: 'slob',
+        typeSequence: null,
+        checksum: checksum,
+        sourceUrl: _currentImportSourceUrl,
+      );
+
+      yield ImportProgress(message: 'Indexing Slob blobs...', value: 0.45);
+
+      final receivePort = ReceivePort();
+      final rootIsolateToken = RootIsolateToken.instance!;
+
+      await Isolate.spawn(
+        _indexSlobEntry,
+        _IndexSlobArgs(
+          dictId: dictId,
+          slobPath: finalSlobPath,
+          indexDefinitions: indexDefinitions,
+          bookName: bookName,
+          sendPort: receivePort.sendPort,
+          rootIsolateToken: rootIsolateToken,
+        ),
+      );
+
+      int finalHeadwordCount = 0;
+      int finalDefWordCount = 0;
+      await for (final message in receivePort) {
+        if (message is ImportProgress) {
+          if (message.error != null) {
+            receivePort.close();
+            throw Exception(message.error);
+          }
+          if (message.isCompleted) {
+            finalHeadwordCount = message.headwordCount;
+            finalDefWordCount = message.definitionWordCount;
+            receivePort.close();
+            break;
+          }
+          yield message;
+        }
+      }
+
+      final sampleWords = await _dbHelper.getSampleWords(dictId);
+
+      yield ImportProgress(
+        message: 'Slob import complete!',
+        value: 1.0,
+        isCompleted: true,
+        dictId: dictId,
+        sampleWords: sampleWords.map((w) => w['word'] as String).toList(),
+        headwordCount: finalHeadwordCount,
+        definitionWordCount: finalDefWordCount,
+        dictionaryName: bookName,
+      );
+    } catch (e, s) {
+      hDebugPrint('Slob import error: $e\n$s');
+      yield ImportProgress(
+        message: 'Slob import error: $e',
+        value: 0.0,
+        error: e.toString(),
+        isCompleted: true,
+      );
+    } finally {
+      // Any cleanup if needed
+    }
+  }
+
+  // ── Definition Lookup Dispatch ──────────────────────────────────────────────
+
+  /// Fetches the definition for a word entry from the correct format reader.
+  ///
+  /// [dictRecord] is the full dictionary row from the DB (includes `format`, `path`).
+  /// [word] is the headword string (used for MDict lookup).
+  /// [offset] and [length] are the values stored in `word_index`.
+  Future<String?> fetchDefinition(
+    Map<String, dynamic> dictRecord,
+    String word,
+    int offset,
+    int length,
+  ) async {
+    if (kIsWeb) return null;
+    final format = (dictRecord['format'] as String?) ?? 'stardict';
+
+    final fetchWatch = HPerf.start('fetchDef_Total[$format]');
+    String? result;
+
+    try {
+      final int? dictId = dictRecord['id'] as int?;
+      if (dictId == null) return null;
+
+      // Fast path: plain .dict readers use File.openRead — fully stateless, one
+      // fresh OS stream per call, no shared seek position. Concurrent reads are
+      // safe without any lock once the reader is cached.
+      final cached = _readerCache[dictId];
+      if (cached is DictReader && !cached.isDz) {
+        // Already cached and stateless — read directly, no lock.
+        final ioWatch = HPerf.start('fetchDef_IO[$format]');
+        result = await cached.readAtIndex(offset, length);
+        HPerf.end(ioWatch, 'fetchDef_IO[$format]');
+      } else if (cached == null) {
+        // First access for this dict: take the lock to create + cache the reader.
+        result = await _synchronized(dictId, () async {
+          final reader = await _getReader(dictRecord);
+          final ioWatch = HPerf.start('fetchDef_IO[$format]');
+          String? res;
+          if (reader is DictReader && !reader.isDz) {
+            res = await reader.readAtIndex(offset, length);
+          } else if (reader is MdictReader) {
+            res = await reader.lookup(word);
+          } else if (reader is SlobReader) {
+            res = await reader.getBlobContentById(offset);
+          } else if (reader is DictdReader) {
+            res = await reader.readAtOffset(offset, length);
+          } else if (reader is DictReader) {
+            res = await reader.readAtIndex(offset, length);
+          }
+          HPerf.end(ioWatch, 'fetchDef_IO[$format]');
+          return res;
+        });
+      } else {
+        // Reader cached but stateful (MDict, Slob, DictD, or .dict.dz) — lock.
+        result = await _synchronized(dictId, () async {
+          final ioWatch = HPerf.start('fetchDef_IO[$format]');
+          String? res;
+          if (cached is MdictReader) {
+            res = await cached.lookup(word);
+          } else if (cached is SlobReader) {
+            res = await cached.getBlobContentById(offset);
+          } else if (cached is DictdReader) {
+            res = await cached.readAtOffset(offset, length);
+          } else if (cached is DictReader) {
+            res = await cached.readAtIndex(offset, length);
+          }
+          HPerf.end(ioWatch, 'fetchDef_IO[$format]');
+          return res;
+        });
+      }
+    } catch (e) {
+      hDebugPrint('Error fetching definition ($format): $e');
+    }
+
+    HPerf.end(fetchWatch, 'fetchDef_Total[$format]');
+
+    // We already recorded actual IO time inside the lock,
+    // so Queue time is just (Total - IO).
+    return result;
+  }
+
+  /// Fetches multiple definitions from the SAME dictionary in a single batch.
+  ///
+  /// For stateful readers (.dz, .mdx, .slob), this acquires the lock ONCE and
+  /// performs all reads sequentially. This eliminates queue contention overhead
+  /// and maximizes the benefit of internal chunk caches (e.g. DictzipLocalReader).
+  ///
+  /// For stateless readers (plain .dict), it fires all reads in parallel since
+  /// they don't share state or need a lock.
+  Future<List<String?>> fetchDefinitionsBatch(
+    Map<String, dynamic> dictRecord,
+    List<Map<String, dynamic>> requests,
+  ) async {
+    if (kIsWeb || requests.isEmpty) return List.filled(requests.length, null);
+
+    final format = (dictRecord['format'] as String?) ?? 'stardict';
+    final int? dictId = dictRecord['id'] as int?;
+    if (dictId == null) return List.filled(requests.length, null);
+
+    final totalWatch = HPerf.start('fetchBatch_Total[$format]');
+
+    try {
+      // 1. Check cache for fast path (plain .dict)
+      final cached = _readerCache[dictId];
+      if (cached is DictReader && !cached.isDz) {
+        // FAST PATH: truly parallel, no locks
+        final ioWatch = HPerf.start('fetchBatch_IO_Parallel[$format]');
+        final results = await Future.wait(
+          requests.map((req) {
+            return cached.readAtIndex(
+              req['offset'] as int,
+              req['length'] as int,
+            );
+          }),
+        );
+        HPerf.end(ioWatch, 'fetchBatch_IO_Parallel[$format]');
+        HPerf.end(totalWatch, 'fetchBatch_Total[$format]');
+        return results;
+      }
+
+      // 2. Stateful readers (or first access): acquire lock ONCE for the whole batch
+      final results = await _synchronized(dictId, () async {
+        final reader = await _getReader(dictRecord);
+        if (reader == null) return List<String?>.filled(requests.length, null);
+
+        final ioWatch = HPerf.start('fetchBatch_IO_Seq[$format]');
+        final batchResults = <String?>[];
+
+        // Perform all reads sequentially inside the lock
+        for (final req in requests) {
+          final word = req['word'] as String;
+          final offset = req['offset'] as int;
+          final length = req['length'] as int;
+
+          if (reader is MdictReader) {
+            batchResults.add(await reader.lookup(word));
+          } else if (reader is SlobReader) {
+            batchResults.add(await reader.getBlobContentById(offset));
+          } else if (reader is DictdReader) {
+            batchResults.add(await reader.readAtOffset(offset, length));
+          } else if (reader is DictReader) {
+            batchResults.add(await reader.readAtIndex(offset, length));
+          } else {
+            batchResults.add(null);
+          }
+        }
+        HPerf.end(ioWatch, 'fetchBatch_IO_Seq[$format]');
+        return batchResults;
+      });
+
+      HPerf.end(totalWatch, 'fetchBatch_Total[$format]');
+      return results;
+    } catch (e) {
+      hDebugPrint('Error in fetchDefinitionsBatch ($format): $e');
+      HPerf.end(totalWatch, 'fetchBatch_Total[$format]');
+      return List.filled(requests.length, null);
+    }
+  }
+
+  Stream<ImportProgress> reIndexDictionariesStream() async* {
+    yield ImportProgress(
+      message: 'Re-indexing not fully implemented for Web yet.',
+      value: 1.0,
+      isCompleted: true,
+    );
+  }
+
+  /// Re-indexes a dictionary.
+  Stream<ImportProgress> reindexDictionaryStream(
+    int dictId, {
+    bool indexDefinitions = true,
+  }) async* {
+    yield ImportProgress(message: 'Preparing to re-index...', value: 0.1);
+
+    if (kIsWeb) {
       yield ImportProgress(
         message: 'Re-indexing not fully implemented for Web yet.',
         value: 1.0,
         isCompleted: true,
       );
+      return;
     }
 
-    /// Re-indexes a dictionary.
-    Stream<ImportProgress> reindexDictionaryStream(
-      int dictId, {
-      bool indexDefinitions = true,
-    }) async* {
-      yield ImportProgress(message: 'Preparing to re-index...', value: 0.1);
+    try {
+      final dict = await _dbHelper.getDictionaryById(dictId);
+      if (dict == null) throw Exception('Dictionary not found');
 
-      if (kIsWeb) {
-        yield ImportProgress(
-          message: 'Re-indexing not fully implemented for Web yet.',
-          value: 1.0,
-          isCompleted: true,
-        );
-        return;
-      }
+      final String dictPath = await _dbHelper.resolvePath(dict['path']);
+      final String format = dict['format'] as String? ?? 'stardict';
+      final String bookName = dict['name'] as String? ?? 'Unknown Dictionary';
 
-      try {
-        final dict = await _dbHelper.getDictionaryById(dictId);
-        if (dict == null) throw Exception('Dictionary not found');
+      // Wipe existing index
+      yield ImportProgress(
+        message: 'Wiping existing index...',
+        value: 0.2,
+        dictionaryName: bookName,
+      );
+      await _dbHelper.deleteWordsByDictionaryId(dictId);
+      await _dbHelper.updateDictionaryIndexDefinitions(
+        dictId,
+        indexDefinitions,
+      );
 
-        final String dictPath = await _dbHelper.resolvePath(dict['path']);
-        final String format = dict['format'] as String? ?? 'stardict';
-        final String bookName = dict['name'] as String? ?? 'Unknown Dictionary';
+      yield ImportProgress(
+        message: 'Starting re-indexing...',
+        value: 0.3,
+        dictionaryName: bookName,
+      );
 
-        // Wipe existing index
-        yield ImportProgress(
-          message: 'Wiping existing index...',
-          value: 0.2,
-          dictionaryName: bookName,
-        );
-        await _dbHelper.deleteWordsByDictionaryId(dictId);
-        await _dbHelper.updateDictionaryIndexDefinitions(
-          dictId,
-          indexDefinitions,
-        );
+      final receivePort = ReceivePort();
+      final rootIsolateToken = RootIsolateToken.instance!;
 
-        yield ImportProgress(
-          message: 'Starting re-indexing...',
-          value: 0.3,
-          dictionaryName: bookName,
-        );
-
-        final receivePort = ReceivePort();
-        final rootIsolateToken = RootIsolateToken.instance!;
-
-        switch (format) {
-          case 'mdict':
-            await Isolate.spawn(
-              _indexMdictEntry,
-              _IndexMdictArgs(
-                dictId: dictId,
-                mdxPath: dictPath,
-                indexDefinitions: indexDefinitions,
-                bookName: bookName,
-                sendPort: receivePort.sendPort,
-                rootIsolateToken: rootIsolateToken,
-              ),
-            );
-            break;
-
-          case 'slob':
-            await Isolate.spawn(
-              _indexSlobEntry,
-              _IndexSlobArgs(
-                dictId: dictId,
-                slobPath: dictPath,
-                indexDefinitions: indexDefinitions,
-                bookName: bookName,
-                sendPort: receivePort.sendPort,
-                rootIsolateToken: rootIsolateToken,
-              ),
-            );
-            break;
-
-          case 'dictd':
-            // For DICTD, we need the .index file. It should be in the same folder.
-            final indexPath = dictPath.replaceFirst(
-              RegExp(r'\.dict(\.dz)?$'),
-              '.index',
-            );
-            if (!File(indexPath).existsSync()) {
-              throw Exception('DICTD .index file not found at $indexPath');
-            }
-            await Isolate.spawn(
-              _indexDictdEntry,
-              _IndexDictdArgs(
-                dictId: dictId,
-                indexPath: indexPath,
-                dictPath: dictPath,
-                indexDefinitions: indexDefinitions,
-                bookName: bookName,
-                sendPort: receivePort.sendPort,
-                rootIsolateToken: rootIsolateToken,
-              ),
-            );
-            break;
-
-          case 'stardict':
-          default:
-            // If the stored path is .dict.dz, strip the .dz before deriving sibling paths.
-            final String dictBasePath = dictPath.endsWith('.dz')
-                ? dictPath.substring(
-                    0,
-                    dictPath.length - 3,
-                  ) // 'something.dict.dz' → 'something.dict'
-                : dictPath;
-            final String ifoPath = dictBasePath.replaceAll('.dict', '.ifo');
-            final String idxPath = dictBasePath.replaceAll('.dict', '.idx');
-            final String synPathCandidate = dictBasePath.replaceAll(
-              '.dict',
-              '.syn',
-            );
-            final String? synPath = File(synPathCandidate).existsSync()
-                ? synPathCandidate
-                : null;
-
-            final ifoParser = IfoParser();
-            await ifoParser.parse(ifoPath);
-
-            await Isolate.spawn(
-              _indexEntry,
-              _IndexArgs(
-                dictId,
-                idxPath,
-                dictPath,
-                synPath,
-                indexDefinitions,
-                ifoParser,
-                receivePort.sendPort,
-                rootIsolateToken,
-              ),
-            );
-            break;
-        }
-
-        int finalHeadwordCount = 0;
-        int finalDefWordCount = 0;
-        await for (final message in receivePort) {
-          if (message is ImportProgress) {
-            if (message.error != null) {
-              receivePort.close();
-              throw Exception(message.error);
-            }
-            if (message.isCompleted) {
-              finalHeadwordCount = message.headwordCount;
-              finalDefWordCount = message.definitionWordCount;
-              receivePort.close();
-              break;
-            }
-            yield message;
-          }
-        }
-        yield ImportProgress(
-          message:
-              '$bookName: $finalHeadwordCount headwords, $finalDefWordCount words in definition',
-          value: 1.0,
-          isCompleted: true,
-          headwordCount: finalHeadwordCount,
-          definitionWordCount: finalDefWordCount,
-          dictionaryName: bookName,
-        );
-      } catch (e) {
-        yield ImportProgress(
-          message: 'Re-indexing failed: $e',
-          value: 0.0,
-          error: e.toString(),
-          isCompleted: true,
-        );
-      }
-    }
-
-    String _resolveDownloadFilename(String url, Map<String, String> headers) {
-      final contentDisposition = headers['content-disposition'];
-      if (contentDisposition != null) {
-        final filenameMatch = RegExp(
-          r'filename[*]?=["\s]*([^";\s]+)',
-        ).firstMatch(contentDisposition);
-        if (filenameMatch != null) {
-          final name = filenameMatch.group(1)!;
-          if (_isRecognizedExtension(name)) return name;
-        }
-      }
-      final uri = Uri.parse(url);
-      if (uri.pathSegments.isNotEmpty) {
-        final urlName = uri.pathSegments.last;
-        if (_isRecognizedExtension(urlName)) return urlName;
-      }
-      return 'downloaded_dict.zip';
-    }
-
-    bool _isRecognizedExtension(String name) {
-      final lower = name.toLowerCase();
-      final recognized = [
-        '.zip',
-        '.tar.gz',
-        '.tgz',
-        '.tar.bz2',
-        '.tbz2',
-        '.tar.xz',
-        '.tar', // Archives
-        '.slob', // Slob format (direct download)
-        '.mdx', '.mdd', // MDict formats
-        '.ifo', '.ifo.gz', '.ifo.dz', '.ifo.bz2', '.ifo.xz', // StarDict
-        '.idx', '.idx.gz', '.idx.dz', '.idx.bz2', '.idx.xz',
-        '.dict', '.dict.dz', '.dict.gz', '.dict.bz2', '.dict.xz',
-        '.syn', '.syn.gz', '.syn.dz', '.syn.bz2', '.syn.xz',
-        '.index', '.index.gz', '.index.dz', // DICTD
-      ];
-      return recognized.any((ext) => lower.endsWith(ext));
-    }
-
-    Stream<ImportProgress> downloadAndImportDictionaryStream(
-      String url, {
-      bool indexDefinitions = false,
-      String? sourceUrl,
-    }) async* {
-      yield ImportProgress(message: 'Connecting...', value: 0.0);
-
-      String effectiveUrl = url.trim().replaceAll(' ', '');
-      if (effectiveUrl.contains('github.com/')) {
-        effectiveUrl = effectiveUrl
-            .replaceFirst('github.com/', 'raw.githubusercontent.com/')
-            .replaceFirst('/blob/', '/')
-            .replaceFirst('/raw/', '/');
-      }
-
-      _currentImportSourceUrl = sourceUrl ?? url;
-
-      if (kIsWeb) {
-        // On Web, we must use byte-based download and import
-        try {
-          final response = await http.get(Uri.parse(effectiveUrl));
-          if (response.statusCode == 200) {
-            String fileName = _resolveDownloadFilename(
-              effectiveUrl,
-              response.headers,
-            );
-            yield* importDictionaryWebStream(
-              fileName,
-              response.bodyBytes,
+      switch (format) {
+        case 'mdict':
+          await Isolate.spawn(
+            _indexMdictEntry,
+            _IndexMdictArgs(
+              dictId: dictId,
+              mdxPath: dictPath,
               indexDefinitions: indexDefinitions,
-            );
-          } else {
-            throw Exception('Failed to download: HTTP ${response.statusCode}');
-          }
-        } catch (e) {
-          String errorMsg = e.toString();
-          if (errorMsg.contains('ClientException') &&
-              errorMsg.contains('Failed to fetch')) {
-            errorMsg =
-                'Download failed due to a CORS error. This happens when the server hosting the file doesn\'t allow web browsers from other domains to download it directly. Try downloading the file manually and then use "Import File".';
-          }
-          yield ImportProgress(
-            message: 'Download error: $errorMsg',
-            value: 0.0,
-            error: errorMsg,
-            isCompleted: true,
+              bookName: bookName,
+              sendPort: receivePort.sendPort,
+              rootIsolateToken: rootIsolateToken,
+            ),
           );
-        }
-        return;
+          break;
+
+        case 'slob':
+          await Isolate.spawn(
+            _indexSlobEntry,
+            _IndexSlobArgs(
+              dictId: dictId,
+              slobPath: dictPath,
+              indexDefinitions: indexDefinitions,
+              bookName: bookName,
+              sendPort: receivePort.sendPort,
+              rootIsolateToken: rootIsolateToken,
+            ),
+          );
+          break;
+
+        case 'dictd':
+          // For DICTD, we need the .index file. It should be in the same folder.
+          final indexPath = dictPath.replaceFirst(
+            RegExp(r'\.dict(\.dz)?$'),
+            '.index',
+          );
+          if (!File(indexPath).existsSync()) {
+            throw Exception('DICTD .index file not found at $indexPath');
+          }
+          await Isolate.spawn(
+            _indexDictdEntry,
+            _IndexDictdArgs(
+              dictId: dictId,
+              indexPath: indexPath,
+              dictPath: dictPath,
+              indexDefinitions: indexDefinitions,
+              bookName: bookName,
+              sendPort: receivePort.sendPort,
+              rootIsolateToken: rootIsolateToken,
+            ),
+          );
+          break;
+
+        case 'stardict':
+        default:
+          // If the stored path is .dict.dz, strip the .dz before deriving sibling paths.
+          final String dictBasePath = dictPath.endsWith('.dz')
+              ? dictPath.substring(
+                  0,
+                  dictPath.length - 3,
+                ) // 'something.dict.dz' → 'something.dict'
+              : dictPath;
+          final String ifoPath = dictBasePath.replaceAll('.dict', '.ifo');
+          final String idxPath = dictBasePath.replaceAll('.dict', '.idx');
+          final String synPathCandidate = dictBasePath.replaceAll(
+            '.dict',
+            '.syn',
+          );
+          final String? synPath = File(synPathCandidate).existsSync()
+              ? synPathCandidate
+              : null;
+
+          final ifoParser = IfoParser();
+          await ifoParser.parse(ifoPath);
+
+          await Isolate.spawn(
+            _indexEntry,
+            _IndexArgs(
+              dictId,
+              idxPath,
+              dictPath,
+              synPath,
+              indexDefinitions,
+              ifoParser,
+              receivePort.sendPort,
+              rootIsolateToken,
+            ),
+          );
+          break;
       }
 
-      final tempBaseDir = await getTemporaryDirectory();
-      await tempBaseDir.create(recursive: true);
-      final tempDir = await tempBaseDir.createTemp('download_');
+      int finalHeadwordCount = 0;
+      int finalDefWordCount = 0;
+      await for (final message in receivePort) {
+        if (message is ImportProgress) {
+          if (message.error != null) {
+            receivePort.close();
+            throw Exception(message.error);
+          }
+          if (message.isCompleted) {
+            finalHeadwordCount = message.headwordCount;
+            finalDefWordCount = message.definitionWordCount;
+            receivePort.close();
+            break;
+          }
+          yield message;
+        }
+      }
+      yield ImportProgress(
+        message:
+            '$bookName: $finalHeadwordCount headwords, $finalDefWordCount words in definition',
+        value: 1.0,
+        isCompleted: true,
+        headwordCount: finalHeadwordCount,
+        definitionWordCount: finalDefWordCount,
+        dictionaryName: bookName,
+      );
+    } catch (e) {
+      yield ImportProgress(
+        message: 'Re-indexing failed: $e',
+        value: 0.0,
+        error: e.toString(),
+        isCompleted: true,
+      );
+    }
+  }
 
+  String _resolveDownloadFilename(String url, Map<String, String> headers) {
+    final contentDisposition = headers['content-disposition'];
+    if (contentDisposition != null) {
+      final filenameMatch = RegExp(
+        r'filename[*]?=["\s]*([^";\s]+)',
+      ).firstMatch(contentDisposition);
+      if (filenameMatch != null) {
+        final name = filenameMatch.group(1)!;
+        if (_isRecognizedExtension(name)) return name;
+      }
+    }
+    final uri = Uri.parse(url);
+    if (uri.pathSegments.isNotEmpty) {
+      final urlName = uri.pathSegments.last;
+      if (_isRecognizedExtension(urlName)) return urlName;
+    }
+    return 'downloaded_dict.zip';
+  }
+
+  bool _isRecognizedExtension(String name) {
+    final lower = name.toLowerCase();
+    final recognized = [
+      '.zip',
+      '.tar.gz',
+      '.tgz',
+      '.tar.bz2',
+      '.tbz2',
+      '.tar.xz',
+      '.tar', // Archives
+      '.slob', // Slob format (direct download)
+      '.mdx', '.mdd', // MDict formats
+      '.ifo', '.ifo.gz', '.ifo.dz', '.ifo.bz2', '.ifo.xz', // StarDict
+      '.idx', '.idx.gz', '.idx.dz', '.idx.bz2', '.idx.xz',
+      '.dict', '.dict.dz', '.dict.gz', '.dict.bz2', '.dict.xz',
+      '.syn', '.syn.gz', '.syn.dz', '.syn.bz2', '.syn.xz',
+      '.index', '.index.gz', '.index.dz', // DICTD
+    ];
+    return recognized.any((ext) => lower.endsWith(ext));
+  }
+
+  Stream<ImportProgress> downloadAndImportDictionaryStream(
+    String url, {
+    bool indexDefinitions = false,
+    String? sourceUrl,
+  }) async* {
+    yield ImportProgress(message: 'Connecting...', value: 0.0);
+
+    String effectiveUrl = url.trim().replaceAll(' ', '');
+    if (effectiveUrl.contains('github.com/')) {
+      effectiveUrl = effectiveUrl
+          .replaceFirst('github.com/', 'raw.githubusercontent.com/')
+          .replaceFirst('/blob/', '/')
+          .replaceFirst('/raw/', '/');
+    }
+
+    _currentImportSourceUrl = sourceUrl ?? url;
+
+    if (kIsWeb) {
+      // On Web, we must use byte-based download and import
       try {
-        final request = http.Request('GET', Uri.parse(effectiveUrl));
-        final response = await _client.send(request);
-
-        if (response.statusCode != 200) {
+        final response = await http.get(Uri.parse(effectiveUrl));
+        if (response.statusCode == 200) {
+          String fileName = _resolveDownloadFilename(
+            effectiveUrl,
+            response.headers,
+          );
+          yield* importDictionaryWebStream(
+            fileName,
+            response.bodyBytes,
+            indexDefinitions: indexDefinitions,
+          );
+        } else {
           throw Exception('Failed to download: HTTP ${response.statusCode}');
         }
-
-        String fileName = _resolveDownloadFilename(
-          effectiveUrl,
-          response.headers,
-        );
-        final tempFile = File(p.join(tempDir.path, fileName));
-
-        final contentLength = response.contentLength ?? -1;
-        int bytesReceived = 0;
-
-        final fileSink = tempFile.openWrite();
-        await for (final chunk in response.stream) {
-          fileSink.add(chunk);
-          bytesReceived += chunk.length;
-          if (contentLength > 0) {
-            yield ImportProgress(
-              message:
-                  'Downloading... ${(bytesReceived / contentLength * 100).round()}%',
-              value: (bytesReceived / contentLength) * 0.5,
-            );
-          }
-        }
-        await fileSink.close();
-
-        yield ImportProgress(
-          message: 'Download complete. Importing...',
-          value: 0.5,
-        );
-        yield* importDictionaryStream(
-          tempFile.path,
-          indexDefinitions: indexDefinitions,
-        );
       } catch (e) {
+        String errorMsg = e.toString();
+        if (errorMsg.contains('ClientException') &&
+            errorMsg.contains('Failed to fetch')) {
+          errorMsg =
+              'Download failed due to a CORS error. This happens when the server hosting the file doesn\'t allow web browsers from other domains to download it directly. Try downloading the file manually and then use "Import File".';
+        }
         yield ImportProgress(
-          message: 'Download error: $e',
+          message: 'Download error: $errorMsg',
           value: 0.0,
-          error: e.toString(),
+          error: errorMsg,
           isCompleted: true,
         );
       }
+      return;
+    }
+
+    final tempBaseDir = await getTemporaryDirectory();
+    await tempBaseDir.create(recursive: true);
+    final tempDir = await tempBaseDir.createTemp('download_');
+
+    try {
+      final request = http.Request('GET', Uri.parse(effectiveUrl));
+      final response = await _client.send(request);
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to download: HTTP ${response.statusCode}');
+      }
+
+      String fileName = _resolveDownloadFilename(
+        effectiveUrl,
+        response.headers,
+      );
+      final tempFile = File(p.join(tempDir.path, fileName));
+
+      final contentLength = response.contentLength ?? -1;
+      int bytesReceived = 0;
+
+      final fileSink = tempFile.openWrite();
+      await for (final chunk in response.stream) {
+        fileSink.add(chunk);
+        bytesReceived += chunk.length;
+        if (contentLength > 0) {
+          yield ImportProgress(
+            message:
+                'Downloading... ${(bytesReceived / contentLength * 100).round()}%',
+            value: (bytesReceived / contentLength) * 0.5,
+          );
+        }
+      }
+      await fileSink.close();
+
+      yield ImportProgress(
+        message: 'Download complete. Importing...',
+        value: 0.5,
+      );
+      yield* importDictionaryStream(
+        tempFile.path,
+        indexDefinitions: indexDefinitions,
+      );
+    } catch (e) {
+      yield ImportProgress(
+        message: 'Download error: $e',
+        value: 0.0,
+        error: e.toString(),
+        isCompleted: true,
+      );
     }
   }
 }

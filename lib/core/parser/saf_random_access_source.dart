@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:saf_stream/saf_stream.dart';
+import 'package:docman/docman.dart';
 import 'random_access_source.dart';
 
 /// Android SAF implementation of [RandomAccessSource] using [SafStream].
@@ -8,17 +9,15 @@ import 'random_access_source.dart';
 class SafRandomAccessSource implements RandomAccessSource {
   final String uri;
   final _safStream = SafStream();
-  String? _sessionId;
   int? _cachedLength;
 
   SafRandomAccessSource(this.uri);
 
   Future<void> _ensureOpen() async {
-    if (_sessionId == null) {
-      // Note: In saf_stream, startFileStream returns a unique session ID
-      // that manages the native-side file descriptor.
-      _sessionId = await _safStream.startFileStream(uri);
-      _cachedLength = await _safStream.getFileStreamLength(_sessionId!);
+    if (_cachedLength == null) {
+      final docFile = await DocumentFile.fromUri(uri);
+      if (docFile == null) throw Exception('File not found: $uri');
+      _cachedLength = docFile.size;
     }
   }
 
@@ -30,16 +29,13 @@ class SafRandomAccessSource implements RandomAccessSource {
 
   @override
   Future<Uint8List> read(int offset, int length) async {
-    await _ensureOpen();
-    // readFileStreamChunk performs native-side seek + read.
-    return await _safStream.readFileStreamChunk(_sessionId!, offset, length);
+    // readFileBytes in saf_stream 2.0.0 acts as a random-access read chunking operation
+    return await _safStream.readFileBytes(uri, start: offset, count: length);
   }
 
   @override
   Future<void> close() async {
-    if (_sessionId != null) {
-      await _safStream.stopFileStream(_sessionId!);
-      _sessionId = null;
-    }
+    // No explicit session state to clean up for this approach
   }
 }
+
