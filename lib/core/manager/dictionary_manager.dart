@@ -57,6 +57,12 @@ class ImportProgress {
   ///   "mydict (StarDict): missing .idx, .dict / .dict.dz"
   final List<String>? incompleteEntries;
 
+  /// Dictionaries that were linked during the process.
+  final List<String>? linkedEntries;
+
+  /// Dictionaries that were imported (copied/extracted) during the process.
+  final List<String>? importedEntries;
+
   /// The suggested group name for the dictionary.
   final String? groupName;
 
@@ -72,6 +78,8 @@ class ImportProgress {
     this.definitionWordCount = 0,
     this.dictionaryName,
     this.incompleteEntries,
+    this.linkedEntries,
+    this.importedEntries,
     this.groupName,
   });
 }
@@ -1927,6 +1935,210 @@ class DictionaryManager {
       incomplete: incomplete,
       foundArchives: foundArchives,
     );
+  }
+
+  /// Merged folder action: links direct dictionaries and imports archives.
+  ///
+  /// 1. Scans the folder for direct dictionary files and links them (zero-copy).
+  /// 2. Identifies archives (.zip, .tar.gz, etc.), extracts them to a temp
+  ///    workspace, and imports their contents (copying to app storage).
+  /// 3. Returns a consolidated report of all processed and skipped entries.
+  Stream<ImportProgress> addFolderStream(
+    String folderPath, {
+    bool indexDefinitions = false,
+  }) async* {
+    yield ImportProgress(message: 'Scanning folder...', value: 0.0);
+
+    if (kIsWeb) {
+      yield ImportProgress(
+        message: 'Folder processing is not supported on Web.',
+        value: 0.0,
+        error: 'Folder processing not supported on Web',
+        isCompleted: true,
+      );
+      return;
+    }
+
+    final List<String> linkedEntries = [];
+    final List<String> importedEntries = [];
+    final List<String> incompleteEntries = [];
+
+    try {
+      FolderScanResult scanResult;
+      if (Platform.isAndroid && folderPath.startsWith('content://')) {
+        yield ImportProgress(message: 'Scanning SAF folder...', value: 0.05);
+        scanResult = await _scanSafFolder(folderPath);
+      } else {
+        scanResult = await scanFolderForDictionaries(
+          folderPath,
+          extractArchives: false,
+        );
+      }
+
+      // --- 1. Process direct (linkable) dictionaries -----------------------
+      int currentLinked = 0;
+      final totalLinked = scanResult.discovered.length;
+      final totalTasks = totalLinked + scanResult.foundArchives.length;
+
+      for (final item in scanResult.discovered) {
+        currentLinked++;
+        final name = p.basenameWithoutExtension(item.path);
+        yield ImportProgress(
+          message: 'Linking dictionary $currentLinked of $totalLinked: $name',
+          value: (totalTasks == 0) ? 0.0 : (currentLinked - 1) / totalTasks * 0.4,
+          dictionaryName: name,
+        );
+
+        Stream<ImportProgress> subStream;
+        switch (item.format) {
+          case 'mdict':
+            subStream = _linkMdict(item.path, indexDefinitions: indexDefinitions);
+            break;
+          case 'slob':
+            subStream = _linkSlob(item.path, indexDefinitions: indexDefinitions);
+            break;
+          case 'dictd':
+            subStream = _linkDictd(
+              item.path,
+              item.companionPath!,
+              indexDefinitions: indexDefinitions,
+            );
+            break;
+          case 'stardict':
+          default:
+            subStream = _linkStarDict(item.path, indexDefinitions: indexDefinitions);
+            break;
+        }
+
+        await for (final progress in subStream) {
+          if (progress.isCompleted) {
+            if (progress.error == null) {
+              linkedEntries.add(progress.dictionaryName ?? name);
+            } else {
+              incompleteEntries.add('$name (${item.format}): ${progress.error}');
+            }
+            break;
+          }
+        }
+      }
+
+      // --- 2. Process archives (.zip, .tar.gz, etc.) -----------------------
+      int currentArchive = 0;
+      final totalArchives = scanResult.foundArchives.length;
+      final tempBaseDir = await getTemporaryDirectory();
+
+      for (final archiveName in scanResult.foundArchives) {
+        currentArchive++;
+        yield ImportProgress(
+          message: 'Processing archive $currentArchive of $totalArchives: $archiveName',
+          value: totalTasks == 0 ? 0.5 : (totalLinked + currentArchive - 1) / totalTasks * 0.8,
+        );
+
+        final workspaceDir = await tempBaseDir.createTemp('merged_import_');
+        try {
+          String archivePath;
+          if (Platform.isAndroid && folderPath.startsWith('content://')) {
+            // Need to copy archive from SAF to local temp before extraction
+            final archiveFile = await DocumentFile.fromUri('$folderPath/$archiveName');
+            if (archiveFile == null) continue;
+            final localArchiveFile = File(p.join(workspaceDir.path, archiveName));
+            final bytes = await archiveFile.readAsBytes().fold<List<int>>([], (p, e) => p..addAll(e));
+            await localArchiveFile.writeAsBytes(bytes);
+            archivePath = localArchiveFile.path;
+          } else {
+            archivePath = p.join(folderPath, archiveName);
+          }
+
+          await _extractToWorkspace(archivePath, workspaceDir.path);
+          final innerScan = await scanFolderForDictionaries(
+            workspaceDir.path,
+            extractArchives: false,
+          );
+
+          if (innerScan.discovered.isEmpty) {
+            incompleteEntries.add('$archiveName: No valid dictionaries found inside.');
+            continue;
+          }
+
+          for (final innerItem in innerScan.discovered) {
+            final innerName = p.basenameWithoutExtension(innerItem.path);
+            Stream<ImportProgress> importSubStream;
+            switch (innerItem.format) {
+              case 'mdict':
+                final mddPath = p.join(
+                  p.dirname(innerItem.path),
+                  '${p.basenameWithoutExtension(innerItem.path)}.mdd',
+                );
+                importSubStream = importMdictStream(
+                  innerItem.path,
+                  mddPath: File(mddPath).existsSync() ? mddPath : null,
+                  indexDefinitions: indexDefinitions,
+                );
+                break;
+              case 'slob':
+                importSubStream = importSlobStream(
+                  innerItem.path,
+                  indexDefinitions: indexDefinitions,
+                );
+                break;
+              case 'dictd':
+                importSubStream = importDictdStream(
+                  innerItem.path,
+                  innerItem.companionPath!,
+                  indexDefinitions: indexDefinitions,
+                );
+                break;
+              case 'stardict':
+              default:
+                importSubStream = _processDictionaryFiles(
+                  innerItem.path,
+                  indexDefinitions: indexDefinitions,
+                );
+                break;
+            }
+
+            await for (final progress in importSubStream) {
+              if (progress.isCompleted) {
+                if (progress.error == null) {
+                  importedEntries.add(progress.dictionaryName ?? innerName);
+                } else {
+                  incompleteEntries.add('$innerName (from $archiveName): ${progress.error}');
+                }
+                break;
+              }
+            }
+          }
+        } finally {
+          if (await workspaceDir.exists()) {
+            await workspaceDir.delete(recursive: true);
+          }
+        }
+      }
+
+      // --- 3. Collect initially incomplete entries -------------------------
+      for (final inc in scanResult.incomplete) {
+        incompleteEntries.add(
+          '${inc.name} (${inc.format}): missing ${inc.missingFiles.join(', ')}',
+        );
+      }
+
+      yield ImportProgress(
+        message: 'Processing complete.',
+        value: 1.0,
+        isCompleted: true,
+        linkedEntries: linkedEntries.isEmpty ? null : linkedEntries,
+        importedEntries: importedEntries.isEmpty ? null : importedEntries,
+        incompleteEntries: incompleteEntries.isEmpty ? null : incompleteEntries,
+      );
+    } catch (e, s) {
+      hDebugPrint('Error in addFolderStream: $e\n$s');
+      yield ImportProgress(
+        message: 'Error: $e',
+        value: 0.0,
+        error: e.toString(),
+        isCompleted: true,
+      );
+    }
   }
 
   String? _resolveLocalFile(String basePath, List<String> extensions) {

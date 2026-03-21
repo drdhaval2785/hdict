@@ -560,205 +560,7 @@ class _DictionaryManagementScreenState
     }
   }
 
-  Future<void> _importFolder() async {
-    final String? folderPath = await FilePicker.platform.getDirectoryPath();
-    if (folderPath == null) return;
-    if (!mounted) return;
-
-    bool indexDefinitions = false;
-    final dynamic importConfig = await showDialog<dynamic>(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('Import Folder'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Scanning "$folderPath" for dictionaries.',
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                    const SizedBox(height: 16),
-                    CheckboxListTile(
-                      title: const Text('Index words in definitions'),
-                      subtitle: const Text(
-                        'Enables searching inside meanings (takes more time/space)',
-                      ),
-                      value: indexDefinitions,
-                      onChanged: (val) {
-                        setDialogState(() {
-                          indexDefinitions = val ?? false;
-                        });
-                      },
-                      controlAffinity: ListTileControlAffinity.leading,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(context, indexDefinitions),
-                  child: const Text('Proceed'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    if (importConfig == null) return;
-    indexDefinitions = importConfig as bool;
-
-    if (!mounted) return;
-
-      bool cancelled = false;
-    // Show progress dialog
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return PopScope(
-          canPop: false,
-          child: AlertDialog(
-            title: const Text('Importing from Folder'),
-            content: ValueListenableBuilder<ImportProgress>(
-              valueListenable: _progressNotifier,
-              builder: (context, progress, child) {
-                return _buildProgressContent(
-                  progress,
-                  onCancel: () {
-                    cancelled = true;
-                    Navigator.pop(context);
-                  },
-                );
-              },
-            ),
-          ),
-        );
-      },
-    );
-
-    try {
-      List<String>? incompleteEntries;
-
-      final stream = _dictionaryManager.importFolderStream(
-        folderPath,
-        indexDefinitions: indexDefinitions,
-      );
-
-      await for (final progress in stream) {
-        if (cancelled) break;
-        _progressNotifier.value = progress;
-        
-        // Auto-assign to group if folder name was captured
-        if (progress.dictId != null && progress.groupName != null) {
-          await DictionaryGroupManager.addDictionaryToGroup(
-            progress.groupName!,
-            progress.dictId!,
-          );
-        }
-
-        if (progress.isCompleted) {
-          incompleteEntries = progress.incompleteEntries;
-          if (progress.error != null) {
-            throw Exception(progress.error);
-          }
-        }
-      }
-
-      if (mounted) {
-        Navigator.pop(context); // Close progress dialog
-        await _loadDictionaries();
-        if (!mounted) return;
-
-        // Show incomplete-entries dialog if any dictionaries were skipped
-        if (incompleteEntries != null && incompleteEntries.isNotEmpty) {
-          await showDialog<void>(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Some Dictionaries Skipped'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'The following dictionaries could not be imported because '
-                      'they are missing required files:',
-                      style: TextStyle(fontSize: 13),
-                    ),
-                    const SizedBox(height: 12),
-                    ...incompleteEntries!.map(
-                      (msg) => Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(
-                              Icons.warning_amber_rounded,
-                              color: Colors.orange,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                msg,
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Folder imported successfully.'),
-              duration: Duration(seconds: 5),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        Navigator.pop(context); // Close progress dialog
-        final String errorStr = e.toString();
-        String message;
-        if (errorStr.contains('ALREADY_EXISTS:')) {
-          message = errorStr.split('ALREADY_EXISTS:').last.trim();
-        } else if (errorStr.contains('already in your library')) {
-          message = errorStr.replaceAll('Exception: ', '').trim();
-        } else {
-          message = 'Folder import failed: $e';
-        }
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
-      }
-    }
-  }
-
-  Future<void> _linkFolder() async {
+  Future<void> _addFolder() async {
     String? folderPath;
     try {
       if (Platform.isAndroid) {
@@ -781,13 +583,13 @@ class _DictionaryManagementScreenState
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: const Text('Link Folder'),
+              title: const Text('Add Folder'),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'Linking "$folderPath" for dictionaries. Files will not be copied.',
+                      'Adding from "$folderPath".\n\nDirect dictionaries will be linked (zero-copy), and archives will be decompressed and imported.',
                       style: const TextStyle(fontSize: 13),
                     ),
                     const SizedBox(height: 16),
@@ -838,7 +640,7 @@ class _DictionaryManagementScreenState
         return PopScope(
           canPop: false,
           child: AlertDialog(
-            title: const Text('Linking from Folder'),
+            title: const Text('Adding Folder Contents'),
             content: ValueListenableBuilder<ImportProgress>(
               valueListenable: _progressNotifier,
               builder: (context, progress, child) {
@@ -857,9 +659,8 @@ class _DictionaryManagementScreenState
     );
 
     try {
-      List<String>? incompleteEntries;
-
-      final stream = _dictionaryManager.linkFolderStream(
+      ImportProgress? finalProgress;
+      final stream = _dictionaryManager.addFolderStream(
         folderPath,
         indexDefinitions: indexDefinitions,
       );
@@ -877,7 +678,7 @@ class _DictionaryManagementScreenState
         }
 
         if (progress.isCompleted) {
-          incompleteEntries = progress.incompleteEntries;
+          finalProgress = progress;
           if (progress.error != null) {
             throw Exception(progress.error);
           }
@@ -887,84 +688,74 @@ class _DictionaryManagementScreenState
       if (mounted) {
         Navigator.pop(context); // Close progress dialog
         await _loadDictionaries();
-        if (!mounted) return;
-
-        // Show incomplete-entries dialog if any dictionaries were skipped
-        if (incompleteEntries != null && incompleteEntries.isNotEmpty) {
-          await showDialog<void>(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Some Dictionaries Skipped'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'The following dictionaries could not be linked because '
-                      'they are missing required files:',
-                      style: TextStyle(fontSize: 13),
-                    ),
-                    const SizedBox(height: 12),
-                    ...incompleteEntries!.map(
-                      (msg) => Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(
-                              Icons.warning_amber_rounded,
-                              color: Colors.orange,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                msg,
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Folder linked successfully.'),
-              duration: Duration(seconds: 5),
-            ),
-          );
+        if (finalProgress != null) {
+          _showAddFolderReport(finalProgress);
         }
       }
     } catch (e) {
       if (mounted) {
         Navigator.pop(context); // Close progress dialog
-        final String errorStr = e.toString();
-        String message;
-        if (errorStr.contains('ALREADY_EXISTS:')) {
-          message = errorStr.split('ALREADY_EXISTS:').last.trim();
-        } else if (errorStr.contains('already in your library')) {
-          message = errorStr.replaceAll('Exception: ', '').trim();
-        } else {
-          message = 'Folder linking failed: $e';
-        }
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(message)));
+        ).showSnackBar(SnackBar(content: Text('Failed to add folder: $e')));
       }
     }
+  }
+
+  void _showAddFolderReport(ImportProgress progress) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Folder Processing Report'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (progress.linkedEntries != null && progress.linkedEntries!.isNotEmpty) ...[
+                const Text('Read directly (Linked):', 
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                const SizedBox(height: 4),
+                ...progress.linkedEntries!.map((e) => Padding(
+                  padding: const EdgeInsets.only(left: 8.0, bottom: 2.0),
+                  child: Text('• $e', style: const TextStyle(fontSize: 12)),
+                )),
+                const SizedBox(height: 12),
+              ],
+              if (progress.importedEntries != null && progress.importedEntries!.isNotEmpty) ...[
+                const Text('Decompressed and stored (Imported):', 
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                const SizedBox(height: 4),
+                ...progress.importedEntries!.map((e) => Padding(
+                  padding: const EdgeInsets.only(left: 8.0, bottom: 2.0),
+                  child: Text('• $e', style: const TextStyle(fontSize: 12)),
+                )),
+                const SizedBox(height: 12),
+              ],
+              if (progress.incompleteEntries != null && progress.incompleteEntries!.isNotEmpty) ...[
+                const Text('Not processed (missing files or errors):', 
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
+                const SizedBox(height: 4),
+                ...progress.incompleteEntries!.map((e) => Padding(
+                  padding: const EdgeInsets.only(left: 8.0, bottom: 2.0),
+                  child: Text('• $e', style: const TextStyle(fontSize: 12)),
+                )),
+              ],
+              if ((progress.linkedEntries == null || progress.linkedEntries!.isEmpty) &&
+                  (progress.importedEntries == null || progress.importedEntries!.isEmpty) &&
+                  (progress.incompleteEntries == null || progress.incompleteEntries!.isEmpty))
+                const Text('No dictionaries found in the selected folder.'),
+            ],
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   final ValueNotifier<ImportProgress> _progressNotifier = ValueNotifier(
@@ -1098,16 +889,9 @@ class _DictionaryManagementScreenState
                 ),
                 const SizedBox(width: 8),
                 _buildFooterButton(
-                  onPressed: _isLoading ? null : _importFolder,
-                  icon: Icons.folder_open_outlined,
-                  label: 'Import Folder',
-                  isPrimary: false,
-                ),
-                const SizedBox(width: 8),
-                _buildFooterButton(
-                  onPressed: _isLoading ? null : _linkFolder,
-                  icon: Icons.link,
-                  label: 'Link Folder',
+                  onPressed: _isLoading ? null : _addFolder,
+                  icon: Icons.create_new_folder_outlined,
+                  label: 'Add Folder',
                   isPrimary: false,
                 ),
                 const SizedBox(width: 8),
@@ -1143,9 +927,9 @@ class _DictionaryManagementScreenState
                     const SizedBox(width: 8),
                     Expanded(
                       child: _buildFooterButton(
-                        onPressed: _isLoading ? null : _importFolder,
-                        icon: Icons.folder_open_outlined,
-                        label: 'Import Folder',
+                        onPressed: _isLoading ? null : _addFolder,
+                        icon: Icons.create_new_folder_outlined,
+                        label: 'Add Folder',
                         isPrimary: false,
                       ),
                     ),
@@ -1154,15 +938,6 @@ class _DictionaryManagementScreenState
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Expanded(
-                      child: _buildFooterButton(
-                        onPressed: _isLoading ? null : _linkFolder,
-                        icon: Icons.link,
-                        label: 'Link Folder',
-                        isPrimary: false,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
                     Expanded(
                       child: _buildFooterButton(
                         onPressed: _isLoading ? null : _downloadDictionary,
