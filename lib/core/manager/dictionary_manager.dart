@@ -1624,6 +1624,14 @@ class DictionaryManager {
       }
 
       if (scanResult.discovered.isEmpty && scanResult.incomplete.isEmpty) {
+        if (scanResult.foundArchives.isNotEmpty) {
+          throw Exception(
+            'No dictionaries found, but found these archives: ${scanResult.foundArchives.join(", ")}.\n\n'
+            'Archives must be extracted first for "Link Folder" (zero-copy) to work, '
+            'as compressed files do not support random access. '
+            'Alternatively, use "Import Folder" which handles extraction automatically.',
+          );
+        }
         throw Exception('No dictionaries found in the selected folder.');
       }
 
@@ -1727,12 +1735,11 @@ class DictionaryManager {
   Future<FolderScanResult> _scanSafFolder(String treeUri) async {
     final List<DiscoveredDict> discovered = [];
     final List<IncompleteDict> incomplete = [];
-
-    final result = FolderScanResult(discovered: discovered, incomplete: incomplete);
+    final List<String> foundArchives = [];
 
     // docman's DirectoryInfo for the tree URI
     final dir = await DocumentFile.fromUri(treeUri);
-    if (dir == null) return result;
+    if (dir == null) return const FolderScanResult(discovered: [], incomplete: []);
 
     // We need to list files recursively. docman might not have a recursive list,
     // so we'll implement a simple one.
@@ -1747,6 +1754,15 @@ class DictionaryManager {
           final String name = entity.name;
           final String lowerName = name.toLowerCase();
           final String path = entity.uri.toString();
+
+          if (lowerName.endsWith('.zip') ||
+              lowerName.endsWith('.tar.gz') ||
+              lowerName.endsWith('.tgz') ||
+              lowerName.endsWith('.tar.bz2') ||
+              lowerName.endsWith('.7z')) {
+            foundArchives.add(name);
+            continue;
+          }
 
           // -- StarDict --
           if (lowerName.endsWith('.ifo')) {
@@ -1855,7 +1871,11 @@ class DictionaryManager {
     }
 
     await scan(dir);
-    return FolderScanResult(discovered: discovered, incomplete: incomplete);
+    return FolderScanResult(
+      discovered: discovered,
+      incomplete: incomplete,
+      foundArchives: foundArchives,
+    );
   }
 
   String? _resolveLocalFile(String basePath, List<String> extensions) {

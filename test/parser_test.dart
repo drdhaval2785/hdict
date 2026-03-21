@@ -6,7 +6,7 @@ import 'package:hdict/core/parser/idx_parser.dart';
 import 'package:hdict/core/parser/syn_parser.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
 import 'package:hdict/core/parser/random_access_source.dart';
-import 'package:dictd_reader/dictd_reader.dart';
+import 'package:hdict/core/parser/dictd_reader.dart';
 import 'package:hdict/core/utils/html_lookup_wrapper.dart';
 import 'package:path/path.dart' as p;
 
@@ -184,7 +184,7 @@ author=Tester
       final dictFilePath = p.join(tempDir.path, 'test.dict');
       await File(dictFilePath).writeAsString('hello worlddefinition of test');
 
-      final reader = DictdReader(dictFilePath);
+      final reader = await DictdReader.fromPath(dictFilePath);
       final def1 = await reader.readEntry(0, 11);
       expect(def1, 'hello world');
 

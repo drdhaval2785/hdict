@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:hdict/core/database/database_helper.dart';
-import 'package:dictd_reader/dictd_reader.dart';
+import 'package:hdict/core/parser/dictd_reader.dart';
 import 'package:hdict/core/parser/ifo_parser.dart';
 import 'package:hdict/core/parser/idx_parser.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
@@ -111,14 +111,16 @@ void main() {
       int defWordCount = 0;
       for (final entry in entries) {
         headwordCount++;
-        final content = await reader.readAtOffset(
+        final content = await reader.readEntry(
           entry['offset'] as int,
           entry['length'] as int,
         );
-        defWordCount += content
-            .split(RegExp(r'\s+'))
-            .where((s) => s.isNotEmpty)
-            .length;
+        if (content != null) {
+          defWordCount += content
+              .split(RegExp(r'\s+'))
+              .where((s) => s.isNotEmpty)
+              .length;
+        }
       }
       expect(headwordCount, 2);
       expect(defWordCount, 5);

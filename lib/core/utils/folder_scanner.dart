@@ -68,9 +68,13 @@ class FolderScanResult {
   /// Dictionaries detected (by their anchor file) but missing mandatory files.
   final List<IncompleteDict> incomplete;
 
+  /// Archive files found in the folder (e.g. .tar.gz, .zip).
+  final List<String> foundArchives;
+
   const FolderScanResult({
     required this.discovered,
     required this.incomplete,
+    this.foundArchives = const [],
   });
 }
 
@@ -199,6 +203,7 @@ Future<FolderScanResult> scanFolderForDictionaries(
   // --- Step 2: scan every file recursively ---------------------------------
   final discovered = <DiscoveredDict>[];
   final incomplete = <IncompleteDict>[];
+  final foundArchives = <String>[];
 
   final entities = await dir.list(recursive: true).toList();
   for (final entity in entities) {
@@ -206,6 +211,12 @@ Future<FolderScanResult> scanFolderForDictionaries(
 
     final path = entity.path;
     final lowerPath = path.toLowerCase();
+
+    if (_isArchive(lowerPath)) {
+      foundArchives.add(p.basename(path));
+      continue;
+    }
+
     final parentName = p.basename(p.dirname(path));
     // If it's a temp extraction dir, we might want the parent of that, 
     // but the requirement "name of the folder which is the last" usually means the immediate parent.
@@ -297,5 +308,9 @@ Future<FolderScanResult> scanFolderForDictionaries(
     }
   }
 
-  return FolderScanResult(discovered: discovered, incomplete: incomplete);
+  return FolderScanResult(
+    discovered: discovered,
+    incomplete: incomplete,
+    foundArchives: foundArchives,
+  );
 }

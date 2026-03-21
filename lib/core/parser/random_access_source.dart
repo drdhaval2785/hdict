@@ -1,6 +1,7 @@
 import 'package:slob_reader/slob_reader.dart' as slob;
 
 import 'package:dictzip_reader/dictzip_reader.dart' as dictzip;
+import 'package:dictd_reader/dictd_reader.dart' as dictd;
 import 'dart:typed_data';
 import 'dart:io';
 
@@ -9,7 +10,8 @@ import 'dart:io';
 abstract class RandomAccessSource
     implements
         slob.RandomAccessSource,
-        dictzip.RandomAccessSource {
+        dictzip.RandomAccessSource,
+        dictd.RandomAccessSource {
   /// Reads [length] bytes starting at [offset].
   @override
   Future<Uint8List> read(int offset, int length);
