@@ -1778,8 +1778,11 @@ class DictionaryManager {
                   parentFolderName: parentName,
                   safUris: {
                     'ifo': path,
+                    // ignore: use_null_aware_elements
                     if (idxUri != null) 'idx': idxUri,
+                    // ignore: use_null_aware_elements
                     if (dictUri != null) 'dict': dictUri,
+                    // ignore: use_null_aware_elements
                     if (synUri != null) 'syn': synUri,
                   },
                 ),

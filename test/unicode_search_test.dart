@@ -28,7 +28,9 @@ void main() {
           type_sequence TEXT,
           css TEXT,
           checksum TEXT,
-          source_url TEXT
+          source_url TEXT,
+          source_type TEXT DEFAULT 'managed',
+          source_bookmark TEXT
         )''');
       await db.execute('''
         CREATE TABLE word_metadata(

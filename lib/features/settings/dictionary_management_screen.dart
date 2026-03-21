@@ -998,6 +998,7 @@ class _DictionaryManagementScreenState
     if (!context.mounted) return;
 
     bool cancelled = false;
+    // ignore: use_build_context_synchronously
     showDialog(
       context: context,
       barrierDismissible: false,

@@ -33,7 +33,9 @@ void main() {
           css TEXT,
           definition_word_count INTEGER DEFAULT 0,
           checksum TEXT,
-          source_url TEXT
+          source_url TEXT,
+          source_type TEXT DEFAULT 'managed',
+          source_bookmark TEXT
         )
       ''');
 
