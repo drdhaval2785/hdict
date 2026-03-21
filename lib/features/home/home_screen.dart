@@ -127,9 +127,8 @@ class HomeScreen extends StatefulWidget {
       );
 
       String processed;
-      if (format == 'mdict' || format == 'slob' || format == 'dictd') {
-        // These formats usually contain standard HTML.
-        // We skip the aggressive tag-to-span conversion to preserve structure and performance.
+      if (format == 'mdict') {
+        // Mdict usually contains standard HTML.
         processed = text;
       } else {
         processed = text.replaceAllMapped(genericTagRegex, (match) {
@@ -144,16 +143,39 @@ class HomeScreen extends StatefulWidget {
             return match.group(0)!;
           }
 
-          // Convert non-standard tags to semantic span with class
-          if (isClosing) {
-            return '</span>';
+          // Convert non-standard tags to semantic span (stardict) or escape (dictd/slob)
+          if (format == 'stardict') {
+            if (isClosing) {
+              return '</span>';
+            } else {
+              return '<span class="hdict-$tagName">';
+            }
           } else {
-            return '<span class="hdict-$tagName">';
+            // Escape pseudo-tags in dictd, slob, etc. to prevent renderer truncation
+            return match.group(0)!.replaceAll('<', '&lt;').replaceAll('>', '&gt;');
           }
         });
       }
 
-      final result = processed.replaceAll(RegExp(r'\s+'), ' ').trim();
+      // Preserve newlines for non-mdict formats by converting to <br>
+      // while collapsing other multiple spaces.
+      if (format != 'mdict') {
+        processed = processed.replaceAll('\r\n', '\n').replaceAllMapped(
+          RegExp(r'\s+'),
+          (match) {
+            String matchStr = match.group(0)!;
+            if (matchStr.contains('\n')) {
+              int n = matchStr.split('\n').length - 1;
+              return '<br>' * n;
+            }
+            return ' ';
+          },
+        );
+      } else {
+        processed = processed.replaceAll(RegExp(r'\s+'), ' ');
+      }
+
+      final result = processed.trim();
       hDebugPrint('normalizeWhitespace (HTML): Result: [$result]');
       return result;
     } else {
