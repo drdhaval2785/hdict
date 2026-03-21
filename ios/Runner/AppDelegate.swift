@@ -9,9 +9,9 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    let controller : FlutterViewController = window?.rootViewController as! FlutterViewController
+    let registrar = self.registrar(forPlugin: "com.drdhaval2785.hdict.BookmarkPlugin")!
     let bookmarkChannel = FlutterMethodChannel(name: "com.drdhaval2785.hdict/bookmarks",
-                                              binaryMessenger: controller.binaryMessenger)
+                                              binaryMessenger: registrar.messenger())
     
     bookmarkChannel.setMethodCallHandler({
       [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) -> Void in
