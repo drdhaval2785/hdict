@@ -233,8 +233,8 @@ class MdxParser {
     List<int> keyBlockInfo;
     if (version >= 2.0) {
       if (encrypt == 2) {
-        final key = RIPEMD128.hash(keyBlockInfoCompressed.sublist(4, 8) + [149, 54, 0, 0] as Uint8List);
-        keyBlockInfoCompressed = keyBlockInfoCompressed.sublist(0, 8) + _fastDecrypt(keyBlockInfoCompressed.sublist(8), key as Uint8List) as Uint8List;
+        final key = Uint8List.fromList(RIPEMD128.hash(Uint8List.fromList([...keyBlockInfoCompressed.sublist(4, 8), 149, 54, 0, 0])));
+        keyBlockInfoCompressed = Uint8List.fromList([...keyBlockInfoCompressed.sublist(0, 8), ..._fastDecrypt(keyBlockInfoCompressed.sublist(8), key)]);
       }
       keyBlockInfo = zlib.decode(keyBlockInfoCompressed.sublist(8));
     } else {
@@ -307,14 +307,15 @@ class MdxParser {
     return recordBlock.sublist(recordOffsetInfo.startOffset, recordOffsetInfo.endOffset);
   }
 
-  Future<List<String>> search(String key, {int? limit}) async {
+  Future<List<(String, int)>> search(String key, {int? limit}) async {
     final firstMatchIndex = lowerBound(_keyList, (0, key), compare: (a, b) => a.$2.compareTo(b.$2));
-    final matchedKeys = <String>[];
+    final matchedKeys = <(String, int)>[];
     for (var i = firstMatchIndex; i < _keyList.length; i++) {
       if (limit != null && matchedKeys.length >= limit) break;
       final currentKey = _keyList[i].$2;
+      final currentOffset = _keyList[i].$1;
       if (currentKey.startsWith(key)) {
-        matchedKeys.add(currentKey);
+        matchedKeys.add((currentKey, currentOffset));
       } else {
         break;
       }

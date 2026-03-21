@@ -402,7 +402,9 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
     int indexed = 0;
     int defWordCount = 0;
 
-    for (final word in allKeys) {
+    for (final entry in allKeys) {
+      final word = entry.$1;
+      final offset = entry.$2;
       String content = '';
       if (args.indexDefinitions) {
         content = await reader.lookup(word) ?? '';
@@ -412,7 +414,7 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
         'word': word,
         'content': content,
         'dict_id': args.dictId,
-        'offset': 0,
+        'offset': offset,
         'length': 0,
       });
       indexed++;

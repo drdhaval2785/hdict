@@ -73,7 +73,7 @@ class MdictReader {
   }
 
   /// Returns up to [limit] headwords that start with [prefix].
-  Future<List<String>> prefixSearch(String prefix, {int limit = 50000}) async {
+  Future<List<(String, int)>> prefixSearch(String prefix, {int limit = 50000}) async {
     if (kIsWeb) throw UnsupportedError('MDict is not supported on Web.');
     if (!_isInitialized) await open();
     try {
