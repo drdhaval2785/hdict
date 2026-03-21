@@ -2064,7 +2064,6 @@ class DictionaryManager {
     }
   }
 
-  Future<void> _extractToWorkspaceSync(_ExtractArgs args) async {
     Stream<ImportProgress> importMultipleFilesWebStream(
       List<({String name, Uint8List bytes})> files, {
       bool indexDefinitions = false,
