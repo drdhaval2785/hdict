@@ -118,7 +118,7 @@ class HomeScreen extends StatefulWidget {
     if (isHtml) {
       // List of common HTML tags to KEEP.
       const allowedTags =
-          'html|head|body|div|span|p|br|hr|b|i|u|blockquote|a|ul|ol|li|h[1-6]|table|tr|td|th|thead|tbody|tfoot|img|font|big|small|em|strong|sub|sup|mark';
+          'html|head|body|div|span|p|br|hr|b|i|u|blockquote|a|ul|ol|li|h[1-6]|table|tr|td|th|thead|tbody|tfoot|img|font|big|small|em|strong|sub|sup|mark|link|script|style|meta|title|head|center|font|dfn|code|samp|kbd|var|cite|abbr|acronym|q|sub|sup|ins|del|pre';
 
       // regex to match any tag <tag ...> or </tag>
       final genericTagRegex = RegExp(

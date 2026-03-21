@@ -117,10 +117,8 @@ class SlobReader {
     if (!_isInitialized) await open();
     if (_reader == null) return null;
 
-    final binIndex = id >> 16;
-    final itemIndex = id & 0xFFFF;
-    final content = await _reader!.getBlobContent(binIndex, itemIndex);
-    return utf8.decode(content, allowMalformed: true);
+    final blob = await _reader!.getBlob(id);
+    return utf8.decode(blob.content, allowMalformed: true);
   }
 
   /// Returns the content of multiple blobs for given [ids].
@@ -130,12 +128,9 @@ class SlobReader {
     if (!_isInitialized) await open();
     if (_reader == null) return [];
 
-    final List<(int, int)> blobIds = ids.map((id) => (
-      id >> 16,
-      id & 0xFFFF,
-    )).toList();
+    final List<(int, int)> ranges = ids.map((id) => (id, 1)).toList();
 
-    final blobs = await _reader!.getBlobs(blobIds);
+    final blobs = await _reader!.getBlobs(ranges);
     return blobs.map((b) => utf8.decode(b.content, allowMalformed: true)).toList();
   }
 
