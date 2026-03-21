@@ -97,6 +97,7 @@ class HomeScreen extends StatefulWidget {
     String? format,
     String? typeSequence,
   }) {
+    hDebugPrint('normalizeWhitespace: Input: [$text]');
     bool isHtml = false;
     if (format == 'mdict' || format == 'dictd') {
       isHtml = true;
@@ -152,11 +153,13 @@ class HomeScreen extends StatefulWidget {
         });
       }
 
-      return processed.replaceAll(RegExp(r'\s+'), ' ').trim();
+      final result = processed.replaceAll(RegExp(r'\s+'), ' ').trim();
+      hDebugPrint('normalizeWhitespace (HTML): Result: [$result]');
+      return result;
     } else {
       // Plain text dictionary: Preserve newlines by converting them to <br>
       // then collapsing other multiple spaces.
-      return text.replaceAll('\r\n', '\n').trim().replaceAllMapped(
+      final result = text.replaceAll('\r\n', '\n').trim().replaceAllMapped(
         RegExp(r'\s+'),
         (match) {
           if (match.group(0)!.contains('\n')) {
@@ -167,6 +170,8 @@ class HomeScreen extends StatefulWidget {
           return ' ';
         },
       );
+      hDebugPrint('normalizeWhitespace (Plain): Result: [$result]');
+      return result;
     }
   }
 
@@ -1144,6 +1149,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     );
 
                     definitionHtml = '${defData['headwordHtml']}\n$processed';
+                    hDebugPrint('HomeScreen: Final definitionHtml: [$definitionHtml]');
                     defData['processedHtml'] =
                         definitionHtml; // Cache for subsequent scrolls
                   }

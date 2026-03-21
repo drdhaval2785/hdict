@@ -719,10 +719,9 @@ packages:
   slob_reader:
     dependency: "direct main"
     description:
-      name: slob_reader
-      sha256: f44c8027130aef8505143abebaaac874affbdf3fb69a8a08f0aefd6eba1d7267
-      url: "https://pub.dev"
-    source: hosted
+      path: "../slob_test"
+      relative: true
+    source: path
     version: "0.1.5"
   source_span:
     dependency: transitive

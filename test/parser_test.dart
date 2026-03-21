@@ -70,7 +70,12 @@ author=Tester
 
     test('IfoParser parses metadata correctly', () async {
       final parser = IfoParser();
-      await parser.parse(ifoPath);
+      final source = FileRandomAccessSource(ifoPath);
+      try {
+        await parser.parseSource(source);
+      } finally {
+        await source.close();
+      }
 
       expect(parser.version, '2.4.2');
       expect(parser.bookName, 'Test Dictionary');
@@ -81,10 +86,23 @@ author=Tester
 
     test('IdxParser parses entries correctly', () async {
       final ifo = IfoParser();
-      await ifo.parse(ifoPath);
+      final ifoSource = FileRandomAccessSource(ifoPath);
+      try {
+        await ifo.parseSource(ifoSource);
+      } finally {
+        await ifoSource.close();
+      }
 
       final idx = IdxParser(ifo);
-      final entries = await idx.parse(idxPath).toList();
+      final idxSource = FileRandomAccessSource(idxPath);
+      final List<Map<String, dynamic>> entries = [];
+      try {
+        await for (final entry in idx.parse(idxSource)) {
+          entries.add(entry);
+        }
+      } finally {
+        await idxSource.close();
+      }
 
       expect(entries.length, 2);
 
@@ -126,7 +144,15 @@ author=Tester
       await File(synPath).writeAsBytes(bytes.toBytes());
 
       final parser = SynParser();
-      final synonyms = await parser.parse(synPath).toList();
+      final source = FileRandomAccessSource(synPath);
+      final List<Map<String, dynamic>> synonyms = [];
+      try {
+        await for (final syn in parser.parse(source)) {
+          synonyms.add(syn);
+        }
+      } finally {
+        await source.close();
+      }
 
       expect(synonyms.length, 2);
       expect(synonyms[0]['word'], 'hi');
@@ -172,7 +198,15 @@ author=Tester
       await File(indexPath).writeAsString('hello\tA\tL\ntest\tL\tS\n');
 
       final parser = DictdParser();
-      final entries = await parser.parseIndex(indexPath).toList();
+      final indexSource = FileRandomAccessSource(indexPath);
+      final List<Map<String, dynamic>> entries = [];
+      try {
+        await for (final entry in parser.parseIndex(indexSource)) {
+          entries.add(entry);
+        }
+      } finally {
+        await indexSource.close();
+      }
 
       expect(entries.length, 2);
       expect(entries[0]['word'], 'hello');

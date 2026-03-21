@@ -23,6 +23,8 @@ import 'package:flutter_7zip/flutter_7zip.dart';
 import 'package:hdict/core/utils/folder_scanner.dart';
 import 'package:docman/docman.dart';
 import 'package:hdict/core/parser/bookmark_manager.dart';
+import 'package:hdict/core/parser/random_access_source.dart';
+import 'package:hdict/core/parser/bookmark_random_access_source.dart';
 
 // Top-level functions for compute
 List<int> _decompressGzip(List<int> bytes) {
@@ -206,10 +208,19 @@ Future<void> _indexEntry(_IndexArgs args) async {
   final dbHelper = DatabaseHelper(); // Assumes singleton or initialized factory
 
   try {
+    final bool isLinked = args.sourceType == 'linked' && args.sourceBookmark != null;
+    
+    // StarDict indexing needs to parse IFO (already parsed but let's be safe), 
+    // IDX (for word offsets), and potentially SYN (for synonyms).
+    
+    // 1. IDX Parser
     final idxParser = IdxParser(args.ifoParser);
-    final stream = idxParser.parse(args.idxPath);
-    final dictReader =
-        args.sourceType == 'linked' && args.sourceBookmark != null
+    final idxSource = isLinked
+        ? BookmarkRandomAccessSource(args.sourceBookmark!, targetPath: p.basename(args.idxPath))
+        : FileRandomAccessSource(args.idxPath);
+    
+    // 2. Dict Reader
+    final dictReader = isLinked
         ? await DictReader.fromLinkedSource(args.sourceBookmark!, targetPath: p.basename(args.dictPath), actualPath: args.dictPath)
         : await DictReader.fromPath(args.dictPath);
     await dictReader.open();
@@ -217,8 +228,12 @@ Future<void> _indexEntry(_IndexArgs args) async {
     List<({int offset, int length, String content})> wordOffsets = [];
 
     final List<Map<String, dynamic>> entriesList = [];
-    await for (final entry in stream) {
-      entriesList.add(entry);
+    try {
+      await for (final entry in idxParser.parse(idxSource)) {
+        entriesList.add(entry);
+      }
+    } finally {
+      await idxSource.close();
     }
 
     final int totalHeadwords = entriesList.length;
@@ -292,35 +307,43 @@ Future<void> _indexEntry(_IndexArgs args) async {
 
     if (args.synPath != null) {
       final synParser = SynParser();
+      final synSource = isLinked
+          ? BookmarkRandomAccessSource(args.sourceBookmark!, targetPath: p.basename(args.synPath!))
+          : FileRandomAccessSource(args.synPath!);
+      
       List<Map<String, dynamic>> synBatch = [];
-      await for (final syn in synParser.parse(args.synPath!)) {
-        final originalIndex = syn['original_word_index'] as int;
-        if (originalIndex < wordOffsets.length) {
-          final originalInfo = wordOffsets[originalIndex];
-          synBatch.add({
-            'word': syn['word'],
-            'content': originalInfo.content,
-            'dict_id': args.dictId,
-            'offset': originalInfo.offset,
-            'length': originalInfo.length,
-          });
-          headwordCount++;
+      try {
+        await for (final syn in synParser.parse(synSource)) {
+          final originalIndex = syn['original_word_index'] as int;
+          if (originalIndex < wordOffsets.length) {
+            final originalInfo = wordOffsets[originalIndex];
+            synBatch.add({
+              'word': syn['word'],
+              'content': originalInfo.content,
+              'dict_id': args.dictId,
+              'offset': originalInfo.offset,
+              'length': originalInfo.length,
+            });
+            headwordCount++;
+          }
+          if (synBatch.length >= 10000) {
+            await dbHelper.batchInsertWords(args.dictId, synBatch);
+            synBatch.clear();
+            sendPort.send(
+              ImportProgress(
+                message:
+                    '${args.ifoParser.bookName}: $headwordCount / $totalAll indexed',
+                value:
+                    0.5 + (headwordCount / (totalAll == 0 ? 1 : totalAll)) * 0.45,
+                headwordCount: headwordCount,
+                definitionWordCount: defWordCount,
+                dictionaryName: args.ifoParser.bookName,
+              ),
+            );
+          }
         }
-        if (synBatch.length >= 10000) {
-          await dbHelper.batchInsertWords(args.dictId, synBatch);
-          synBatch.clear();
-          sendPort.send(
-            ImportProgress(
-              message:
-                  '${args.ifoParser.bookName}: $headwordCount / $totalAll indexed',
-              value:
-                  0.5 + (headwordCount / (totalAll == 0 ? 1 : totalAll)) * 0.45,
-              headwordCount: headwordCount,
-              definitionWordCount: defWordCount,
-              dictionaryName: args.ifoParser.bookName,
-            ),
-          );
-        }
+      } finally {
+        await synSource.close();
       }
       if (synBatch.isNotEmpty) {
         await dbHelper.batchInsertWords(args.dictId, synBatch);
@@ -573,17 +596,29 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
   final sendPort = args.sendPort;
 
   try {
+    final bool isLinked = args.sourceType == 'linked' && args.sourceBookmark != null;
+
     final dictdParser = DictdParser();
-    final dictdReader =
-        args.sourceType == 'linked' && args.sourceBookmark != null
+
+    // 1. Index Source
+    final indexSource = isLinked
+        ? BookmarkRandomAccessSource(args.sourceBookmark!, targetPath: p.basename(args.indexPath))
+        : FileRandomAccessSource(args.indexPath);
+
+    // 2. Dict Reader
+    final dictdReader = isLinked
         ? await DictdReader.fromLinkedSource(args.sourceBookmark!, targetPath: p.basename(args.dictPath), actualPath: args.dictPath)
         : await DictdReader.fromPath(args.dictPath);
     await dictdReader.open();
-    final indexStream = dictdParser.parseIndex(args.indexPath);
 
     final List<Map<String, dynamic>> entriesList = [];
-    await for (final entry in indexStream) {
-      entriesList.add(entry);
+    try {
+      final indexStream = dictdParser.parseIndex(indexSource);
+      await for (final entry in indexStream) {
+        entriesList.add(entry);
+      }
+    } finally {
+      await indexSource.close();
     }
 
     final int totalHeadwords = entriesList.length;
@@ -1907,7 +1942,12 @@ class DictionaryManager {
     yield ImportProgress(message: 'Linking StarDict...', value: 0.1);
     try {
       final ifoParser = IfoParser();
-      await ifoParser.parse(ifoPath);
+      final ifoSource = FileRandomAccessSource(ifoPath);
+      try {
+        await ifoParser.parseSource(ifoSource);
+      } finally {
+        await ifoSource.close();
+      }
       final bookName = ifoParser.bookName ?? p.basenameWithoutExtension(ifoPath);
 
       // Create bookmark for the parent folder to allow access to all sibling files (.idx, .dict, etc.)
@@ -2084,8 +2124,9 @@ class DictionaryManager {
     yield ImportProgress(message: 'Linking DICTD...', value: 0.1);
     try {
       // For DICTD, we link based on the index file, but we need both.
-      // We'll store the index path and bookmark it.
-      final String? bookmark = await BookmarkManager.createBookmark(indexPath);
+      // Create bookmark for the parent folder to allow access to all sibling files (.index, .dict, etc.)
+      final String folderPath = p.dirname(indexPath);
+      final String? bookmark = await BookmarkManager.createBookmark(folderPath);
       if (bookmark == null) throw Exception('Failed to create bookmark');
 
       final bookName = p.basenameWithoutExtension(indexPath);
@@ -3307,6 +3348,9 @@ class DictionaryManager {
         final results = await cached.readBulk(entries);
         HPerf.end(ioWatch, 'fetchBatch_IO_Batch[$format]');
         HPerf.end(totalWatch, 'fetchBatch_Total[$format]');
+        for (int i = 0; i < requests.length; i++) {
+          hDebugPrint('DictionaryManager: Raw Result for "${requests[i]['word']}": [${results[i]}]');
+        }
         return results;
       }
 
@@ -3344,6 +3388,9 @@ class DictionaryManager {
         }
 
         HPerf.end(ioWatch, 'fetchBatch_IO_Batch[$format]');
+        for (int i = 0; i < requests.length; i++) {
+          hDebugPrint('DictionaryManager: Raw Result for "${requests[i]['word']}": [${batchResults[i]}]');
+        }
         return batchResults;
       });
 

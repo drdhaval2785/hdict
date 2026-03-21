@@ -14,6 +14,11 @@ class BookmarkRandomAccessSource implements RandomAccessSource {
 
   BookmarkRandomAccessSource(this.bookmark, {this.targetPath});
 
+  @override
+  Future<void> open() async {
+    await _ensureOpened();
+  }
+
   Future<void> _ensureOpened() async {
     if (_file != null) return;
 

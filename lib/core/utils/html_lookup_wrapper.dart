@@ -1,3 +1,4 @@
+import 'package:hdict/core/utils/logger.dart';
 /// A utility to wrap every word in a string with HTML links for dictionary lookup.
 class HtmlLookupWrapper {
   static final RegExp _tagRegExp = RegExp(r'<[^>]*>|&[a-z0-9#]{2,10};|[^<&]+', caseSensitive: false);
@@ -12,6 +13,7 @@ class HtmlLookupWrapper {
     String? underlineQuery,
   }) {
     if (html.isEmpty) return '';
+    hDebugPrint('HtmlLookupWrapper: Input: [$html]');
 
     final String? lowerHighlight = highlightQuery?.toLowerCase();
     final String? lowerUnderline = underlineQuery?.toLowerCase();
@@ -79,7 +81,9 @@ class HtmlLookupWrapper {
       }
     }
 
-    return buffer.toString().trim();
+    final result = buffer.toString().trim();
+    hDebugPrint('HtmlLookupWrapper: Result: [$result]');
+    return result;
   }
 
   /// Process record for basic highlighting.

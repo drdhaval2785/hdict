@@ -9,6 +9,9 @@ import 'dart:io';
 class BookmarkManager {
   static const _channel = MethodChannel('com.drdhaval2785.hdict/bookmarks');
 
+  /// Keeps track of active access sessions for each bookmark.
+  static final Map<String, int> _sessionCounts = {};
+
   /// Resolves a security-scoped bookmark to a physical path.
   /// 
   /// On iOS/macOS, this also starts a security-scoped access session.
@@ -16,12 +19,17 @@ class BookmarkManager {
   static Future<String?> resolveBookmark(String bookmark) async {
     if (Platform.isIOS || Platform.isMacOS) {
       try {
+        // Increment session count
+        _sessionCounts[bookmark] = (_sessionCounts[bookmark] ?? 0) + 1;
+        
+        // If this is the first session, it will trigger startAccessing on native side
         final String? path = await _channel.invokeMethod('resolveBookmark', {
           'bookmark': bookmark,
         });
         return path;
       } on PlatformException catch (e) {
         debugPrint('Error resolving bookmark: $e');
+        _sessionCounts[bookmark] = (_sessionCounts[bookmark] ?? 0) - 1;
         return null;
       }
     }
@@ -31,12 +39,21 @@ class BookmarkManager {
   /// Stops security-scoped access for a previously resolved bookmark.
   static Future<void> stopAccess(String bookmark) async {
     if (Platform.isIOS || Platform.isMacOS) {
-      try {
-        await _channel.invokeMethod('stopAccess', {
-          'bookmark': bookmark,
-        });
-      } on PlatformException catch (e) {
-        debugPrint('Error stopping access: $e');
+      final current = _sessionCounts[bookmark] ?? 0;
+      if (current <= 0) return;
+
+      final next = current - 1;
+      _sessionCounts[bookmark] = next;
+
+      if (next == 0) {
+        try {
+          await _channel.invokeMethod('stopAccess', {
+            'bookmark': bookmark,
+          });
+          _sessionCounts.remove(bookmark);
+        } on PlatformException catch (e) {
+          debugPrint('Error stopping access: $e');
+        }
       }
     }
   }

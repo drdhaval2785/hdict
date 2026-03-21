@@ -105,11 +105,12 @@ void main() {
       final reader = DictdReader(dictPath);
       await reader.openSource(FileRandomAccessSource(dictPath));
       final parser = DictdParser();
-      final entries = await parser.parseIndex(indexPath).toList();
-
+      final indexSource = FileRandomAccessSource(indexPath);
       int headwordCount = 0;
       int defWordCount = 0;
-      for (final entry in entries) {
+      try {
+        final entries = await parser.parseIndex(indexSource).toList();
+        for (final entry in entries) {
         headwordCount++;
         final content = await reader.readEntry(
           entry['offset'] as int,
@@ -122,9 +123,12 @@ void main() {
               .length;
         }
       }
+      } finally {
+        await indexSource.close();
+        await reader.close();
+      }
       expect(headwordCount, 2);
       expect(defWordCount, 5);
-      await reader.close();
     });
 
     test('StarDict indexing logic (direct call)', () async {
@@ -149,10 +153,24 @@ void main() {
       await File(idxPath).writeAsBytes(bytes.toBytes());
 
       final ifo = IfoParser();
-      await ifo.parse(ifoPath);
+      final ifoSource = FileRandomAccessSource(ifoPath);
+      try {
+        await ifo.parseSource(ifoSource);
+      } finally {
+        await ifoSource.close();
+      }
+      
       final reader = DictReader(dictPath, source: FileRandomAccessSource(dictPath));
       final idx = IdxParser(ifo);
-      final entries = await idx.parse(idxPath).toList();
+      final idxSource = FileRandomAccessSource(idxPath);
+      final List<Map<String, dynamic>> entries = [];
+      try {
+        await for (final entry in idx.parse(idxSource)) {
+          entries.add(entry);
+        }
+      } finally {
+        await idxSource.close();
+      }
 
       int headwordCount = 0;
       int defWordCount = 0;

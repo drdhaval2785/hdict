@@ -13,6 +13,11 @@ class SafRandomAccessSource implements RandomAccessSource {
 
   SafRandomAccessSource(this.uri);
 
+  @override
+  Future<void> open() async {
+    await _ensureOpen();
+  }
+
   Future<void> _ensureOpen() async {
     if (_cachedLength == null) {
       final docFile = await DocumentFile.fromUri(uri);

@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'package:hdict/core/parser/random_access_source.dart';
 import 'dart:typed_data';
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -9,18 +9,15 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 /// - A null-terminated UTF-8 string (the synonym).
 /// - A 32-bit Big Endian index pointing to the original word in the .idx file.
 class SynParser {
-  /// Parses a StarDict .syn file at [path].
+  /// Parses a StarDict .syn file.
   /// Yields pairs of {'word': synonym, 'original_word_index': index}.
-  Stream<Map<String, dynamic>> parse(String path) async* {
+  Stream<Map<String, dynamic>> parse(RandomAccessSource source) async* {
     if (kIsWeb) {
       throw UnsupportedError('Use parseFromBytes on Web');
     }
-    final file = File(path);
-    if (!await file.exists()) {
-      throw Exception('SYN file not found: $path');
-    }
-
-    final bytes = await file.readAsBytes();
+    
+    final length = await source.length;
+    final bytes = await source.read(0, length);
     yield* parseFromBytes(bytes);
   }
 

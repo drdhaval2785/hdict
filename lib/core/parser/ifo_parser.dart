@@ -1,5 +1,6 @@
-import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:hdict/core/parser/random_access_source.dart';
 
 /// A parser for StarDict .ifo files (metadata/information).
 class IfoParser {
@@ -9,13 +10,21 @@ class IfoParser {
     if (kIsWeb) {
       throw UnsupportedError('Use parseContent on Web');
     }
-    final file = File(path);
-    if (!await file.exists()) {
-      throw Exception('IFO file not found: $path');
+    // We maintain this for backward compatibility and local files.
+    // In linked files, DictionaryManager should use parseSource.
+    final source = FileRandomAccessSource(path);
+    try {
+      await parseSource(source);
+    } finally {
+      await source.close();
     }
+  }
 
-    final lines = await file.readAsLines();
-    _parseLines(lines);
+  Future<void> parseSource(RandomAccessSource source) async {
+    final length = await source.length;
+    final bytes = await source.read(0, length);
+    final content = utf8.decode(bytes, allowMalformed: true);
+    parseContent(content);
   }
 
   void parseContent(String content) {

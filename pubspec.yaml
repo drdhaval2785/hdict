@@ -146,3 +146,5 @@ dependency_overrides:
     path: ../dictzip_reader
   dictd_reader:
     path: ../dictd_reader
+  slob_reader:
+    path: ../slob_test

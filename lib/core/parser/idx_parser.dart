@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'package:hdict/core/parser/random_access_source.dart';
 import 'dart:typed_data';
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -15,18 +15,15 @@ class IdxParser {
 
   IdxParser(this.ifo);
 
-  /// Parses the .idx file at [path] and yields a stream of word entries.
+  /// Parses the .idx file and yields a stream of word entries.
   /// Each entry is a map containing: 'word', 'offset', and 'length'.
-  Stream<Map<String, dynamic>> parse(String path) async* {
+  Stream<Map<String, dynamic>> parse(RandomAccessSource source) async* {
     if (kIsWeb) {
       throw UnsupportedError('Use parseFromBytes on Web');
     }
-    final file = File(path);
-    if (!await file.exists()) {
-      throw Exception('IDX file not found: $path');
-    }
-
-    final bytes = await file.readAsBytes();
+    
+    final length = await source.length;
+    final bytes = await source.read(0, length);
     yield* parseFromBytes(bytes);
   }
 
