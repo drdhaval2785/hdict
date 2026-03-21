@@ -210,7 +210,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
     final stream = idxParser.parse(args.idxPath);
     final dictReader =
         args.sourceType == 'linked' && args.sourceBookmark != null
-        ? await DictReader.fromUri(args.sourceBookmark!)
+        ? await DictReader.fromLinkedSource(args.sourceBookmark!, targetPath: p.basename(args.dictPath))
         : await DictReader.fromPath(args.dictPath);
     await dictReader.open();
 
@@ -576,7 +576,7 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
     final dictdParser = DictdParser();
     final dictdReader =
         args.sourceType == 'linked' && args.sourceBookmark != null
-        ? await DictdReader.fromUri(args.sourceBookmark!)
+        ? await DictdReader.fromLinkedSource(args.sourceBookmark!, targetPath: p.basename(args.dictPath))
         : await DictdReader.fromPath(args.dictPath);
     await dictdReader.open();
     final indexStream = dictdParser.parseIndex(args.indexPath);
@@ -876,9 +876,23 @@ class DictionaryManager {
       } else if (format == 'slob') {
         reader = await SlobReader.fromLinkedSource(sourceBookmark);
       } else if (format == 'stardict') {
-        reader = await DictReader.fromLinkedSource(sourceBookmark);
+        final String dictPath = await _dbHelper.resolvePath(rawPath);
+        final basePath = p.withoutExtension(dictPath);
+        final actualDictPath = _resolveLocalFile(basePath, [
+          '.dict',
+          '.dict.dz',
+          '.dict.gz',
+          '.dict.bz2',
+          '.dict.xz',
+        ]);
+        if (actualDictPath == null) return null;
+        reader = await DictReader.fromLinkedSource(sourceBookmark, targetPath: p.basename(actualDictPath));
       } else if (format == 'dictd') {
-        reader = await DictdReader.fromLinkedSource(sourceBookmark);
+        final String indexPath = await _dbHelper.resolvePath(rawPath);
+        final basePath = p.withoutExtension(indexPath);
+        final actualDictPath = _resolveLocalFile(basePath, ['.dict.dz', '.dict']);
+        if (actualDictPath == null) return null;
+        reader = await DictdReader.fromLinkedSource(sourceBookmark, targetPath: p.basename(actualDictPath));
       }
     } else {
       final String dictPath = await _dbHelper.resolvePath(rawPath);
@@ -1896,8 +1910,9 @@ class DictionaryManager {
       await ifoParser.parse(ifoPath);
       final bookName = ifoParser.bookName ?? p.basenameWithoutExtension(ifoPath);
 
-      // Create bookmark for the folder or file
-      final String? bookmark = await BookmarkManager.createBookmark(ifoPath);
+      // Create bookmark for the parent folder to allow access to all sibling files (.idx, .dict, etc.)
+      final String folderPath = p.dirname(ifoPath);
+      final String? bookmark = await BookmarkManager.createBookmark(folderPath);
       if (bookmark == null) throw Exception('Failed to create bookmark');
 
       final basePath = p.withoutExtension(ifoPath);
@@ -3278,7 +3293,7 @@ class DictionaryManager {
     if (dictId == null) return List.filled(requests.length, null);
 
     final totalWatch = HPerf.start('fetchBatch_Total[$format]');
-
+    
     try {
       // 1. Check cache for fast path (plain .dict)
       final cached = _readerCache[dictId];

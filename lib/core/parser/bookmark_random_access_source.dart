@@ -2,15 +2,17 @@ import 'dart:typed_data';
 import 'dart:io';
 import 'package:hdict/core/parser/random_access_source.dart';
 import 'package:hdict/core/parser/bookmark_manager.dart';
+import 'package:path/path.dart' as p;
 
 /// Implementation of [RandomAccessSource] for iOS/macOS security-scoped bookmarks.
 class BookmarkRandomAccessSource implements RandomAccessSource {
   final String bookmark;
+  final String? targetPath;
   RandomAccessFile? _file;
   String? _resolvedPath;
   int? _length;
 
-  BookmarkRandomAccessSource(this.bookmark);
+  BookmarkRandomAccessSource(this.bookmark, {this.targetPath});
 
   Future<void> _ensureOpened() async {
     if (_file != null) return;
@@ -20,9 +22,13 @@ class BookmarkRandomAccessSource implements RandomAccessSource {
       throw FileSystemException('Could not resolve bookmark', bookmark);
     }
 
-    final file = File(_resolvedPath!);
+    final String fullPath = targetPath != null 
+        ? p.join(_resolvedPath!, targetPath!) 
+        : _resolvedPath!;
+
+    final file = File(fullPath);
     if (!await file.exists()) {
-      throw FileSystemException('Resolved path does not exist', _resolvedPath);
+      throw FileSystemException('Resolved path does not exist', fullPath);
     }
 
     _file = await file.open();

@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:hdict/core/parser/random_access_source.dart';
 import 'package:hdict/core/parser/saf_random_access_source.dart';
 import 'package:hdict/core/parser/bookmark_random_access_source.dart';
+import 'package:hdict/core/utils/logger.dart';
 
 /// Reads definitions from a StarDict .dict or .dict.dz file at specified offsets and lengths.
 ///
@@ -30,14 +31,17 @@ class DictReader {
   }
 
   /// Factory to create an instance from a linked source (SAF or Bookmark).
-  static Future<DictReader> fromLinkedSource(String source) async {
+  static Future<DictReader> fromLinkedSource(String source, {String? targetPath}) async {
     if (Platform.isAndroid) {
+      // For SAF on Android, 'source' is usually the URI of the specific file
+      // but if we move to folder-based SAF, we might need targetPath too.
       return DictReader(source, source: SafRandomAccessSource(source));
     } else if (Platform.isIOS || Platform.isMacOS) {
-      return DictReader(source, source: BookmarkRandomAccessSource(source));
+      return DictReader(source, source: BookmarkRandomAccessSource(source, targetPath: targetPath));
     } else {
       // For Linux/Windows, linked source is just a direct path for now
-      return DictReader(source, source: FileRandomAccessSource(source));
+      final String fullPath = targetPath != null ? p.join(source, targetPath) : source;
+      return DictReader(fullPath, source: FileRandomAccessSource(fullPath));
     }
   }
 

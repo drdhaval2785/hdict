@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart';
 import 'package:dictd_reader/dictd_reader.dart' as lib;
 
 // Export DictdParser so callers can still parse DICTD indexes
@@ -29,14 +30,15 @@ class DictdReader {
     return reader;
   }
 
-  static Future<DictdReader> fromLinkedSource(String source) async {
+  static Future<DictdReader> fromLinkedSource(String source, {String? targetPath}) async {
     final reader = DictdReader(source);
     if (!kIsWeb && Platform.isAndroid) {
       await reader.openSource(SafRandomAccessSource(source));
     } else if (!kIsWeb && (Platform.isIOS || Platform.isMacOS)) {
-      await reader.openSource(BookmarkRandomAccessSource(source));
+      await reader.openSource(BookmarkRandomAccessSource(source, targetPath: targetPath));
     } else {
-      await reader.openSource(FileRandomAccessSource(source));
+      final String fullPath = targetPath != null ? join(source, targetPath) : source;
+      await reader.openSource(FileRandomAccessSource(fullPath));
     }
     return reader;
   }
