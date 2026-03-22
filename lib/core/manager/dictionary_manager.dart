@@ -63,6 +63,9 @@ class ImportProgress {
   /// Dictionaries that were imported (copied/extracted) during the process.
   final List<String>? importedEntries;
 
+  /// Dictionaries that already exist in the database.
+  final List<String>? alreadyExistsEntries;
+
   /// The suggested group name for the dictionary.
   final String? groupName;
 
@@ -80,6 +83,7 @@ class ImportProgress {
     this.incompleteEntries,
     this.linkedEntries,
     this.importedEntries,
+    this.alreadyExistsEntries,
     this.groupName,
   });
 }
@@ -1962,6 +1966,7 @@ class DictionaryManager {
     final List<String> linkedEntries = [];
     final List<String> importedEntries = [];
     final List<String> incompleteEntries = [];
+    final List<String> alreadyExistsEntries = [];
 
     try {
       FolderScanResult scanResult;
@@ -2002,7 +2007,7 @@ class DictionaryManager {
                       alreadyInLibraryNames.contains(lowerName);
 
         if (exists) {
-          incompleteEntries.add('$name: ALREADY_EXISTS');
+          alreadyExistsEntries.add(name);
           yield ImportProgress(
             message: 'Skipping $name (Already in library)',
             value: (totalTasks == 0) ? 0.0 : currentLinked / totalTasks,
@@ -2104,7 +2109,7 @@ class DictionaryManager {
                                processedInThisSessionNames.contains(innerLowerName);
 
             if (innerExists) {
-              incompleteEntries.add('$innerName (from $archiveName): ALREADY_EXISTS');
+              alreadyExistsEntries.add('$innerName (from $archiveName)');
               yield ImportProgress(
                 message: 'Skipping $innerName from archive (Already exists)',
                 value: (totalTasks == 0) ? 1.0 : (totalLinked + currentArchive) / totalTasks,
@@ -2157,6 +2162,8 @@ class DictionaryManager {
                   final finalInnerName = progress.dictionaryName ?? innerName;
                   importedEntries.add(finalInnerName);
                   if (finalInnerName != innerName) processedInThisSessionNames.add(finalInnerName);
+                } else if (progress.error != null && progress.error!.contains('ALREADY_EXISTS')) {
+                  alreadyExistsEntries.add('$innerName (from $archiveName)');
                 } else {
                   incompleteEntries.add('$innerName (from $archiveName): ${progress.error}');
                 }
@@ -2185,6 +2192,7 @@ class DictionaryManager {
         linkedEntries: linkedEntries.isEmpty ? null : linkedEntries,
         importedEntries: importedEntries.isEmpty ? null : importedEntries,
         incompleteEntries: incompleteEntries.isEmpty ? null : incompleteEntries,
+        alreadyExistsEntries: alreadyExistsEntries.isEmpty ? null : alreadyExistsEntries,
       );
     } catch (e, s) {
       hDebugPrint('Error in addFolderStream: $e\n$s');

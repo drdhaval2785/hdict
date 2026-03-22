@@ -713,7 +713,7 @@ class _DictionaryManagementScreenState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (progress.linkedEntries != null && progress.linkedEntries!.isNotEmpty) ...[
-                const Text('Read directly (Linked):', 
+                const Text('Linked Dictionaries (Not Copied):', 
                   style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
                 const SizedBox(height: 4),
                 ...progress.linkedEntries!.map((e) => Padding(
@@ -723,7 +723,7 @@ class _DictionaryManagementScreenState
                 const SizedBox(height: 12),
               ],
               if (progress.importedEntries != null && progress.importedEntries!.isNotEmpty) ...[
-                const Text('Decompressed and stored (Imported):', 
+                const Text('Imported Dictionaries (Data Copied):', 
                   style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
                 const SizedBox(height: 4),
                 ...progress.importedEntries!.map((e) => Padding(
@@ -732,8 +732,18 @@ class _DictionaryManagementScreenState
                 )),
                 const SizedBox(height: 12),
               ],
+              if (progress.alreadyExistsEntries != null && progress.alreadyExistsEntries!.isNotEmpty) ...[
+                const Text('ALREADY EXISTS:',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.purple)),
+                const SizedBox(height: 4),
+                ...progress.alreadyExistsEntries!.map((e) => Padding(
+                  padding: const EdgeInsets.only(left: 8.0, bottom: 2.0),
+                  child: Text('• $e', style: const TextStyle(fontSize: 12)),
+                )),
+                const SizedBox(height: 12),
+              ],
               if (progress.incompleteEntries != null && progress.incompleteEntries!.isNotEmpty) ...[
-                const Text('Not processed (missing files or errors):', 
+                const Text('ERRORS / Not Processed:', 
                   style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
                 const SizedBox(height: 4),
                 ...progress.incompleteEntries!.map((e) => Padding(
@@ -743,6 +753,7 @@ class _DictionaryManagementScreenState
               ],
               if ((progress.linkedEntries == null || progress.linkedEntries!.isEmpty) &&
                   (progress.importedEntries == null || progress.importedEntries!.isEmpty) &&
+                  (progress.alreadyExistsEntries == null || progress.alreadyExistsEntries!.isEmpty) &&
                   (progress.incompleteEntries == null || progress.incompleteEntries!.isEmpty))
                 const Text('No dictionaries found in the selected folder.'),
             ],
