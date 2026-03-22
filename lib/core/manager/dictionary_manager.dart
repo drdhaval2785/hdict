@@ -306,6 +306,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
                   '${args.ifoParser.bookName}: $headwordCount / $totalAll indexed',
               value:
                   0.5 + (headwordCount / (totalAll == 0 ? 1 : totalAll)) * 0.45,
+              dictId: args.dictId,
               headwordCount: headwordCount,
               definitionWordCount: defWordCount,
               dictionaryName: args.ifoParser.bookName,
@@ -347,6 +348,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
                     '${args.ifoParser.bookName}: $headwordCount / $totalAll indexed',
                 value:
                     0.5 + (headwordCount / (totalAll == 0 ? 1 : totalAll)) * 0.45,
+                dictId: args.dictId,
                 headwordCount: headwordCount,
                 definitionWordCount: defWordCount,
                 dictionaryName: args.ifoParser.bookName,
@@ -374,6 +376,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
         message:
             '${args.ifoParser.bookName}: $headwordCount headwords, $defWordCount words in definition',
         value: 1.0,
+        dictId: args.dictId,
         isCompleted: true,
         headwordCount: headwordCount,
         definitionWordCount: defWordCount,
@@ -445,6 +448,7 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
             message:
                 '${args.bookName}: $indexed / $totalKeys headwords indexed',
             value: 0.5 + (indexed / (totalKeys == 0 ? 1 : totalKeys)) * 0.45,
+            dictId: args.dictId,
             headwordCount: indexed,
             definitionWordCount: defWordCount,
             dictionaryName: args.bookName,
@@ -465,6 +469,7 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
       ImportProgress(
         message: 'MDict indexing complete!',
         value: 1.0,
+        dictId: args.dictId,
         isCompleted: true,
         headwordCount: indexed,
         definitionWordCount: defWordCount,
@@ -546,6 +551,7 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
               value:
                   0.45 +
                   (headwordCount / (totalBlobs == 0 ? 1 : totalBlobs)) * 0.5,
+              dictId: args.dictId,
               headwordCount: headwordCount,
               definitionWordCount: defWordCount,
               dictionaryName: args.bookName,
@@ -562,6 +568,7 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
               '${args.bookName}: $headwordCount / $totalBlobs headwords indexed',
           value:
               0.45 + (headwordCount / (totalBlobs == 0 ? 1 : totalBlobs)) * 0.5,
+          dictId: args.dictId,
           headwordCount: headwordCount,
           definitionWordCount: defWordCount,
           dictionaryName: args.bookName,
@@ -583,6 +590,7 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
         message:
             '${args.bookName}: $headwordCount headwords, $defWordCount words in definition',
         value: 1.0,
+        dictId: args.dictId,
         isCompleted: true,
         headwordCount: headwordCount,
         definitionWordCount: defWordCount,
@@ -689,6 +697,7 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
                   0.45 +
                   (headwordCount / (totalHeadwords == 0 ? 1 : totalHeadwords)) *
                       0.5,
+              dictId: args.dictId,
               headwordCount: headwordCount,
               definitionWordCount: defWordCount,
               dictionaryName: args.bookName,
@@ -712,6 +721,7 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
         message:
             '${args.bookName}: $headwordCount headwords, $defWordCount words in definition',
         value: 1.0,
+        dictId: args.dictId,
         isCompleted: true,
         headwordCount: headwordCount,
         definitionWordCount: defWordCount,
@@ -1963,6 +1973,12 @@ class DictionaryManager {
       return;
     }
 
+    // Extract folder name from path or URI
+    final String decoded = folderPath.startsWith('content://') 
+        ? Uri.decodeComponent(folderPath) 
+        : folderPath;
+    final String folderName = p.basename(decoded.replaceAll(RegExp(r'/$'), ''));
+    
     final List<String> linkedEntries = [];
     final List<String> importedEntries = [];
     final List<String> incompleteEntries = [];
@@ -2047,6 +2063,13 @@ class DictionaryManager {
         }
 
         await for (final progress in subStream) {
+          yield ImportProgress(
+            message: progress.message,
+            value: (totalTasks == 0) ? 0.0 : (currentLinked - 1 + progress.value) / totalTasks * 0.4,
+            dictId: progress.dictId,
+            groupName: folderName,
+            dictionaryName: progress.dictionaryName ?? name,
+          );
           if (progress.isCompleted) {
             if (progress.error == null) {
               final finalName = progress.dictionaryName ?? name;
@@ -2157,6 +2180,13 @@ class DictionaryManager {
             }
 
             await for (final progress in importSubStream) {
+              yield ImportProgress(
+                message: progress.message,
+                value: (totalTasks == 0) ? 1.0 : (totalLinked + currentArchive - 1 + progress.value) / totalTasks,
+                dictId: progress.dictId,
+                groupName: folderName,
+                dictionaryName: progress.dictionaryName ?? innerName,
+              );
               if (progress.isCompleted) {
                 if (progress.error == null) {
                   final finalInnerName = progress.dictionaryName ?? innerName;
