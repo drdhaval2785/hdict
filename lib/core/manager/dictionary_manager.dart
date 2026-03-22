@@ -975,6 +975,27 @@ class DictionaryManager {
   /// Per-dictionary locks to prevent concurrent file access on the same reader.
   static final Map<int, Future<void>> _readerLocks = {};
 
+  /// A global serialization lock for SAF (Storage Access Framework) operations on Android.
+  ///
+  /// The `docman` native method channel does not support concurrent calls to `documentfileaction`
+  /// — calling it from multiple isolates/futures simultaneously throws `AlreadyRunning`.
+  /// All calls to `DocumentFile.fromUri()` and `dir.listDocuments()` must be chained
+  /// through this single queue so they run one at a time.
+  static Future<void> _safLock = Future.value();
+
+  /// Runs a SAF operation serially. All calls are queued and run one after another.
+  static Future<T> _runSafAction<T>(Future<T> Function() action) async {
+    final prev = _safLock;
+    final completer = Completer<void>();
+    _safLock = completer.future;
+    try {
+      await prev;
+      return await action();
+    } finally {
+      completer.complete();
+    }
+  }
+
   /// Executes a task while ensuring only one task runs per dictionary ID.
   Future<T> _synchronized<T>(int dictId, Future<T> Function() task) async {
     final prev = _readerLocks[dictId] ?? Future.value();
@@ -1020,7 +1041,8 @@ class DictionaryManager {
         if (isSaf) {
           // sourceBookmark is typically the Tree URI for folder-added dictionaries.
           // We need to resolve the .dict URI within that tree.
-          final docFile = await DocumentFile.fromUri(rawPath);
+          // Use _runSafAction to serialize all docman calls globally.
+          final docFile = await _runSafAction(() => DocumentFile.fromUri(rawPath));
           if (docFile == null) return null;
           final baseName = p.basenameWithoutExtension(docFile.name);
           final dictUri = await _resolveSafFile(sourceBookmark, baseName, [
@@ -1054,7 +1076,7 @@ class DictionaryManager {
         }
       } else if (format == 'dictd') {
         if (isSaf) {
-          final docFile = await DocumentFile.fromUri(rawPath);
+          final docFile = await _runSafAction(() => DocumentFile.fromUri(rawPath));
           if (docFile == null) return null;
           final baseName = p.basenameWithoutExtension(docFile.name);
           final dictUri = await _resolveSafFile(sourceBookmark, baseName, ['.dict.dz', '.dict']);
@@ -2438,17 +2460,21 @@ class DictionaryManager {
   }
 
   Future<String?> _resolveSafFile(String treeUri, String baseName, List<String> extensions) async {
-    final dir = await DocumentFile.fromUri(treeUri);
-    if (dir == null) return null;
-    final entities = await dir.listDocuments();
-    final lowerBase = baseName.toLowerCase();
-    for (final ext in extensions) {
-      for (final f in entities) {
-        final n = f.name.toLowerCase();
-        if (n == '$lowerBase$ext') return f.uri;
+    // All DocumentFile operations must be serialized globally to avoid
+    // the docman "AlreadyRunning" error from concurrent channel calls.
+    return _runSafAction(() async {
+      final dir = await DocumentFile.fromUri(treeUri);
+      if (dir == null) return null;
+      final entities = await dir.listDocuments();
+      final lowerBase = baseName.toLowerCase();
+      for (final ext in extensions) {
+        for (final f in entities) {
+          final n = f.name.toLowerCase();
+          if (n == '$lowerBase$ext') return f.uri;
+        }
       }
-    }
-    return null;
+      return null;
+    });
   }
 
   Stream<ImportProgress> _linkStarDict(
