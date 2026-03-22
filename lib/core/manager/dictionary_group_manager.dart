@@ -67,7 +67,21 @@ class DictionaryGroupManager {
     final groups = await getGroups();
     int extIndex = groups.indexWhere((g) => g.id == groupId);
     if (extIndex >= 0) {
-      groups[extIndex].dictIds.remove(dictId);
+      if (groups[extIndex].dictIds.remove(dictId)) {
+        await saveGroups(groups);
+      }
+    }
+  }
+
+  static Future<void> removeDictionaryFromAllGroups(int dictId) async {
+    final groups = await getGroups();
+    bool modified = false;
+    for (var group in groups) {
+      if (group.dictIds.remove(dictId)) {
+        modified = true;
+      }
+    }
+    if (modified) {
       await saveGroups(groups);
     }
   }
@@ -89,10 +103,37 @@ class DictionaryGroupManager {
 
   static Future<void> toggleGroup(String groupId, bool enable) async {
     final groups = await getGroups();
-    final group = groups.firstWhere((g) => g.id == groupId);
+    final groupIndex = groups.indexWhere((g) => g.id == groupId);
+    if (groupIndex < 0) return;
+    final group = groups[groupIndex];
     final DictionaryManager dictManager = DictionaryManager();
-    for(int dictId in group.dictIds) {
-      await dictManager.toggleDictionaryEnabled(dictId, enable);
+    
+    if (enable) {
+      // Enabling a group enables all its members.
+      for (int dictId in group.dictIds) {
+        await dictManager.toggleDictionaryEnabled(dictId, true);
+      }
+    } else {
+      // Disabling a group disables its members ONLY IF they are not part of
+      // another group that is currently active.
+      final otherGroups = groups.where((g) => g.id != groupId).toList();
+      final List<DictionaryGroup> activeOtherGroups = [];
+      for (var og in otherGroups) {
+        if (await isGroupActive(og.id)) {
+          activeOtherGroups.add(og);
+        }
+      }
+
+      final Set<int> dictsNeededByOthers = {};
+      for (var og in activeOtherGroups) {
+        dictsNeededByOthers.addAll(og.dictIds);
+      }
+
+      for (int dictId in group.dictIds) {
+        if (!dictsNeededByOthers.contains(dictId)) {
+          await dictManager.toggleDictionaryEnabled(dictId, false);
+        }
+      }
     }
   }
   
@@ -102,11 +143,18 @@ class DictionaryGroupManager {
     if (idx < 0) return false;
     final group = groups[idx];
     if (group.dictIds.isEmpty) return false;
+    
     final DictionaryManager dictManager = DictionaryManager();
-    final activeDicts = await dictManager.getDictionaries();
-    for (int dictId in group.dictIds) {
-      final ext = activeDicts.firstWhere((d) => d['id'] == dictId, orElse: () => <String, dynamic>{});
-      if (ext.isEmpty || ext['is_enabled'] != 1) return false;
+    final allDicts = await dictManager.getDictionaries();
+    final existingDictIds = allDicts.map((d) => d['id'] as int).toSet();
+
+    // Only consider dictionaries that actually exist in the database.
+    final List<int> validDictIds = group.dictIds.where((id) => existingDictIds.contains(id)).toList();
+    if (validDictIds.isEmpty) return false;
+
+    for (int dictId in validDictIds) {
+      final ext = allDicts.firstWhere((d) => d['id'] == dictId);
+      if (ext['is_enabled'] != 1) return false;
     }
     return true;
   }

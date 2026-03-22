@@ -25,6 +25,7 @@ import 'package:docman/docman.dart';
 import 'package:hdict/core/parser/bookmark_manager.dart';
 import 'package:hdict/core/parser/random_access_source.dart';
 import 'package:hdict/core/parser/bookmark_random_access_source.dart';
+import 'package:hdict/core/manager/dictionary_group_manager.dart';
 
 // Top-level functions for compute
 List<int> _decompressGzip(List<int> bytes) {
@@ -3127,6 +3128,8 @@ class DictionaryManager {
 
     yield DeletionProgress(message: 'Removing from database...', value: 0.6);
     await _dbHelper.deleteDictionary(id);
+    // Remove from all dictionary groups
+    await DictionaryGroupManager.removeDictionaryFromAllGroups(id);
 
     yield DeletionProgress(message: 'Optimizing database...', value: 0.9);
 

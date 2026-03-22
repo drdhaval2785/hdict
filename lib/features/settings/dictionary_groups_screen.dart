@@ -214,7 +214,7 @@ class _DictionaryGroupsScreenState extends State<DictionaryGroupsScreen> {
                     
                     return ListTile(
                       title: Text(group.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text('${group.dictIds.length} dictionaries'),
+                      subtitle: Text('${group.dictIds.where((id) => _allDictionaries.any((d) => d['id'] == id)).length} dictionaries'),
                       trailing: Row(
                          mainAxisSize: MainAxisSize.min,
                          children: [
