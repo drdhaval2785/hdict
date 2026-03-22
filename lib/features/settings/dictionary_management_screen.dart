@@ -184,28 +184,46 @@ class _DictionaryManagementScreenState
         await for (final progress in stream) {
           if (cancelled) break;
           _progressNotifier.value = progress;
-          if (progress.isCompleted) {
-            if (progress.error != null) {
-              throw Exception(progress.error);
-            }
-          }
         }
 
         if (mounted) {
           Navigator.pop(context); // Close progress dialog
           final lastProgress = _progressNotifier.value;
-          final String sampleWordsText = lastProgress.sampleWords != null
-              ? '\n\nSample words: ${lastProgress.sampleWords!.join(', ')}'
-              : '';
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Dictionary downloaded and imported successfully$sampleWordsText',
+          if (lastProgress.error != null && lastProgress.error != 'ALREADY_EXISTS') {
+            throw Exception(lastProgress.error);
+          }
+
+          if (lastProgress.alreadyExistsEntries != null &&
+              lastProgress.alreadyExistsEntries!.isNotEmpty) {
+            _showImportReport(lastProgress, title: 'Download Result');
+          } else if (lastProgress.error == 'ALREADY_EXISTS') {
+            final name = lastProgress.dictionaryName ?? 
+                        (lastProgress.message.contains(':') ? lastProgress.message.split(':').last.trim() : lastProgress.message);
+            _showImportReport(
+              ImportProgress(
+                message: lastProgress.message,
+                value: 1.0,
+                isCompleted: true,
+                alreadyExistsEntries: [name],
               ),
-              duration: const Duration(seconds: 5),
-            ),
-          );
+              title: 'Download Result',
+            );
+          } else {
+            final String sampleWordsText =
+                lastProgress.sampleWords != null
+                    ? '\n\nSample words: ${lastProgress.sampleWords!.join(', ')}'
+                    : '';
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Dictionary downloaded and imported successfully$sampleWordsText',
+                ),
+                duration: const Duration(seconds: 5),
+              ),
+            );
+          }
           await _loadDictionaries();
         }
       } catch (e) {
@@ -268,6 +286,9 @@ class _DictionaryManagementScreenState
 
       int successCount = 0;
       int failureCount = 0;
+      final List<String> allAlreadyExists = [];
+      final List<String> allIncomplete = [];
+      final List<String> allImported = [];
 
       for (int i = 0; i < urls.length; i++) {
         if (cancelled) break;
@@ -281,61 +302,79 @@ class _DictionaryManagementScreenState
           await for (final progress in stream) {
             if (cancelled) break;
             _progressNotifier.value = ImportProgress(
-               message: urls.length > 1 ? '(${i + 1}/${urls.length}) ${progress.message}' : progress.message,
-               value: progress.value,
-               isCompleted: progress.isCompleted,
-               error: progress.error,
-               sampleWords: progress.sampleWords,
-               incompleteEntries: progress.incompleteEntries,
+              message:
+                  urls.length > 1
+                      ? '(${i + 1}/${urls.length}) ${progress.message}'
+                      : progress.message,
+              value: progress.value,
+              isCompleted: progress.isCompleted,
+              error: progress.error,
+              sampleWords: progress.sampleWords,
+              incompleteEntries: progress.incompleteEntries,
+              alreadyExistsEntries: progress.alreadyExistsEntries,
             );
             if (progress.dictId != null && groupName != null) {
-               await DictionaryGroupManager.addDictionaryToGroup(groupName, progress.dictId!);
+              await DictionaryGroupManager.addDictionaryToGroup(
+                groupName,
+                progress.dictId!,
+              );
             }
             if (progress.isCompleted) {
-              if (progress.error != null) {
+              if (progress.error != null && progress.error != 'ALREADY_EXISTS') {
                 throw Exception(progress.error);
+              }
+              if (progress.alreadyExistsEntries != null) {
+                allAlreadyExists.addAll(progress.alreadyExistsEntries!);
+              } else if (progress.error == 'ALREADY_EXISTS') {
+                allAlreadyExists.add(progress.dictionaryName ?? url);
+              } else if (progress.error == null) {
+                allImported.add(progress.dictionaryName ?? url);
+                successCount++;
               }
             }
           }
-          successCount++;
         } catch (e) {
           failureCount++;
-          if (mounted) {
-            final String errorStr = e.toString();
-            String message;
-            if (errorStr.contains('ALREADY_EXISTS:')) {
-              message = errorStr.split('ALREADY_EXISTS:').last.trim();
-            } else if (errorStr.contains('already in your library')) {
-              message = errorStr.replaceAll('Exception: ', '').trim();
-            } else {
-              message = 'Download/Import failed: $e';
-            }
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text('Failed (${i + 1}/${urls.length}): $message')));
-          }
+          allIncomplete.add('(${i + 1}/${urls.length}) $e');
         }
       }
 
       if (mounted) {
         Navigator.pop(context); // Close progress dialog
-        
-        String msg;
-        if (urls.length == 1) {
-           msg = successCount == 1 ? 'Dictionary downloaded and imported successfully' : 'Failed to import dictionary';
-        } else {
-           msg = '$successCount successfully imported.';
-           if (failureCount > 0) {
-             msg += ' $failureCount failed.';
-           }
-        }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(msg),
-            duration: const Duration(seconds: 5),
-          ),
-        );
+        if (allAlreadyExists.isNotEmpty || allIncomplete.isNotEmpty) {
+          _showImportReport(
+            ImportProgress(
+              message: 'Bulk download complete',
+              value: 1.0,
+              isCompleted: true,
+              alreadyExistsEntries: allAlreadyExists,
+              incompleteEntries: allIncomplete,
+              importedEntries: allImported,
+            ),
+            title: 'Bulk Download Result',
+          );
+        } else {
+          String msg;
+          if (urls.length == 1) {
+            msg =
+                successCount == 1
+                    ? 'Dictionary downloaded and imported successfully'
+                    : 'Failed to import dictionary';
+          } else {
+            msg = '$successCount successfully imported.';
+            if (failureCount > 0) {
+              msg += ' $failureCount failed.';
+            }
+          }
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(msg),
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
         await _loadDictionaries();
       }
     }

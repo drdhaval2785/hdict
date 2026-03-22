@@ -2418,7 +2418,7 @@ class DictionaryManager {
       final existing = await _dbHelper.getDictionaryByChecksum(checksum);
       if (existing != null) {
         yield ImportProgress(
-          message: 'StarDict dictionary "${existing['name']}" is already in your library.',
+          message: 'Already Exists: ${existing['name']}',
           value: 1.0,
           error: 'ALREADY_EXISTS',
           isCompleted: true,
@@ -2492,7 +2492,7 @@ class DictionaryManager {
       if (existing != null) {
         await reader.close();
         yield ImportProgress(
-          message: 'MDict dictionary "${existing['name']}" is already in your library.',
+          message: 'Already Exists: ${existing['name']}',
           value: 1.0,
           error: 'ALREADY_EXISTS',
           isCompleted: true,
@@ -2623,7 +2623,7 @@ class DictionaryManager {
       final existing = await _dbHelper.getDictionaryByChecksum(checksum);
       if (existing != null) {
         yield ImportProgress(
-          message: 'DICTD dictionary "${existing['name']}" is already in your library.',
+          message: 'Already Exists: ${existing['name']}',
           value: 1.0,
           error: 'ALREADY_EXISTS',
           isCompleted: true,
@@ -2851,8 +2851,7 @@ class DictionaryManager {
       final existing = await _dbHelper.getDictionaryByChecksum(checksum);
       if (existing != null) {
         yield ImportProgress(
-          message:
-              'Dictionary "${existing['name']}" is already in your library.',
+          message: 'Already Exists: ${existing['name']}',
           value: 1.0,
           error: 'ALREADY_EXISTS',
           isCompleted: true,
@@ -3372,8 +3371,7 @@ class DictionaryManager {
       if (existing != null) {
         await reader.close();
         yield ImportProgress(
-          message:
-              'MDict dictionary "${existing['name']}" is already in your library.',
+          message: 'Already Exists: ${existing['name']}',
           value: 1.0,
           error: 'ALREADY_EXISTS',
           isCompleted: true,
@@ -3509,8 +3507,7 @@ class DictionaryManager {
       final existing = await _dbHelper.getDictionaryByChecksum(checksum);
       if (existing != null) {
         yield ImportProgress(
-          message:
-              'DICTD dictionary "${existing['name']}" is already in your library.',
+          message: 'Already Exists: ${existing['name']}',
           value: 1.0,
           error: 'ALREADY_EXISTS',
           isCompleted: true,
@@ -3638,8 +3635,7 @@ class DictionaryManager {
       if (existing != null) {
         await reader.close();
         yield ImportProgress(
-          message:
-              'Slob dictionary "${existing['name']}" is already in your library.',
+          message: 'Already Exists: ${existing['name']}',
           value: 1.0,
           error: 'ALREADY_EXISTS',
           isCompleted: true,
@@ -4131,6 +4127,66 @@ class DictionaryManager {
     return 'downloaded_dict.zip';
   }
 
+  /// Extracts an MD5 checksum from HTTP headers.
+  /// Supports: x-checksum-md5, content-md5 (base64), etag, x-amz-meta-md5.
+  String? _getChecksumFromHeaders(Map<String, String> headers) {
+    // 1. Direct hex MD5 headers
+    final directMd5 = headers['x-checksum-md5'] ?? 
+                      headers['x-amz-meta-md5'] ?? 
+                      headers['x-md5-checksum'];
+    if (directMd5 != null && directMd5.length == 32) {
+      return directMd5.toLowerCase();
+    }
+
+    // 2. Content-MD5 (Standard, Base64 encoded)
+    final contentMd5 = headers['content-md5'];
+    if (contentMd5 != null) {
+      try {
+        final bytes = base64.decode(contentMd5);
+        return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join().toLowerCase();
+      } catch (_) {}
+    }
+
+    // 3. ETag (Often MD5, might be quoted or have W/ prefix)
+    final etag = headers['etag'];
+    if (etag != null) {
+      String cleanEtag = etag.replaceAll('"', '');
+      if (cleanEtag.startsWith('W/')) cleanEtag = cleanEtag.substring(2);
+      if (cleanEtag.length == 32 && RegExp(r'^[a-fA-F0-9]{32}$').hasMatch(cleanEtag)) {
+        return cleanEtag.toLowerCase();
+      }
+    }
+
+    // 4. Digest header (RFC 3230) - e.g. "md5=..."
+    final digest = headers['digest'];
+    if (digest != null) {
+      final md5Match = RegExp(r'md5=([a-fA-F0-9]{32})', caseSensitive: false).firstMatch(digest);
+      if (md5Match != null) return md5Match.group(1)!.toLowerCase();
+      
+      final base64Match = RegExp(r'md5=([a-zA-Z0-9+/=]+)', caseSensitive: false).firstMatch(digest);
+      if (base64Match != null) {
+        try {
+          final bytes = base64.decode(base64Match.group(1)!);
+          return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join().toLowerCase();
+        } catch (_) {}
+      }
+    }
+
+    // 5. x-goog-hash (Google Cloud Storage) - e.g. "crc32c=XXXX,md5=YYYY=="
+    final googHash = headers['x-goog-hash'];
+    if (googHash != null) {
+      final md5Match = RegExp(r'md5=([a-zA-Z0-9+/=]+)', caseSensitive: false).firstMatch(googHash);
+      if (md5Match != null) {
+        try {
+          final bytes = base64.decode(md5Match.group(1)!);
+          return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join().toLowerCase();
+        } catch (_) {}
+      }
+    }
+
+    return null;
+  }
+
   bool _isRecognizedExtension(String name) {
     final lower = name.toLowerCase();
     final recognized = [
@@ -4174,6 +4230,22 @@ class DictionaryManager {
       try {
         final response = await http.get(Uri.parse(effectiveUrl));
         if (response.statusCode == 200) {
+          yield ImportProgress(message: 'Checking checksum of the dictionary...', value: 0.0);
+          final headerChecksum = _getChecksumFromHeaders(response.headers);
+          if (headerChecksum != null) {
+            final existing = await _dbHelper.getDictionaryByChecksum(headerChecksum);
+            if (existing != null) {
+              yield ImportProgress(
+                message: 'Already Exists: ${existing['name']}',
+                value: 1.0,
+                isCompleted: true,
+                alreadyExistsEntries: [existing['name']],
+                dictionaryName: existing['name'],
+              );
+              return;
+            }
+          }
+
           String fileName = _resolveDownloadFilename(
             effectiveUrl,
             response.headers,
@@ -4213,6 +4285,22 @@ class DictionaryManager {
 
       if (response.statusCode != 200) {
         throw Exception('Failed to download: HTTP ${response.statusCode}');
+      }
+
+      yield ImportProgress(message: 'Checking checksum of the dictionary...', value: 0.0);
+      final headerChecksum = _getChecksumFromHeaders(response.headers);
+      if (headerChecksum != null) {
+        final existing = await _dbHelper.getDictionaryByChecksum(headerChecksum);
+        if (existing != null) {
+          yield ImportProgress(
+            message: 'Already Exists: ${existing['name']}',
+            value: 1.0,
+            isCompleted: true,
+            alreadyExistsEntries: [existing['name']],
+            dictionaryName: existing['name'],
+          );
+          return;
+        }
       }
 
       String fileName = _resolveDownloadFilename(
