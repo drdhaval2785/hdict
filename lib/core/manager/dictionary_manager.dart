@@ -2413,6 +2413,7 @@ class DictionaryManager {
           '.syn.bz2',
           '.syn.xz',
         ]);
+      }
       final checksum = await _calculateChecksum(ifoPath);
       final existing = await _dbHelper.getDictionaryByChecksum(checksum);
       if (existing != null) {
