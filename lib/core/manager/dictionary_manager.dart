@@ -25,6 +25,7 @@ import 'package:docman/docman.dart';
 import 'package:hdict/core/parser/bookmark_manager.dart';
 import 'package:hdict/core/parser/random_access_source.dart';
 import 'package:hdict/core/parser/bookmark_random_access_source.dart';
+import 'package:hdict/core/parser/saf_random_access_source.dart';
 import 'package:hdict/core/manager/dictionary_group_manager.dart';
 
 // Top-level functions for compute
@@ -141,8 +142,15 @@ class _IndexArgs {
     this.sourceType,
     this.sourceBookmark,
     this.sendPort,
-    this.rootIsolateToken,
-  );
+    this.rootIsolateToken, {
+    this.idxUri,
+    this.dictUri,
+    this.synUri,
+  });
+
+  final String? idxUri;
+  final String? dictUri;
+  final String? synUri;
 }
 
 class _IndexMdictArgs {
@@ -164,7 +172,12 @@ class _IndexMdictArgs {
     this.sourceBookmark,
     required this.sendPort,
     required this.rootIsolateToken,
+    this.mdxUri,
+    this.mddUri,
   });
+
+  final String? mdxUri;
+  final String? mddUri;
 }
 
 class _IndexSlobArgs {
@@ -210,7 +223,12 @@ class _IndexDictdArgs {
     this.sourceBookmark,
     required this.sendPort,
     required this.rootIsolateToken,
+    this.indexUri,
+    this.dictUri,
   });
+
+  final String? indexUri;
+  final String? dictUri;
 }
 
 // Top-level function for indexing isolate
@@ -228,14 +246,18 @@ Future<void> _indexEntry(_IndexArgs args) async {
     
     // 1. IDX Parser
     final idxParser = IdxParser(args.ifoParser);
-    final idxSource = isLinked
-        ? BookmarkRandomAccessSource(args.sourceBookmark!, targetPath: p.basename(args.idxPath))
-        : FileRandomAccessSource(args.idxPath);
+    final idxSource = (isLinked && Platform.isAndroid && args.idxUri != null)
+        ? SafRandomAccessSource(args.idxUri!)
+        : isLinked
+            ? BookmarkRandomAccessSource(args.sourceBookmark!, targetPath: p.basename(args.idxPath))
+            : FileRandomAccessSource(args.idxPath);
     
     // 2. Dict Reader
-    final dictReader = isLinked
-        ? await DictReader.fromLinkedSource(args.sourceBookmark!, targetPath: p.basename(args.dictPath), actualPath: args.dictPath)
-        : await DictReader.fromPath(args.dictPath);
+    final dictReader = (isLinked && Platform.isAndroid && args.dictUri != null)
+        ? await DictReader.fromUri(args.dictUri!)
+        : (isLinked
+            ? await DictReader.fromLinkedSource(args.sourceBookmark!, targetPath: p.basename(args.dictPath), actualPath: args.dictPath)
+            : await DictReader.fromPath(args.dictPath));
     await dictReader.open();
 
     List<({int offset, int length, String content})> wordOffsets = [];
@@ -321,9 +343,11 @@ Future<void> _indexEntry(_IndexArgs args) async {
 
     if (args.synPath != null) {
       final synParser = SynParser();
-      final synSource = isLinked
-          ? BookmarkRandomAccessSource(args.sourceBookmark!, targetPath: p.basename(args.synPath!))
-          : FileRandomAccessSource(args.synPath!);
+      final synSource = (isLinked && Platform.isAndroid && args.synUri != null)
+          ? SafRandomAccessSource(args.synUri!)
+          : (isLinked
+              ? BookmarkRandomAccessSource(args.sourceBookmark!, targetPath: p.basename(args.synPath!))
+              : FileRandomAccessSource(args.synPath!));
       
       List<Map<String, dynamic>> synBatch = [];
       try {
@@ -405,9 +429,11 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
   final sendPort = args.sendPort;
 
   try {
-    final reader = args.sourceType == 'linked' && args.sourceBookmark != null
-        ? await MdictReader.fromLinkedSource(args.sourceBookmark!, actualPath: args.mdxPath)
-        : await MdictReader.fromPath(args.mdxPath);
+    final reader = (args.sourceType == 'linked' && Platform.isAndroid && args.mdxUri != null)
+        ? await MdictReader.fromUri(args.mdxUri!)
+        : (args.sourceType == 'linked' && args.sourceBookmark != null
+            ? await MdictReader.fromLinkedSource(args.sourceBookmark!, actualPath: args.mdxPath)
+            : await MdictReader.fromPath(args.mdxPath));
     await reader.open();
 
     // Fetch all keys via prefix search with empty prefix
@@ -498,9 +524,11 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
   final sendPort = args.sendPort;
 
   try {
-    final reader = args.sourceType == 'linked' && args.sourceBookmark != null
-        ? await SlobReader.fromLinkedSource(args.sourceBookmark!, actualPath: args.slobPath)
-        : await SlobReader.fromPath(args.slobPath);
+    final reader = (args.sourceType == 'linked' && Platform.isAndroid && args.slobPath.startsWith('content://'))
+        ? await SlobReader.fromUri(args.slobPath)
+        : (args.sourceType == 'linked' && args.sourceBookmark != null
+            ? await SlobReader.fromLinkedSource(args.sourceBookmark!, actualPath: args.slobPath)
+            : await SlobReader.fromPath(args.slobPath));
     await reader.open();
 
     int headwordCount = 0;
@@ -624,14 +652,18 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
     final dictdParser = DictdParser();
 
     // 1. Index Source
-    final indexSource = isLinked
-        ? BookmarkRandomAccessSource(args.sourceBookmark!, targetPath: p.basename(args.indexPath))
-        : FileRandomAccessSource(args.indexPath);
+    final indexSource = (isLinked && Platform.isAndroid && args.indexUri != null)
+        ? SafRandomAccessSource(args.indexUri!)
+        : isLinked
+            ? BookmarkRandomAccessSource(args.sourceBookmark!, targetPath: p.basename(args.indexPath))
+            : FileRandomAccessSource(args.indexPath);
 
     // 2. Dict Reader
-    final dictdReader = isLinked
-        ? await DictdReader.fromLinkedSource(args.sourceBookmark!, targetPath: p.basename(args.dictPath), actualPath: args.dictPath)
-        : await DictdReader.fromPath(args.dictPath);
+    final dictdReader = (isLinked && Platform.isAndroid && args.dictUri != null)
+        ? await DictdReader.fromUri(args.dictUri!)
+        : (isLinked
+            ? await DictdReader.fromLinkedSource(args.sourceBookmark!, targetPath: p.basename(args.dictPath), actualPath: args.dictPath)
+            : await DictdReader.fromPath(args.dictPath));
     await dictdReader.open();
 
     final List<Map<String, dynamic>> entriesList = [];
@@ -931,28 +963,44 @@ class DictionaryManager {
 
     dynamic reader;
     if (sourceType == 'linked' && sourceBookmark != null) {
+      final isSaf = Platform.isAndroid && sourceBookmark.startsWith('content://');
       if (format == 'mdict') {
         reader = await MdictReader.fromLinkedSource(sourceBookmark, actualPath: rawPath);
       } else if (format == 'slob') {
         reader = await SlobReader.fromLinkedSource(sourceBookmark, actualPath: rawPath);
       } else if (format == 'stardict') {
-        final String dictPath = await _dbHelper.resolvePath(rawPath);
-        final basePath = p.withoutExtension(dictPath);
-        final actualDictPath = _resolveLocalFile(basePath, [
-          '.dict',
-          '.dict.dz',
-          '.dict.gz',
-          '.dict.bz2',
-          '.dict.xz',
-        ]);
-        if (actualDictPath == null) return null;
-        reader = await DictReader.fromLinkedSource(sourceBookmark, targetPath: p.basename(actualDictPath), actualPath: actualDictPath);
+        if (isSaf) {
+          // For SAF, sourceBookmark is the IFO URI. We use it directly.
+          reader = await DictReader.fromLinkedSource(sourceBookmark, actualPath: rawPath);
+        } else {
+          final String dictPath = await _dbHelper.resolvePath(rawPath);
+          final basePath = p.withoutExtension(dictPath);
+          final actualDictPath = _resolveLocalFile(basePath, [
+            '.dict',
+            '.dict.dz',
+            '.dict.gz',
+            '.dict.bz2',
+            '.dict.xz',
+          ]);
+          if (actualDictPath == null) return null;
+          reader = await DictReader.fromLinkedSource(sourceBookmark, targetPath: p.basename(actualDictPath), actualPath: actualDictPath);
+        }
       } else if (format == 'dictd') {
-        final String indexPath = await _dbHelper.resolvePath(rawPath);
-        final basePath = p.withoutExtension(indexPath);
-        final actualDictPath = _resolveLocalFile(basePath, ['.dict.dz', '.dict']);
-        if (actualDictPath == null) return null;
-        reader = await DictdReader.fromLinkedSource(sourceBookmark, targetPath: p.basename(actualDictPath), actualPath: actualDictPath);
+        if (isSaf) {
+          // For SAF, sourceBookmark is the index URI (on Android). 
+          // We need the .dict URI.
+          final String dictUri = sourceBookmark.replaceFirst(
+            RegExp(r'\.index$'),
+            '.dict.dz',
+          );
+          reader = await DictdReader.fromLinkedSource(dictUri, actualPath: rawPath);
+        } else {
+          final String indexPath = await _dbHelper.resolvePath(rawPath);
+          final basePath = p.withoutExtension(indexPath);
+          final actualDictPath = _resolveLocalFile(basePath, ['.dict.dz', '.dict']);
+          if (actualDictPath == null) return null;
+          reader = await DictdReader.fromLinkedSource(sourceBookmark, targetPath: p.basename(actualDictPath), actualPath: actualDictPath);
+        }
       }
     } else {
       final String dictPath = await _dbHelper.resolvePath(rawPath);
@@ -2045,21 +2093,34 @@ class DictionaryManager {
         Stream<ImportProgress> subStream;
         switch (item.format) {
           case 'mdict':
-            subStream = _linkMdict(item.path, indexDefinitions: indexDefinitions);
+            subStream = _linkMdict(
+              item.path,
+              indexDefinitions: indexDefinitions,
+              safUris: item.safUris,
+            );
             break;
           case 'slob':
-            subStream = _linkSlob(item.path, indexDefinitions: indexDefinitions);
+            subStream = _linkSlob(
+              item.path,
+              indexDefinitions: indexDefinitions,
+              safUris: item.safUris,
+            );
             break;
           case 'dictd':
             subStream = _linkDictd(
               item.path,
               item.companionPath!,
               indexDefinitions: indexDefinitions,
+              safUris: item.safUris,
             );
             break;
           case 'stardict':
           default:
-            subStream = _linkStarDict(item.path, indexDefinitions: indexDefinitions);
+            subStream = _linkStarDict(
+              item.path,
+              indexDefinitions: indexDefinitions,
+              safUris: item.safUris,
+            );
             break;
         }
 
@@ -2252,11 +2313,17 @@ class DictionaryManager {
   Stream<ImportProgress> _linkStarDict(
     String ifoPath, {
     bool indexDefinitions = false,
+    Map<String, String>? safUris,
   }) async* {
     yield ImportProgress(message: 'Linking StarDict...', value: 0.1);
     try {
       final ifoParser = IfoParser();
-      final ifoSource = FileRandomAccessSource(ifoPath);
+      final isSaf = Platform.isAndroid && ifoPath.startsWith('content://');
+
+      final ifoSource = isSaf
+          ? SafRandomAccessSource(ifoPath)
+          : FileRandomAccessSource(ifoPath);
+      
       try {
         await ifoParser.parseSource(ifoSource);
       } finally {
@@ -2265,32 +2332,45 @@ class DictionaryManager {
       final bookName = ifoParser.bookName ?? p.basenameWithoutExtension(ifoPath);
 
       // Create bookmark for the parent folder to allow access to all sibling files (.idx, .dict, etc.)
-      final String folderPath = p.dirname(ifoPath);
+      final String folderPath = isSaf && safUris != null 
+          ? ifoPath // It's already anchored in its folder
+          : p.dirname(ifoPath);
+          
       final String? bookmark = await BookmarkManager.createBookmark(folderPath);
       if (bookmark == null) throw Exception('Failed to create bookmark');
 
-      final basePath = p.withoutExtension(ifoPath);
-      final idxPath = _resolveLocalFile(basePath, [
-        '.idx',
-        '.idx.gz',
-        '.idx.dz',
-        '.idx.bz2',
-        '.idx.xz',
-      ])!;
-      final dictPath = _resolveLocalFile(basePath, [
-        '.dict',
-        '.dict.dz',
-        '.dict.gz',
-        '.dict.bz2',
-        '.dict.xz',
-      ])!;
-      final synPath = _resolveLocalFile(basePath, [
-        '.syn',
-        '.syn.gz',
-        '.syn.dz',
-        '.syn.bz2',
-        '.syn.xz',
-      ]);
+      final String idxPath;
+      final String dictPath;
+      final String? synPath;
+      
+      if (isSaf && safUris != null) {
+        idxPath = safUris['idx']!;
+        dictPath = safUris['dict']!;
+        synPath = safUris['syn'];
+      } else {
+        final basePath = p.withoutExtension(ifoPath);
+        idxPath = _resolveLocalFile(basePath, [
+          '.idx',
+          '.idx.gz',
+          '.idx.dz',
+          '.idx.bz2',
+          '.idx.xz',
+        ])!;
+        dictPath = _resolveLocalFile(basePath, [
+          '.dict',
+          '.dict.dz',
+          '.dict.gz',
+          '.dict.bz2',
+          '.dict.xz',
+        ])!;
+        synPath = _resolveLocalFile(basePath, [
+          '.syn',
+          '.syn.gz',
+          '.syn.dz',
+          '.syn.bz2',
+          '.syn.xz',
+        ]);
+      }
 
       final dictId = await _dbHelper.insertDictionary(
         bookName,
@@ -2314,6 +2394,9 @@ class DictionaryManager {
           bookmark,
           receivePort.sendPort,
           RootIsolateToken.instance!,
+          idxUri: isSaf ? idxPath : null,
+          dictUri: isSaf ? dictPath : null,
+          synUri: isSaf ? synPath : null,
         ),
       );
 
@@ -2334,13 +2417,17 @@ class DictionaryManager {
   Stream<ImportProgress> _linkMdict(
     String mdxPath, {
     bool indexDefinitions = false,
+    Map<String, String>? safUris,
   }) async* {
     yield ImportProgress(message: 'Linking MDict...', value: 0.1);
     try {
+      final isSaf = Platform.isAndroid && mdxPath.startsWith('content://');
       final String? bookmark = await BookmarkManager.createBookmark(mdxPath);
       if (bookmark == null) throw Exception('Failed to create bookmark');
 
-      final reader = await MdictReader.fromLinkedSource(bookmark, actualPath: mdxPath);
+      final reader = isSaf 
+          ? await MdictReader.fromUri(mdxPath)
+          : await MdictReader.fromLinkedSource(bookmark, actualPath: mdxPath);
       await reader.open();
       // MDict book name usually comes from the header or filename
       final bookName = p.basenameWithoutExtension(mdxPath);
@@ -2365,6 +2452,8 @@ class DictionaryManager {
           sourceBookmark: bookmark,
           sendPort: receivePort.sendPort,
           rootIsolateToken: RootIsolateToken.instance!,
+          mdxUri: isSaf ? mdxPath : null,
+          mddUri: (isSaf && safUris != null) ? safUris['mdd'] : null,
         ),
       );
 
@@ -2386,6 +2475,7 @@ class DictionaryManager {
   Stream<ImportProgress> _linkSlob(
     String slobPath, {
     bool indexDefinitions = false,
+    Map<String, String>? safUris,
   }) async* {
     yield ImportProgress(message: 'Linking Slob...', value: 0.1);
     try {
@@ -2434,12 +2524,15 @@ class DictionaryManager {
     String indexPath,
     String dictPath, {
     bool indexDefinitions = false,
+    Map<String, String>? safUris,
   }) async* {
     yield ImportProgress(message: 'Linking DICTD...', value: 0.1);
     try {
+      final isSaf = Platform.isAndroid && indexPath.startsWith('content://');
+
       // For DICTD, we link based on the index file, but we need both.
       // Create bookmark for the parent folder to allow access to all sibling files (.index, .dict, etc.)
-      final String folderPath = p.dirname(indexPath);
+      final String folderPath = isSaf ? indexPath : p.dirname(indexPath);
       final String? bookmark = await BookmarkManager.createBookmark(folderPath);
       if (bookmark == null) throw Exception('Failed to create bookmark');
 
@@ -2465,6 +2558,8 @@ class DictionaryManager {
           sourceBookmark: bookmark,
           sendPort: receivePort.sendPort,
           rootIsolateToken: RootIsolateToken.instance!,
+          indexUri: isSaf ? indexPath : null,
+          dictUri: isSaf ? dictPath : null,
         ),
       );
 
@@ -3774,6 +3869,7 @@ class DictionaryManager {
 
       switch (format) {
         case 'mdict':
+          final isSafMdict = Platform.isAndroid && dictPath.startsWith('content://');
           await Isolate.spawn(
             _indexMdictEntry,
             _IndexMdictArgs(
@@ -3781,8 +3877,12 @@ class DictionaryManager {
               mdxPath: dictPath,
               indexDefinitions: indexDefinitions,
               bookName: bookName,
+              sourceType: isSafMdict ? 'linked' : null,
+              sourceBookmark: isSafMdict ? dictPath : null,
               sendPort: receivePort.sendPort,
               rootIsolateToken: rootIsolateToken,
+              mdxUri: isSafMdict ? dictPath : null,
+              mddUri: isSafMdict ? dictPath.replaceAll('.mdx', '.mdd') : null,
             ),
           );
           break;
@@ -3795,6 +3895,8 @@ class DictionaryManager {
               slobPath: dictPath,
               indexDefinitions: indexDefinitions,
               bookName: bookName,
+              sourceType: (Platform.isAndroid && dictPath.startsWith('content://')) ? 'linked' : null,
+              sourceBookmark: (Platform.isAndroid && dictPath.startsWith('content://')) ? dictPath : null,
               sendPort: receivePort.sendPort,
               rootIsolateToken: rootIsolateToken,
             ),
@@ -3802,12 +3904,13 @@ class DictionaryManager {
           break;
 
         case 'dictd':
+          final isSafDictd = Platform.isAndroid && dictPath.startsWith('content://');
           // For DICTD, we need the .index file. It should be in the same folder.
           final indexPath = dictPath.replaceFirst(
             RegExp(r'\.dict(\.dz)?$'),
             '.index',
           );
-          if (!File(indexPath).existsSync()) {
+          if (!isSafDictd && !File(indexPath).existsSync()) {
             throw Exception('DICTD .index file not found at $indexPath');
           }
           await Isolate.spawn(
@@ -3818,14 +3921,20 @@ class DictionaryManager {
               dictPath: dictPath,
               indexDefinitions: indexDefinitions,
               bookName: bookName,
+              sourceType: isSafDictd ? 'linked' : null,
+              sourceBookmark: isSafDictd ? indexPath : null,
               sendPort: receivePort.sendPort,
               rootIsolateToken: rootIsolateToken,
+              indexUri: isSafDictd ? indexPath : null,
+              dictUri: isSafDictd ? dictPath : null,
             ),
           );
           break;
 
         case 'stardict':
         default:
+          final isSaf = Platform.isAndroid && dictPath.startsWith('content://');
+
           // If the stored path is .dict.dz, strip the .dz before deriving sibling paths.
           final String dictBasePath = dictPath.endsWith('.dz')
               ? dictPath.substring(
@@ -3839,16 +3948,34 @@ class DictionaryManager {
             '.dict',
             '.syn',
           );
-          final String? synPath = File(synPathCandidate).existsSync()
-              ? synPathCandidate
-              : null;
+          String? synPath;
+          if (isSaf) {
+            // Check if .syn exists via docman
+            final synDoc = await DocumentFile.fromUri(synPathCandidate);
+            if (synDoc != null) synPath = synPathCandidate;
+          } else {
+            if (File(synPathCandidate).existsSync()) synPath = synPathCandidate;
+          }
 
           final ifoParser = IfoParser();
           await ifoParser.parse(ifoPath);
 
           await Isolate.spawn(
             _indexEntry,
-            _IndexArgs(dictId, idxPath, dictPath, synPath, indexDefinitions, ifoParser, 'managed', null, receivePort.sendPort, rootIsolateToken,
+            _IndexArgs(
+              dictId,
+              idxPath,
+              dictPath,
+              synPath,
+              indexDefinitions,
+              ifoParser,
+              'managed',
+              null,
+              receivePort.sendPort,
+              rootIsolateToken,
+              idxUri: isSaf ? idxPath : null,
+              dictUri: isSaf ? dictPath : null,
+              synUri: isSaf ? synPath : null,
             ),
           );
           break;

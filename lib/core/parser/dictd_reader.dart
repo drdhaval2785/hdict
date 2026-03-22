@@ -34,7 +34,15 @@ class DictdReader {
     final String path = actualPath ?? targetPath ?? source;
     final reader = DictdReader(path);
     if (!kIsWeb && Platform.isAndroid) {
-      await reader.openSource(SafRandomAccessSource(source));
+      if (source.startsWith('content://')) {
+        // If 'source' is already a content URI, use it directly.
+        // This is used when we pass individual file URIs.
+        await reader.openSource(SafRandomAccessSource(source));
+      } else {
+        // Fallback or folder-based resolve logic if needed
+        final String fullPath = targetPath != null ? join(source, targetPath) : source;
+        await reader.openSource(SafRandomAccessSource(fullPath));
+      }
     } else if (!kIsWeb && (Platform.isIOS || Platform.isMacOS)) {
       await reader.openSource(BookmarkRandomAccessSource(source, targetPath: targetPath));
     } else {

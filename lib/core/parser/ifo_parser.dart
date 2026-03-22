@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:hdict/core/parser/random_access_source.dart';
+import 'package:hdict/core/parser/saf_random_access_source.dart';
 
 /// A parser for StarDict .ifo files (metadata/information).
 class IfoParser {
@@ -12,7 +14,9 @@ class IfoParser {
     }
     // We maintain this for backward compatibility and local files.
     // In linked files, DictionaryManager should use parseSource.
-    final source = FileRandomAccessSource(path);
+    final source = (Platform.isAndroid && path.startsWith('content://'))
+        ? SafRandomAccessSource(path)
+        : FileRandomAccessSource(path);
     try {
       await parseSource(source);
     } finally {
