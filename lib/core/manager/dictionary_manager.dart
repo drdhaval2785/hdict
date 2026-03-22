@@ -88,6 +88,42 @@ class ImportProgress {
     this.alreadyExistsEntries,
     this.groupName,
   });
+
+  ImportProgress copyWith({
+    String? message,
+    double? value,
+    bool? isCompleted,
+    int? dictId,
+    String? error,
+    String? ifoPath,
+    List<String>? sampleWords,
+    int? headwordCount,
+    int? definitionWordCount,
+    String? dictionaryName,
+    List<String>? incompleteEntries,
+    List<String>? linkedEntries,
+    List<String>? importedEntries,
+    List<String>? alreadyExistsEntries,
+    String? groupName,
+  }) {
+    return ImportProgress(
+      message: message ?? this.message,
+      value: value ?? this.value,
+      isCompleted: isCompleted ?? this.isCompleted,
+      dictId: dictId ?? this.dictId,
+      error: error ?? this.error,
+      ifoPath: ifoPath ?? this.ifoPath,
+      sampleWords: sampleWords ?? this.sampleWords,
+      headwordCount: headwordCount ?? this.headwordCount,
+      definitionWordCount: definitionWordCount ?? this.definitionWordCount,
+      dictionaryName: dictionaryName ?? this.dictionaryName,
+      incompleteEntries: incompleteEntries ?? this.incompleteEntries,
+      linkedEntries: linkedEntries ?? this.linkedEntries,
+      importedEntries: importedEntries ?? this.importedEntries,
+      alreadyExistsEntries: alreadyExistsEntries ?? this.alreadyExistsEntries,
+      groupName: groupName ?? this.groupName,
+    );
+  }
 }
 
 class DeletionProgress {
@@ -1219,7 +1255,7 @@ class DictionaryManager {
 
       await for (final message in receivePort) {
         if (message is ImportProgress) {
-          yield message;
+          yield message.copyWith(isCompleted: false);
 
           if (message.isCompleted) {
             if (message.error != null) {
@@ -1304,7 +1340,7 @@ class DictionaryManager {
                     : progress.message,
             value: 0.5 + ((current - 1) + progress.value) / total * 0.5,
             headwordCount: progress.headwordCount,
-            isCompleted: progress.isCompleted && current == total,
+            isCompleted: false, // Only the final yield of importDictionaryStream should be isCompleted: true
             dictId: progress.dictId,
             sampleWords: progress.sampleWords,
             error: progress.error,
@@ -1536,7 +1572,7 @@ class DictionaryManager {
             value:
                 0.45 + ((currentDict - 1) + progress.value) / totalDicts * 0.55,
             headwordCount: progress.headwordCount,
-            isCompleted: progress.isCompleted && currentDict == totalDicts,
+            isCompleted: false, // Only the final yield of importMultipleFilesStream should be isCompleted: true
             dictId: progress.dictId,
             sampleWords: progress.sampleWords,
             error: progress.error,
@@ -1717,7 +1753,7 @@ class DictionaryManager {
             value:
                 0.2 + ((currentDict - 1) + progress.value) / totalDicts * 0.8,
             headwordCount: progress.headwordCount,
-            isCompleted: progress.isCompleted && currentDict == totalDicts,
+            isCompleted: false, // Only the final yield of importFolderStream should be isCompleted: true
             dictId: progress.dictId,
             sampleWords: progress.sampleWords,
             error: progress.error,
@@ -1866,7 +1902,7 @@ class DictionaryManager {
             value:
                 0.2 + ((currentDict - 1) + progress.value) / totalDicts * 0.8,
             headwordCount: progress.headwordCount,
-            isCompleted: progress.isCompleted && currentDict == totalDicts,
+            isCompleted: false, // Only the final yield of this stream should be isCompleted: true
             dictId: progress.dictId,
             sampleWords: progress.sampleWords,
             error: progress.error,
