@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.1] - 2026-03-23
+
+### Added
+- **Speed Improvements**: 
+    - **Optimized Search**: Implemented a more efficient query strategy for prefix and wildcard searches, significantly reducing response times.
+    - **Better Indexing**: Improved the indexing process to handle large dictionaries more effectively.
+
 ## [1.5.0] - 2026-03-22
 
 ### Added
