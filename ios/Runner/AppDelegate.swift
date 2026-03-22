@@ -4,6 +4,7 @@ import UIKit
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var activeURLs: [String: URL] = [:]
+  private var activePathURLs: [String: URL] = [:]
 
   override func application(
     _ application: UIApplication,
@@ -15,13 +16,18 @@ import UIKit
     
     bookmarkChannel.setMethodCallHandler({
       [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) -> Void in
-      if call.method == "createBookmark" {
+      switch call.method {
+      case "createBookmark":
           self?.handleCreateBookmark(call: call, result: result)
-      } else if call.method == "resolveBookmark" {
+      case "resolveBookmark":
           self?.handleResolveBookmark(call: call, result: result)
-      } else if call.method == "stopAccess" {
+      case "stopAccess":
           self?.handleStopAccess(call: call, result: result)
-      } else {
+      case "startAccessingPath":
+          self?.handleStartAccessingPath(call: call, result: result)
+      case "stopAccessingPath":
+          self?.handleStopAccessingPath(call: call, result: result)
+      default:
         result(FlutterMethodNotImplemented)
       }
     })
@@ -37,9 +43,18 @@ import UIKit
       }
       
       let url = URL(fileURLWithPath: path)
+      let startedAccess = url.startAccessingSecurityScopedResource()
+      
+      defer {
+          if startedAccess {
+              url.stopAccessingSecurityScopedResource()
+          }
+      }
+
       do {
           // Security-scoped bookmark for app sandboxing
-          let bookmarkData = try url.bookmarkData(options: .minimalBookmark, 
+          // On iOS, .withSecurityScope is not available; use empty options
+          let bookmarkData = try url.bookmarkData(options: [], 
                                                  includingResourceValuesForKeys: nil, 
                                                  relativeTo: nil)
           result(bookmarkData.base64EncodedString())
@@ -62,8 +77,9 @@ import UIKit
       
       do {
           var isStale = false
+          // On iOS, use empty options for resolution as well
           let url = try URL(resolvingBookmarkData: bookmarkData, 
-                           options: .withoutUI, 
+                           options: [], 
                            relativeTo: nil, 
                            bookmarkDataIsStale: &isStale)
           
@@ -71,7 +87,7 @@ import UIKit
               activeURLs[bookmarkBase64] = url
               result(url.path)
           } else {
-              result(FlutterError(code: "ACCESS_DENIED", message: "Could not start access", details: nil))
+              result(FlutterError(code: "ACCESS_DENIED", message: "Could not start access to security-scoped resource", details: nil))
           }
       } catch {
           result(FlutterError(code: "RESOLVE_ERROR", message: error.localizedDescription, details: nil))
@@ -88,6 +104,44 @@ import UIKit
       if let url = activeURLs[bookmarkBase64] {
           url.stopAccessingSecurityScopedResource()
           activeURLs.removeValue(forKey: bookmarkBase64)
+      }
+      result(nil)
+  }
+
+  private func handleStartAccessingPath(call: FlutterMethodCall, result: FlutterResult) {
+      guard let args = call.arguments as? [String: Any],
+            let path = args["path"] as? String else {
+          result(FlutterError(code: "INVALID_ARGS", message: "Path is required", details: nil))
+          return
+      }
+      
+      let url = URL(fileURLWithPath: path)
+      if url.startAccessingSecurityScopedResource() {
+          activePathURLs[path] = url
+          result(true)
+      } else {
+          // If it's not a security-scoped URL, startAccessing... returns false but it might still be accessible
+          // (e.g. inside Documents but not picked via picker).
+          // We return true if we can list it or if it exists.
+          let fm = FileManager.default
+          if fm.isReadableFile(atPath: path) {
+              result(true)
+          } else {
+              result(false)
+          }
+      }
+  }
+
+  private func handleStopAccessingPath(call: FlutterMethodCall, result: FlutterResult) {
+      guard let args = call.arguments as? [String: Any],
+            let path = args["path"] as? String else {
+          result(FlutterError(code: "INVALID_ARGS", message: "Path is required", details: nil))
+          return
+      }
+      
+      if let url = activePathURLs[path] {
+          url.stopAccessingSecurityScopedResource()
+          activePathURLs.removeValue(forKey: path)
       }
       result(nil)
   }

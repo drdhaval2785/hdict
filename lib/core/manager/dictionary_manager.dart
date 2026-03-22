@@ -1010,40 +1010,73 @@ class DictionaryManager {
     dynamic reader;
     if (sourceType == 'linked' && sourceBookmark != null) {
       final isSaf = Platform.isAndroid && sourceBookmark.startsWith('content://');
+      final bool isIos = Platform.isIOS || Platform.isMacOS;
+      
       if (format == 'mdict') {
-        reader = await MdictReader.fromLinkedSource(sourceBookmark, actualPath: rawPath);
+        reader = await MdictReader.fromLinkedSource(isSaf ? rawPath : sourceBookmark, actualPath: rawPath);
       } else if (format == 'slob') {
-        reader = await SlobReader.fromLinkedSource(sourceBookmark, actualPath: rawPath);
+        reader = await SlobReader.fromLinkedSource(isSaf ? rawPath : sourceBookmark, actualPath: rawPath);
       } else if (format == 'stardict') {
         if (isSaf) {
-          // For SAF, sourceBookmark is the IFO URI. We use it directly.
-          reader = await DictReader.fromLinkedSource(sourceBookmark, actualPath: rawPath);
-        } else {
-          final String dictPath = await _dbHelper.resolvePath(rawPath);
-          final basePath = p.withoutExtension(dictPath);
-          final actualDictPath = _resolveLocalFile(basePath, [
-            '.dict',
-            '.dict.dz',
-            '.dict.gz',
-            '.dict.bz2',
-            '.dict.xz',
+          // sourceBookmark is typically the Tree URI for folder-added dictionaries.
+          // We need to resolve the .dict URI within that tree.
+          final docFile = await DocumentFile.fromUri(rawPath);
+          if (docFile == null) return null;
+          final baseName = p.basenameWithoutExtension(docFile.name);
+          final dictUri = await _resolveSafFile(sourceBookmark, baseName, [
+            '.dict', '.dict.dz', '.dict.gz', '.dict.bz2', '.dict.xz',
           ]);
+          if (dictUri == null) return null;
+          reader = await DictReader.fromLinkedSource(dictUri, actualPath: rawPath);
+        } else {
+          String? actualDictPath;
+          if (isIos) {
+            final resolvedPath = await BookmarkManager.resolveBookmark(sourceBookmark);
+            if (resolvedPath != null) {
+              try {
+                final basePath = p.withoutExtension(rawPath);
+                actualDictPath = _resolveLocalFile(basePath, [
+                  '.dict', '.dict.dz', '.dict.gz', '.dict.bz2', '.dict.xz',
+                ]);
+              } finally {
+                await BookmarkManager.stopAccess(sourceBookmark);
+              }
+            }
+          } else {
+            final String dictPath = await _dbHelper.resolvePath(rawPath);
+            final basePath = p.withoutExtension(dictPath);
+            actualDictPath = _resolveLocalFile(basePath, [
+              '.dict', '.dict.dz', '.dict.gz', '.dict.bz2', '.dict.xz',
+            ]);
+          }
           if (actualDictPath == null) return null;
           reader = await DictReader.fromLinkedSource(sourceBookmark, targetPath: p.basename(actualDictPath), actualPath: actualDictPath);
         }
       } else if (format == 'dictd') {
         if (isSaf) {
-          // For SAF, sourceBookmark is the index URI (on Android). 
-          // We need the .dict URI.
-          final String dictUri = sourceBookmark.replaceFirst(
-            RegExp(r'\.index$'),
-            '.dict.dz',
-          );
+          final docFile = await DocumentFile.fromUri(rawPath);
+          if (docFile == null) return null;
+          final baseName = p.basenameWithoutExtension(docFile.name);
+          final dictUri = await _resolveSafFile(sourceBookmark, baseName, ['.dict.dz', '.dict']);
+          if (dictUri == null) return null;
           reader = await DictdReader.fromLinkedSource(dictUri, actualPath: rawPath);
         } else {
-          final String indexPath = await _dbHelper.resolvePath(rawPath);
-          final basePath = p.withoutExtension(indexPath);
-          final actualDictPath = _resolveLocalFile(basePath, ['.dict.dz', '.dict']);
+          String? actualDictPath;
+          if (isIos) {
+            final resolvedPath = await BookmarkManager.resolveBookmark(sourceBookmark);
+            if (resolvedPath != null) {
+              try {
+                final basePath = p.withoutExtension(rawPath);
+                actualDictPath = _resolveLocalFile(basePath, ['.dict.dz', '.dict']);
+              } finally {
+                await BookmarkManager.stopAccess(sourceBookmark);
+              }
+            }
+          } else {
+            final String indexPath = await _dbHelper.resolvePath(rawPath);
+            final basePath = p.withoutExtension(indexPath);
+            actualDictPath = _resolveLocalFile(basePath, ['.dict.dz', '.dict']);
+          }
           if (actualDictPath == null) return null;
           reader = await DictdReader.fromLinkedSource(sourceBookmark, targetPath: p.basename(actualDictPath), actualPath: actualDictPath);
         }
@@ -1995,6 +2028,7 @@ class DictionaryManager {
                   parentFolderName: parentName,
                   safUris: {
                     'ifo': path,
+                    'tree': treeUri,
                     // ignore: use_null_aware_elements
                     if (idxUri != null) 'idx': idxUri,
                     // ignore: use_null_aware_elements
@@ -2022,6 +2056,7 @@ class DictionaryManager {
                 path: path,
                 format: 'mdict',
                 parentFolderName: parentName,
+                safUris: {'tree': treeUri},
               ),
             );
           }
@@ -2032,6 +2067,7 @@ class DictionaryManager {
                 path: path,
                 format: 'slob',
                 parentFolderName: parentName,
+                safUris: {'tree': treeUri},
               ),
             );
           }
@@ -2054,6 +2090,9 @@ class DictionaryManager {
                   format: 'dictd',
                   companionPath: dictPath,
                   parentFolderName: parentName,
+                  safUris: {
+                    'tree': treeUri,
+                  },
                 ),
               );
             } else {
@@ -2111,6 +2150,11 @@ class DictionaryManager {
     final List<String> importedEntries = [];
     final List<String> incompleteEntries = [];
     final List<String> alreadyExistsEntries = [];
+
+    final bool isIos = Platform.isIOS || Platform.isMacOS;
+    if (isIos) {
+      await BookmarkManager.startAccessingPath(folderPath);
+    }
 
     try {
       FolderScanResult scanResult;
@@ -2378,6 +2422,10 @@ class DictionaryManager {
         error: e.toString(),
         isCompleted: true,
       );
+    } finally {
+      if (isIos) {
+        await BookmarkManager.stopAccessingPath(folderPath);
+      }
     }
   }
 
@@ -2385,6 +2433,20 @@ class DictionaryManager {
     for (final ext in extensions) {
       final f = File('$basePath$ext');
       if (f.existsSync()) return f.path;
+    }
+    return null;
+  }
+
+  Future<String?> _resolveSafFile(String treeUri, String baseName, List<String> extensions) async {
+    final dir = await DocumentFile.fromUri(treeUri);
+    if (dir == null) return null;
+    final entities = await dir.listDocuments();
+    final lowerBase = baseName.toLowerCase();
+    for (final ext in extensions) {
+      for (final f in entities) {
+        final n = f.name.toLowerCase();
+        if (n == '$lowerBase$ext') return f.uri;
+      }
     }
     return null;
   }
@@ -2411,9 +2473,10 @@ class DictionaryManager {
       final bookName = ifoParser.bookName ?? p.basenameWithoutExtension(ifoPath);
 
       // Create bookmark for the parent folder to allow access to all sibling files (.idx, .dict, etc.)
-      final String folderPath = isSaf && safUris != null 
-          ? ifoPath // It's already anchored in its folder
-          : p.dirname(ifoPath);
+      // For SAF, we use the tree URI if available to allow listing siblings later.
+      final String folderPath = isSaf && safUris != null && safUris.containsKey('tree')
+          ? safUris['tree']!
+          : (isSaf ? ifoPath : p.dirname(ifoPath));
           
       final String? bookmark = await BookmarkManager.createBookmark(folderPath);
       if (bookmark == null) throw Exception('Failed to create bookmark');
@@ -2513,7 +2576,10 @@ class DictionaryManager {
     yield ImportProgress(message: 'Linking MDict...', value: 0.1);
     try {
       final isSaf = Platform.isAndroid && mdxPath.startsWith('content://');
-      final String? bookmark = await BookmarkManager.createBookmark(mdxPath);
+      final String folderPath = isSaf && safUris != null && safUris.containsKey('tree')
+          ? safUris['tree']!
+          : mdxPath;
+      final String? bookmark = await BookmarkManager.createBookmark(folderPath);
       if (bookmark == null) throw Exception('Failed to create bookmark');
 
       final reader = isSaf 
@@ -2584,7 +2650,11 @@ class DictionaryManager {
   }) async* {
     yield ImportProgress(message: 'Linking Slob...', value: 0.1);
     try {
-      final String? bookmark = await BookmarkManager.createBookmark(slobPath);
+      final isSaf = Platform.isAndroid && slobPath.startsWith('content://');
+      final String folderPath = isSaf && safUris != null && safUris.containsKey('tree')
+          ? safUris['tree']!
+          : slobPath;
+      final String? bookmark = await BookmarkManager.createBookmark(folderPath);
       if (bookmark == null) throw Exception('Failed to create bookmark');
 
       final bookName = p.basenameWithoutExtension(slobPath);
@@ -2648,9 +2718,10 @@ class DictionaryManager {
     try {
       final isSaf = Platform.isAndroid && indexPath.startsWith('content://');
 
-      // For DICTD, we link based on the index file, but we need both.
       // Create bookmark for the parent folder to allow access to all sibling files (.index, .dict, etc.)
-      final String folderPath = isSaf ? indexPath : p.dirname(indexPath);
+      final String folderPath = isSaf && safUris != null && safUris.containsKey('tree')
+          ? safUris['tree']!
+          : (isSaf ? indexPath : p.dirname(indexPath));
       final String? bookmark = await BookmarkManager.createBookmark(folderPath);
       if (bookmark == null) throw Exception('Failed to create bookmark');
 
