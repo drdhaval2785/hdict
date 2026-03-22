@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0] - 2026-03-22
+
+### Added
+- **Avoid Copying Data**: Reads data from user specified file or folder and avoids copying data as far as possible. This will work if the user data is in decompressed format. It is not possible to read tar, tar.gz or zip files non-sequentially on the fly. Therefore, they will continue to be copied / decompressed to AppData.
+- **Checksum-based Deduplication**: Automatically detects and prevents importing duplicate dictionaries using MD5 checksums across all import workflows.
+- **Enhanced Android SAF Support**: Robust Storage Access Framework (SAF) implementation for StarDict and DICTD formats, ensuring reliable indexing from external SD cards and cloud storage.
+- **Import Report**: Providing user with a report at the end of importing via File, Folder, Web or by Language selection.
+- **Improved Group Management**: Dictionaries can now belong to multiple groups simultaneously. Group membership is automatically cleaned up when a dictionary is deleted.
+- **Automatic Folder Grouping**: Importing a folder now automatically creates and assigns dictionaries to a group named after the source folder.
+- **Unified Import Workflow**: Simplified "Import Folder" and "Link Folder" into a single, intuitive "Add Folder" action.
+- **Universal Archive Support**: Seamlessly handles `.tar.xz`, `.7z`, and other compressed formats by falling back through system tools and high-performance Dart libraries.
+
+### Fixed
+- **Dictionary Reader Stability**: Resolved edge-case crashes and data consolidation errors for MDict and Slob readers.
+- **HTML Rendering**: Improved the internal HTML pipeline to safely handle non-standard or unclosed tags in dictionary definitions.
+- **Android Archive Handling**: Corrected a platform-specific bug where Android occasionally treated compressed archives as folders.
+
 ## [1.4.7] - 2026-03-20
   
 ### Added

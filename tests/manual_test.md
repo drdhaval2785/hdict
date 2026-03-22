@@ -21,11 +21,17 @@ Testing is everything. This document lists manual tests that ensure the visual l
 - [ ] Import a StarDict dictionary (.zip or .7z). Verify progress bar and final word counts.
 - [ ] Import an MDict dictionary (.mdx).
 - [ ] Import a Slob dictionary (.slob).
+- [ ] Import a `.tar.xz` dictionary archive. Verify extraction works correctly.
+- [ ] **Checksum Check**: Import an already existing dictionary via "Import File". Verify the system identifies it as "Already Exists" and does not create a duplicate.
+- [ ] **Folder Deduplication**: "Add Folder" containing dictionaries already imported via "Import File". Verify they are skipped correctly.
 - [ ] Verify that incomplete dictionaries (missing .idx or .dict) show detailed error messages in the "Incomplete" section.
 
 ### 2.2 Reordering and Enabling
 - [ ] Reorder dictionaries by dragging. Verify that search results follow the new order.
+- [ ] **Multi-Group Membership**: Assign a dictionary to Group A and Group B. Enable Group A and Disable Group B. Verify dictionary remains searchable.
+- [ ] **Automatic Folder Grouping**: Use "Add Folder" on a directory named "MyDicts". Verify a group "MyDicts" is created and dictionaries are assigned to it.
 - [ ] Disable a dictionary. Verify it no longer appears in search results.
+- [ ] Delete a dictionary that is a member of multiple groups. Verify it is removed from the database and all group lists.
 
 ## 3. Platform Specific Actions
 

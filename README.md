@@ -21,7 +21,8 @@ A high-performance, feature-rich dictionary application built with Flutter. Opti
 - **Multi-Dictionary Search**: Display results from multiple dictionaries simultaneously in a tabbed interface.
 - **Wildcard & Prefix Search**: Supports wildcard operators like `*` and `?` as well as prefix search for powerful lookups.
 - **Definition Search**: Dive deeper by searching for words directly within definitions.
-- **Lightning Fast Lookup**: Powered by optimized queries using SQLite FTS5, batch processing, and database vacuuming to ensure near-instant results and minimal storage usage.
+- **Lightning Fast Lookup**: Powered by optimized queries using SQLite FTS5, batch processing, and database vacuuming to ensure near-instant results.
+- **Deduplication**: Automatically detects and skips duplicate dictionaries using MD5 checksums during "Import File" or "Add Folder" workflows.
 
 ### 📖 Universal Word Lookup & Native Tap-to-Search
 - **Tap-on-Meaning**: Every word in a definition is interactive using native hit-testing (without character limits). Tap any word to instantly look it up.
@@ -32,7 +33,8 @@ A high-performance, feature-rich dictionary application built with Flutter. Opti
 ### 📚 Massive Dictionary Support & Web Import
 - **Select Dictionaries by Language**: Browse and download from around 1900 FreeDict dictionaries organized by origin and target languages directly within the app.
 - **Extensive Format Support**: Read from **StarDict**, **MDict** (`.mdx`, `.mdd`), **Slob** (`.slob`), and **DICTD** formats.
-- **Archive Extracting**: Native ingestion of dictionaries compressed in `.zip`, `.tar.gz`, `.tar.xz`, `.bz2`, and `.7z` formats. Support for importing entire folders of dictionaries at once.
+- **Archive Extracting**: Native ingestion of dictionaries compressed in `.zip`, `.tar.gz`, `.tar.xz`, `.bz2`, and `.7z` formats. Support for importing entire folders of dictionaries at once via the unified **Add Folder** action.
+- **Smart Grouping**: Dictionaries can now belong to multiple groups. When using "Add Folder", dictionaries are automatically assigned to a group named after the source folder.
 - **Manage Dictionaries**: Delete, update, securely clean orphaned data and prioritize dictionaries via standard display ordering.
 
 ### 🗂️ Flash Cards & Learning
@@ -53,7 +55,7 @@ A high-performance, feature-rich dictionary application built with Flutter. Opti
 1. Open the **Manage Dictionaries** menu in the sidebar.
 2. Choose **Select by Language** to instantly browse and download 1900+ dictionaries.
 3. Alternatively, tap the **Import File**, **Import Folder**, or **Download from Web** button.
-4. Select your `.slob`, `.mdx`, `.zip`, `.7z` etc. dictionary files or folders to parse entirely offline into the local database.
+4. Choose your `.slob`, `.mdx`, `.zip`, `.7z`, or `.tar.xz` dictionary files or folders to parse entirely offline into the local database.
 
 ---
 
