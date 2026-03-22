@@ -213,7 +213,7 @@ Future<FolderScanResult> scanFolderForDictionaries(
     final lowerPath = path.toLowerCase();
 
     if (_isArchive(lowerPath)) {
-      foundArchives.add(p.basename(path));
+      foundArchives.add(path);
       continue;
     }
 

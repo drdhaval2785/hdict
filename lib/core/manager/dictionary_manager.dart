@@ -1834,7 +1834,7 @@ class DictionaryManager {
               lowerName.endsWith('.tgz') ||
               lowerName.endsWith('.tar.bz2') ||
               lowerName.endsWith('.7z')) {
-            foundArchives.add(name);
+            foundArchives.add(path);
             continue;
           }
 
@@ -2090,26 +2090,31 @@ class DictionaryManager {
       final totalArchives = scanResult.foundArchives.length;
       final tempBaseDir = await getTemporaryDirectory();
 
-      for (final archiveName in scanResult.foundArchives) {
+      for (final archiveFullPath in scanResult.foundArchives) {
         currentArchive++;
+        final archiveDispName = p.basename(archiveFullPath.startsWith('content://') 
+            ? Uri.decodeComponent(archiveFullPath) 
+            : archiveFullPath);
+            
         yield ImportProgress(
-          message: 'Processing archive $currentArchive of $totalArchives: $archiveName',
+          message: 'Processing archive $currentArchive of $totalArchives: $archiveDispName',
           value: totalTasks == 0 ? 0.5 : (totalLinked + currentArchive - 1) / totalTasks * 0.8,
         );
 
         final workspaceDir = await tempBaseDir.createTemp('merged_import_');
         try {
           String archivePath;
-          if (Platform.isAndroid && folderPath.startsWith('content://')) {
-            // Need to copy archive from SAF to local temp before extraction
-            final archiveFile = await DocumentFile.fromUri('$folderPath/$archiveName');
+          if (Platform.isAndroid && archiveFullPath.startsWith('content://')) {
+            // Use URI directly
+            final archiveFile = await DocumentFile.fromUri(archiveFullPath);
             if (archiveFile == null) continue;
-            final localArchiveFile = File(p.join(workspaceDir.path, archiveName));
+            final localArchiveFile = File(p.join(workspaceDir.path, archiveDispName));
             final bytes = await archiveFile.readAsBytes().fold<List<int>>([], (p, e) => p..addAll(e));
             await localArchiveFile.writeAsBytes(bytes);
             archivePath = localArchiveFile.path;
           } else {
-            archivePath = p.join(folderPath, archiveName);
+            // Already a full path
+            archivePath = archiveFullPath;
           }
 
           await _extractToWorkspace(archivePath, workspaceDir.path);
@@ -2119,7 +2124,7 @@ class DictionaryManager {
           );
 
           if (innerScan.discovered.isEmpty) {
-            incompleteEntries.add('$archiveName: No valid dictionaries found inside.');
+            incompleteEntries.add('$archiveDispName: No valid dictionaries found inside.');
             continue;
           }
 
@@ -2133,7 +2138,7 @@ class DictionaryManager {
                                processedInThisSessionNames.contains(innerLowerName);
 
             if (innerExists) {
-              alreadyExistsEntries.add('$innerName (from $archiveName)');
+              alreadyExistsEntries.add('$innerName (from $archiveDispName)');
               yield ImportProgress(
                 message: 'Skipping $innerName from archive (Already exists)',
                 value: (totalTasks == 0) ? 1.0 : (totalLinked + currentArchive) / totalTasks,
@@ -2194,9 +2199,9 @@ class DictionaryManager {
                   importedEntries.add(finalInnerName);
                   if (finalInnerName != innerName) processedInThisSessionNames.add(finalInnerName);
                 } else if (progress.error != null && progress.error!.contains('ALREADY_EXISTS')) {
-                  alreadyExistsEntries.add('$innerName (from $archiveName)');
+                  alreadyExistsEntries.add('$innerName (from $archiveDispName)');
                 } else {
-                  incompleteEntries.add('$innerName (from $archiveName): ${progress.error}');
+                  incompleteEntries.add('$innerName (from $archiveDispName): ${progress.error}');
                 }
                 break;
               }
