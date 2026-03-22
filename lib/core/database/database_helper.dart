@@ -1546,7 +1546,8 @@ class DatabaseHelper {
       dicts = await getEnabledDictionaries();
     }
 
-    final List<Map<String, dynamic>> finalResults = [];
+    if (dicts.isEmpty) return [];
+
     final bool hasWildcards = hq.contains('*') || hq.contains('?');
     final String translatedHq = _translateWildcards(hq);
 
@@ -1564,38 +1565,43 @@ class DatabaseHelper {
       likePattern = hq;
     }
 
-    // 2. Query each dictionary
-    // Because we have idx_metadata_dict_word(dict_id, word),
-    // SQLite can satisfy the WHERE and the ORDER BY word ASC entirely from the index.
-    for (final dict in dicts) {
-      // dicts already filtered by is_enabled in getEnabledDictionaries()
+    // 2. Build multi-query using UNION ALL to fetch early limits per dictionary natively,
+    // avoiding the overhead of N sequential Flutter-to-Native SQLite method channels.
+    // By nesting, we ensure each table lookup stops at `limit` internally.
+    final List<String> subQueries = [];
+    final List<Object?> args = [];
 
-      final int currentLimit = limit - finalResults.length;
-      if (currentLimit <= 0) break;
-
-      final results = await db.query(
-        'word_metadata',
-        columns: ['word', 'dict_id', 'offset', 'length'],
-        where: 'dict_id = ? AND word $operator ?',
-        whereArgs: [dict['id'], likePattern],
-        orderBy: 'word ASC',
-        limit: currentLimit,
-      );
-
-      finalResults.addAll(results);
+    for (int i = 0; i < dicts.length; i++) {
+      subQueries.add('''
+        SELECT * FROM (
+          SELECT word, dict_id, offset, length, ? as sort_order 
+          FROM word_metadata 
+          WHERE dict_id = ? AND word $operator ? 
+          ORDER BY word ASC LIMIT ?
+        )
+      ''');
+      args.addAll([i, dicts[i]['id'], likePattern, limit]);
     }
 
-    // 3. Optional: Move exact matches to the top of the combined result set
-    // if the user expects "apple" to be first even if it's not the first dict.
-    // However, original logic sorts by dict_id first.
+    final String finalSql = '''
+      SELECT word, dict_id, offset, length 
+      FROM (
+        ${subQueries.join(' UNION ALL ')}
+      )
+      ORDER BY sort_order ASC, word ASC
+      LIMIT ?
+    ''';
+    args.add(limit);
+
+    final results = await db.rawQuery(finalSql, args);
 
     _log(
-      'SEQUENTIAL_QUERY [$operator]',
-      'SELECT word, dict_id, offset, length FROM word_metadata WHERE dict_id = ? AND word $operator ? ORDER BY word ASC LIMIT $limit',
-      ['[IDs of ${dicts.length} dicts]', likePattern],
-      finalResults,
+      'UNION_ALL_QUERY [$operator]',
+      'SELECT ... UNION ALL ... LIMIT $limit',
+      ['[IDs of \${dicts.length} dicts]', likePattern],
+      results,
     );
-    return finalResults;
+    return results;
   }
 
   Future<List<String>> getPrefixSuggestions(
