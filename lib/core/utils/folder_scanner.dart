@@ -116,13 +116,29 @@ Future<void> _extractArchiveToDir(String filePath, String destDir) async {
       archive = TarDecoder().decodeBytes(BZip2Decoder().decodeBytes(bytes));
     } else if (lowerPath.endsWith('.tar.xz') ||
         lowerPath.endsWith('.txz')) {
-      try {
-        archive = TarDecoder().decodeBytes(XZDecoder().decodeBytes(bytes));
-      } catch (_) {
-        if (Platform.isMacOS || Platform.isLinux) {
-          Process.runSync('tar', ['-xf', filePath, '-C', destDir]);
+      // 1. Try system tar on macOS/Linux (most reliable and fastest)
+      if (Platform.isMacOS || Platform.isLinux) {
+        try {
+          final result = Process.runSync('tar', ['-xf', filePath, '-C', destDir]);
+          if (result.exitCode == 0) return;
+          hDebugPrint('FolderScanner: native tar failed: ${result.stderr}. Falling back.');
+        } catch (e) {
+          hDebugPrint('FolderScanner: system tar not found or failed: $e. Falling back.');
         }
+      }
+
+      try {
+        // 2. Try native 7-zip first as it's more robust for XZ on other platforms
+        SZArchive.extract(filePath, destDir);
         return;
+      } catch (e7z) {
+        hDebugPrint('FolderScanner: flutter_7zip failed to extract ${p.basename(filePath)}: $e7z. Trying archive package.');
+        try {
+          archive = TarDecoder().decodeBytes(XZDecoder().decodeBytes(bytes));
+        } catch (e) {
+          hDebugPrint('FolderScanner: final fallback (archive package) failed for ${p.basename(filePath)}: $e');
+          rethrow;
+        }
       }
     } else {
       // plain .tar

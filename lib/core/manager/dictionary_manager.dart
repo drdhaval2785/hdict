@@ -799,26 +799,36 @@ Future<void> _extractToWorkspaceSync(_ExtractArgs args) async {
     } else if (lowerPath.endsWith('.tar.bz2') || lowerPath.endsWith('.tbz2')) {
       archive = TarDecoder().decodeBytes(BZip2Decoder().decodeBytes(bytes));
     } else if (lowerPath.endsWith('.tar.xz')) {
-      try {
-        archive = TarDecoder().decodeBytes(XZDecoder().decodeBytes(bytes));
-      } catch (e) {
-        if (Platform.isMacOS || Platform.isLinux) {
-          hDebugPrint(
-            'Dart archive package failed to extract .tar.xz ($e). Falling back to system tar.',
-          );
+      // 1. Try system tar on macOS/Linux (most reliable and fastest)
+      if (Platform.isMacOS || Platform.isLinux) {
+        try {
           final result = Process.runSync('tar', [
             '-xf',
             filePath,
             '-C',
             workspacePath,
           ]);
-          if (result.exitCode != 0) {
-            throw Exception('Native tar extraction failed: ${result.stderr}');
-          }
-          return;
-        } else {
-          rethrow;
+          if (result.exitCode == 0) return;
+          hDebugPrint('Native tar failed: ${result.stderr}. Falling back.');
+        } catch (e) {
+          hDebugPrint('System tar not found or failed: $e. Falling back.');
         }
+      }
+
+      // 2. Try native 7-zip (good for Windows/Android where 7zip is bundled)
+      try {
+        SZArchive.extract(filePath, workspacePath);
+        return;
+      } catch (e7z) {
+        hDebugPrint('flutter_7zip failed to extract: $e7z. Trying archive package.');
+      }
+
+      // 3. Try pure-Dart archive package as last resort
+      try {
+        archive = TarDecoder().decodeBytes(XZDecoder().decodeBytes(bytes));
+      } catch (e) {
+        hDebugPrint('Final fallback (archive package) failed: $e');
+        rethrow;
       }
     } else if (lowerPath.endsWith('.7z')) {
       SZArchive.extract(filePath, workspacePath);
