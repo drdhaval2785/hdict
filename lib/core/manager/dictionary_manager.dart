@@ -1027,6 +1027,9 @@ class DictionaryManager {
     final String rawPath = dict['path'];
     final String? sourceType = dict['source_type'];
     final String? sourceBookmark = dict['source_bookmark'];
+    // Pre-resolved companion file URI stored at link-time (e.g. SAF .dict URI).
+    // When present, eliminates all runtime DocumentFile calls for SAF dictionaries.
+    final String? companionUri = dict['companion_uri'] as String?;
 
     dynamic reader;
     if (sourceType == 'linked' && sourceBookmark != null) {
@@ -1039,15 +1042,19 @@ class DictionaryManager {
         reader = await SlobReader.fromLinkedSource(isSaf ? rawPath : sourceBookmark, actualPath: rawPath);
       } else if (format == 'stardict') {
         if (isSaf) {
-          // sourceBookmark is typically the Tree URI for folder-added dictionaries.
-          // We need to resolve the .dict URI within that tree.
-          // Use _runSafAction to serialize all docman calls globally.
-          final docFile = await _runSafAction(() => DocumentFile.fromUri(rawPath));
-          if (docFile == null) return null;
-          final baseName = p.basenameWithoutExtension(docFile.name);
-          final dictUri = await _resolveSafFile(sourceBookmark, baseName, [
-            '.dict', '.dict.dz', '.dict.gz', '.dict.bz2', '.dict.xz',
-          ]);
+          // Fast path: use the pre-resolved companion URI stored at link-time.
+          // This avoids all runtime DocumentFile.fromUri + listDocuments calls.
+          String? dictUri = companionUri;
+          if (dictUri == null) {
+            // Fallback for dictionaries linked before companion_uri was introduced.
+            // Use the serialized SAF action queue to avoid concurrent docman calls.
+            final docFile = await _runSafAction(() => DocumentFile.fromUri(rawPath));
+            if (docFile == null) return null;
+            final baseName = p.basenameWithoutExtension(docFile.name);
+            dictUri = await _resolveSafFile(sourceBookmark, baseName, [
+              '.dict', '.dict.dz', '.dict.gz', '.dict.bz2', '.dict.xz',
+            ]);
+          }
           if (dictUri == null) return null;
           reader = await DictReader.fromLinkedSource(dictUri, actualPath: rawPath);
         } else {
@@ -1076,10 +1083,15 @@ class DictionaryManager {
         }
       } else if (format == 'dictd') {
         if (isSaf) {
-          final docFile = await _runSafAction(() => DocumentFile.fromUri(rawPath));
-          if (docFile == null) return null;
-          final baseName = p.basenameWithoutExtension(docFile.name);
-          final dictUri = await _resolveSafFile(sourceBookmark, baseName, ['.dict.dz', '.dict']);
+          // Fast path: use the pre-resolved companion URI stored at link-time.
+          String? dictUri = companionUri;
+          if (dictUri == null) {
+            // Fallback for dictionaries linked before companion_uri was introduced.
+            final docFile = await _runSafAction(() => DocumentFile.fromUri(rawPath));
+            if (docFile == null) return null;
+            final baseName = p.basenameWithoutExtension(docFile.name);
+            dictUri = await _resolveSafFile(sourceBookmark, baseName, ['.dict.dz', '.dict']);
+          }
           if (dictUri == null) return null;
           reader = await DictdReader.fromLinkedSource(dictUri, actualPath: rawPath);
         } else {
@@ -2558,6 +2570,9 @@ class DictionaryManager {
         sourceType: 'linked',
         sourceBookmark: bookmark,
         checksum: checksum,
+        // Store the pre-resolved .dict URI so _getReader never needs to call
+        // DocumentFile.fromUri + listDocuments at runtime (avoids docman serialization overhead).
+        companionUri: isSaf ? dictPath : null,
       );
 
       final receivePort = ReceivePort();
@@ -2771,6 +2786,8 @@ class DictionaryManager {
         sourceType: 'linked',
         sourceBookmark: bookmark,
         checksum: checksum,
+        // Store the .dict/.dict.dz URI so _getReader never needs to call DocumentFile at runtime.
+        companionUri: isSaf ? dictPath : null,
       );
 
       final receivePort = ReceivePort();

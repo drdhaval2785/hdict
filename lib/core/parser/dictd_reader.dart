@@ -31,25 +31,32 @@ class DictdReader {
   }
 
   static Future<DictdReader> fromLinkedSource(String source, {String? targetPath, String? actualPath}) async {
-    final String path = actualPath ?? targetPath ?? source;
-    final reader = DictdReader(path);
     if (!kIsWeb && Platform.isAndroid) {
       if (source.startsWith('content://')) {
-        // If 'source' is already a content URI, use it directly.
-        // This is used when we pass individual file URIs.
+        // Use 'source' (the SAF content:// URI of the .dict.dz file) as the path
+        // so that lib.DictdReader's _isCompressed correctly detects the .dz extension.
+        final reader = DictdReader(source);
         await reader.openSource(SafRandomAccessSource(source));
+        return reader;
       } else {
         // Fallback or folder-based resolve logic if needed
         final String fullPath = targetPath != null ? join(source, targetPath) : source;
+        final reader = DictdReader(fullPath);
         await reader.openSource(SafRandomAccessSource(fullPath));
+        return reader;
       }
     } else if (!kIsWeb && (Platform.isIOS || Platform.isMacOS)) {
+      final String path = actualPath ?? targetPath ?? source;
+      final reader = DictdReader(path);
       await reader.openSource(BookmarkRandomAccessSource(source, targetPath: targetPath));
+      return reader;
     } else {
+      final String path = actualPath ?? targetPath ?? source;
+      final reader = DictdReader(path);
       final String fullPath = targetPath != null ? join(source, targetPath) : source;
       await reader.openSource(FileRandomAccessSource(fullPath));
+      return reader;
     }
-    return reader;
   }
 
   Future<void> openSource(RandomAccessSource source) async {

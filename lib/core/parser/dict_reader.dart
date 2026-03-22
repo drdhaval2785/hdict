@@ -30,13 +30,16 @@ class DictReader {
   }
 
   /// Factory to create an instance from a linked source (SAF or Bookmark).
+  /// On Android [source] must be the content:// URI of the .dict/.dict.dz file
+  /// so that [isDz] is correctly computed from the actual file extension.
   static Future<DictReader> fromLinkedSource(String source, {String? targetPath, String? actualPath}) async {
-    final String path = actualPath ?? targetPath ?? source;
     if (Platform.isAndroid) {
-      // For SAF on Android, 'source' is usually the URI of the specific file
-      // but if we move to folder-based SAF, we might need targetPath too.
-      return DictReader(path, source: SafRandomAccessSource(source));
+      // On Android 'source' is the SAF content:// URI of the .dict or .dict.dz file.
+      // Use 'source' (not 'actualPath' which may be the .ifo URI) as 'path' so that
+      // isDz correctly detects .dict.dz and opens the dictzip reader.
+      return DictReader(source, source: SafRandomAccessSource(source));
     } else if (Platform.isIOS || Platform.isMacOS) {
+      final String path = actualPath ?? targetPath ?? source;
       return DictReader(path, source: BookmarkRandomAccessSource(source, targetPath: targetPath));
     } else {
       // For Linux/Windows, linked source is just a direct path for now

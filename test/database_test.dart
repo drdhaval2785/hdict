@@ -35,7 +35,8 @@ void main() {
           checksum TEXT,
           source_url TEXT,
           source_type TEXT DEFAULT 'managed',
-          source_bookmark TEXT
+          source_bookmark TEXT,
+          companion_uri TEXT
         )
       ''');
 

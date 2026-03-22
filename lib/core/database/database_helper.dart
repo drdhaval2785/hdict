@@ -100,7 +100,7 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       version:
-          29, // Version 29: Added source_type and source_bookmark for linking
+          30, // Version 30: Added companion_uri to store pre-resolved SAF dict file URI
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onOpen: _onOpen,
@@ -233,7 +233,8 @@ class DatabaseHelper {
         checksum TEXT,
         source_url TEXT,
         source_type TEXT DEFAULT 'managed',
-        source_bookmark TEXT
+        source_bookmark TEXT,
+        companion_uri TEXT
       )
     ''');
 
@@ -741,7 +742,20 @@ class DatabaseHelper {
         hDebugPrint('Migration error (version 29): $e');
       }
     }
-  }
+
+    if (oldVersion < 30) {
+      try {
+        hDebugPrint(
+          'Migration to version 30: Adding companion_uri to store pre-resolved SAF dict file URI',
+        );
+        await db.execute(
+          'ALTER TABLE dictionaries ADD COLUMN companion_uri TEXT',
+        );
+      } catch (e) {
+        hDebugPrint('Migration error (version 30): $e');
+      }
+    }
+  } // end _onUpgrade
 
   // ---------------------------------------------------------------------------
   // Content Tokenizer
@@ -853,6 +867,7 @@ class DatabaseHelper {
     String? sourceUrl,
     String sourceType = 'managed',
     String? sourceBookmark,
+    String? companionUri, // Pre-resolved companion file URI (e.g. SAF .dict URI)
   }) async {
     final db = await database;
 
@@ -874,6 +889,7 @@ class DatabaseHelper {
       'source_url': sourceUrl,
       'source_type': sourceType,
       'source_bookmark': sourceBookmark,
+      'companion_uri': companionUri,
     });
   }
 
