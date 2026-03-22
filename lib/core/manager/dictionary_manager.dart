@@ -1048,10 +1048,23 @@ class DictionaryManager {
 
   /// Calculates the MD5 checksum of a file.
   Future<String> _calculateChecksum(String filePath) async {
-    final file = File(filePath);
-    if (!await file.exists()) return '';
-    final bytes = await file.readAsBytes();
-    return md5.convert(bytes).toString();
+    try {
+      Stream<List<int>> stream;
+      if (Platform.isAndroid && filePath.startsWith('content://')) {
+        final docFile = await DocumentFile.fromUri(filePath);
+        if (docFile == null) return '';
+        stream = docFile.readAsBytes();
+      } else {
+        final file = File(filePath);
+        if (!await file.exists()) return '';
+        stream = file.openRead();
+      }
+      final digest = await md5.bind(stream).first;
+      return digest.toString();
+    } catch (e) {
+      hDebugPrint('Checksum calculation error for $filePath: $e');
+      return '';
+    }
   }
 
   /// Scans the 'dictionaries' directory and returns folder names that are not referenced in the database.
@@ -1232,6 +1245,7 @@ class DictionaryManager {
 
       int total = discovered.length;
       int current = 0;
+      final List<String> alreadyExistsList = [];
 
       for (final dict in discovered) {
         current++;
@@ -1277,10 +1291,17 @@ class DictionaryManager {
         }
 
         await for (final progress in subStream) {
+          if (progress.error == 'ALREADY_EXISTS') {
+            alreadyExistsList.add(
+              progress.dictionaryName ?? p.basenameWithoutExtension(primaryPath),
+            );
+            break;
+          }
           yield ImportProgress(
-            message: total > 1
-                ? '[$current/$total] ${progress.message}'
-                : progress.message,
+            message:
+                total > 1
+                    ? '[$current/$total] ${progress.message}'
+                    : progress.message,
             value: 0.5 + ((current - 1) + progress.value) / total * 0.5,
             headwordCount: progress.headwordCount,
             isCompleted: progress.isCompleted && current == total,
@@ -1291,6 +1312,14 @@ class DictionaryManager {
           if (progress.isCompleted) break;
         }
       }
+
+      yield ImportProgress(
+        message: 'Import process complete',
+        value: 1.0,
+        isCompleted: true,
+        alreadyExistsEntries:
+            alreadyExistsList.isEmpty ? null : alreadyExistsList,
+      );
     } catch (e, s) {
       hDebugPrint('Error in importDictionaryStream: $e\n$s');
       yield ImportProgress(
@@ -1445,6 +1474,7 @@ class DictionaryManager {
       int totalDicts = scanResult.discovered.length;
       int currentDict = 0;
 
+      final List<String> alreadyExistsList = [];
       for (final item in scanResult.discovered) {
         currentDict++;
         final primaryPath = item.path;
@@ -1497,6 +1527,10 @@ class DictionaryManager {
         }
 
         await for (final progress in subStream) {
+          if (progress.error == 'ALREADY_EXISTS') {
+            alreadyExistsList.add(progress.dictionaryName ?? name);
+            break;
+          }
           yield ImportProgress(
             message: '[$currentDict/$totalDicts] ${progress.message}',
             value:
@@ -1517,9 +1551,8 @@ class DictionaryManager {
         message: 'All imports complete.',
         value: 1.0,
         isCompleted: true,
-        incompleteEntries: incompleteMessages.isEmpty
-            ? null
-            : incompleteMessages,
+        incompleteEntries: incompleteMessages.isEmpty ? null : incompleteMessages,
+        alreadyExistsEntries: alreadyExistsList.isEmpty ? null : alreadyExistsList,
       );
     } catch (e) {
       yield ImportProgress(
@@ -2380,6 +2413,16 @@ class DictionaryManager {
           '.syn.bz2',
           '.syn.xz',
         ]);
+      final checksum = await _calculateChecksum(ifoPath);
+      final existing = await _dbHelper.getDictionaryByChecksum(checksum);
+      if (existing != null) {
+        yield ImportProgress(
+          message: 'StarDict dictionary "${existing['name']}" is already in your library.',
+          value: 1.0,
+          error: 'ALREADY_EXISTS',
+          isCompleted: true,
+        );
+        return;
       }
 
       final dictId = await _dbHelper.insertDictionary(
@@ -2388,6 +2431,7 @@ class DictionaryManager {
         format: 'stardict',
         sourceType: 'linked',
         sourceBookmark: bookmark,
+        checksum: checksum,
       );
 
       final receivePort = ReceivePort();
@@ -2442,12 +2486,26 @@ class DictionaryManager {
       // MDict book name usually comes from the header or filename
       final bookName = p.basenameWithoutExtension(mdxPath);
 
+      final checksum = await _calculateChecksum(mdxPath);
+      final existing = await _dbHelper.getDictionaryByChecksum(checksum);
+      if (existing != null) {
+        await reader.close();
+        yield ImportProgress(
+          message: 'MDict dictionary "${existing['name']}" is already in your library.',
+          value: 1.0,
+          error: 'ALREADY_EXISTS',
+          isCompleted: true,
+        );
+        return;
+      }
+
       final dictId = await _dbHelper.insertDictionary(
         bookName,
         mdxPath,
         format: 'mdict',
         sourceType: 'linked',
         sourceBookmark: bookmark,
+        checksum: checksum,
       );
 
       final receivePort = ReceivePort();
@@ -2493,12 +2551,25 @@ class DictionaryManager {
       if (bookmark == null) throw Exception('Failed to create bookmark');
 
       final bookName = p.basenameWithoutExtension(slobPath);
+      final checksum = await _calculateChecksum(slobPath);
+      final existing = await _dbHelper.getDictionaryByChecksum(checksum);
+      if (existing != null) {
+        yield ImportProgress(
+          message: 'Slob dictionary "${existing['name']}" is already in your library.',
+          value: 1.0,
+          error: 'ALREADY_EXISTS',
+          isCompleted: true,
+        );
+        return;
+      }
+
       final dictId = await _dbHelper.insertDictionary(
         bookName,
         slobPath,
         format: 'slob',
         sourceType: 'linked',
         sourceBookmark: bookmark,
+        checksum: checksum,
       );
 
       final receivePort = ReceivePort();
@@ -2547,12 +2618,25 @@ class DictionaryManager {
       if (bookmark == null) throw Exception('Failed to create bookmark');
 
       final bookName = p.basenameWithoutExtension(indexPath);
+      final checksum = await _calculateChecksum(indexPath);
+      final existing = await _dbHelper.getDictionaryByChecksum(checksum);
+      if (existing != null) {
+        yield ImportProgress(
+          message: 'DICTD dictionary "${existing['name']}" is already in your library.',
+          value: 1.0,
+          error: 'ALREADY_EXISTS',
+          isCompleted: true,
+        );
+        return;
+      }
+
       final dictId = await _dbHelper.insertDictionary(
         bookName,
         indexPath,
         format: 'dictd',
         sourceType: 'linked',
         sourceBookmark: bookmark,
+        checksum: checksum,
       );
 
       final receivePort = ReceivePort();

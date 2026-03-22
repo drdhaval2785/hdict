@@ -528,16 +528,27 @@ class _DictionaryManagementScreenState
         if (mounted) {
           Navigator.pop(context); // Close dialog
           final lastProgress = _progressNotifier.value;
-          final String sampleWordsText = lastProgress.sampleWords != null
-              ? '\n\nSample words: ${lastProgress.sampleWords!.join(', ')}'
-              : '';
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Dictionary imported successfully$sampleWordsText'),
-              duration: const Duration(seconds: 5),
-            ),
-          );
+          if ((lastProgress.alreadyExistsEntries != null &&
+                  lastProgress.alreadyExistsEntries!.isNotEmpty) ||
+              (lastProgress.incompleteEntries != null &&
+                  lastProgress.incompleteEntries!.isNotEmpty)) {
+            _showImportReport(lastProgress, title: 'Import Result');
+          } else {
+            final String sampleWordsText =
+                lastProgress.sampleWords != null
+                    ? '\n\nSample words: ${lastProgress.sampleWords!.join(', ')}'
+                    : '';
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Dictionary imported successfully$sampleWordsText',
+                ),
+                duration: const Duration(seconds: 5),
+              ),
+            );
+          }
           await _loadDictionaries();
         }
       } catch (e) {
@@ -689,7 +700,7 @@ class _DictionaryManagementScreenState
         Navigator.pop(context); // Close progress dialog
         await _loadDictionaries();
         if (finalProgress != null) {
-          _showAddFolderReport(finalProgress);
+          _showImportReport(finalProgress, title: 'Folder Processing Report');
         }
       }
     } catch (e) {
@@ -702,11 +713,14 @@ class _DictionaryManagementScreenState
     }
   }
 
-  void _showAddFolderReport(ImportProgress progress) {
+  void _showImportReport(
+    ImportProgress progress, {
+    String title = 'Import Report',
+  }) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Folder Processing Report'),
+        title: Text(title),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
