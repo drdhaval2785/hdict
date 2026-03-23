@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.3] - 2026-03-23
+
+### Added
+- **Speed Improvements**: 
+    - **LRU Cache for headwords and definitions**: For speedier lookups in case of repeat seraches
+    - **Avoid SQLITE calls for dictionary names**: Avoid calling SQLITE for dictionary names repeatedly by caching map of dict_id
+    - **SQLITE WAL Mode**: Enabled WAL mode for SQLITE database for better performance
+    - **SAF Buffer Size**: Increased buffer size for SAF reads to 512kb for better performance
+
 ## [1.5.2] - 2026-03-23
 
 ### Fixed
