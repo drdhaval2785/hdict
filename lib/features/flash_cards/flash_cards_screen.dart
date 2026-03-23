@@ -114,7 +114,6 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
       }
 
       hDebugPrint('FlashCards: Meta fetch complete. Found ${allAvailableWordMetas.length} words in ${stopwatch.elapsedMilliseconds}ms');
-      final metaTime = stopwatch.elapsedMilliseconds;
 
       if (allAvailableWordMetas.length < targetCount) {
         if (mounted) {
