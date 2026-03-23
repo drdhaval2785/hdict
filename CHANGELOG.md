@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.4] - 2026-03-23
+
+### Fixed
+- **Flashcard History**: Fixed issue where flashcard history was not showing dictionary names. Now shows dictionary names on demand.
+- **Flashcard Speedup**: Fixed an issue where flashcard took a lot of time to initiate for large number of dictionaries or too many words.
+- **Lazy Loading of Meanings**: Added lazy loading of meanings in flashcards to speed up the process.  
+
+
 ## [1.5.3] - 2026-03-23
 
 ### Added
