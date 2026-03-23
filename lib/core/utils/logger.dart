@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 bool enableDebugLogs = true;
 
 /// Flag to control verbose HTML processing logs.
-bool showHtmlProcessing = false;
+bool showHtmlProcessing = true;
 
 /// A wrapper around [debugPrint] that checks the [enableDebugLogs] flag.
 void hDebugPrint(String? message, {int? wrapWidth}) {

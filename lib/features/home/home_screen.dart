@@ -47,7 +47,8 @@ class HomeScreen extends StatefulWidget {
   /// `definition` and groups them first by dictionary id and then by the
   /// specific headword before producing a list suitable for the UI.
   static Future<List<Map<String, dynamic>>> consolidateDefinitions(
-    List<MapEntry<int, Map<String, List<Map<String, dynamic>>>>> groupedResults, {
+    List<MapEntry<int, Map<String, List<Map<String, dynamic>>>>>
+    groupedResults, {
     Map<int, Map<String, dynamic>>? dictMap,
   }) async {
     final List<Map<String, dynamic>> consolidated = [];
@@ -68,7 +69,10 @@ class HomeScreen extends StatefulWidget {
       uniqueKeyMap.forEach((uniqueKey, entries) {
         if (entries.isEmpty) return;
 
-        final headwords = entries.map((e) => e['word'] as String).toSet().toList();
+        final headwords = entries
+            .map((e) => e['word'] as String)
+            .toSet()
+            .toList();
         final headwordStr = headwords.join(' | ');
         allHeadwords.add(headwordStr);
 
@@ -157,7 +161,10 @@ class HomeScreen extends StatefulWidget {
             }
           } else {
             // Escape pseudo-tags in dictd, slob, etc. to prevent renderer truncation
-            return match.group(0)!.replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+            return match
+                .group(0)!
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;');
           }
         });
       }
@@ -327,10 +334,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
       final enrichmentWatch = HPerf.start('Search_Enrichment');
 
-      // The database helper now internally caches dictionary metadata, 
+      // The database helper now internally caches dictionary metadata,
       // so we can rely on it and avoid manual pre-fetching logic here.
 
-      // Group results by dictionary for batch fetching. 
+      // Group results by dictionary for batch fetching.
       // This is critical for performance on stateful readers (.dz, .mdx).
       final Map<int, List<Map<String, dynamic>>> resultsByDict = {};
       final Map<int, List<int>> originalIndicesByDict = {};
@@ -376,7 +383,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             );
 
             // We store ONLY the original result reference and the dictId.
-            // Dictionary metadata like name/format will be looked up during 
+            // Dictionary metadata like name/format will be looked up during
             // consolidation from the shared dictMap, avoiding 50k Map instances.
             resultsMetadata.add(req);
           }
@@ -411,24 +418,31 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         HPerf.end(enrichmentWatch, 'Search_Enrichment');
 
         // Sort finalGrouped by display_order so results respect user-configured priority.
+        // First, ensure dictionary cache is loaded for fast synchronous lookups.
+        await _dbHelper.getDictionaries();
+
         final sortedGroupedList = finalGrouped.entries.toList();
-        
-        // Sorting is now asynchronous because it looks up metadata via the DB helper (cached).
-        // Since we know the internal cache is likely populated by now (due to previous fetches), 
-        // we can either await each or use a helper. 
-        // Let's use a Future.wait approach for maximum safety and concurrency.
-        final List<({int dictId, int displayOrder, MapEntry<int, Map<String, List<Map<String, dynamic>>>> entry})> sortData = await Future.wait(
-          sortedGroupedList.map((entry) async {
-            final dict = await _dbHelper.getDictionaryById(entry.key);
-            return (
-              dictId: entry.key,
-              displayOrder: (dict?['display_order'] as int?) ?? 999,
-              entry: entry
-            );
-          }),
-        );
-        
-        sortData.sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
+        final List<
+          ({
+            int displayOrder,
+            int dictId,
+            MapEntry<int, Map<String, List<Map<String, dynamic>>>> entry,
+          })
+        >
+        sortData = sortedGroupedList.map((entry) {
+          final dict = _dbHelper.getDictionaryByIdSync(entry.key);
+          return (
+            displayOrder: (dict?['display_order'] as int?) ?? 999,
+            dictId: entry.key,
+            entry: entry,
+          );
+        }).toList();
+
+        sortData.sort((a, b) {
+          final orderCompare = a.displayOrder.compareTo(b.displayOrder);
+          if (orderCompare != 0) return orderCompare;
+          return a.dictId.compareTo(b.dictId);
+        });
         final finalizedEntries = sortData.map((d) => d.entry).toList();
 
         final consolidatedDefs = await HomeScreen.consolidateDefinitions(
@@ -531,7 +545,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     if (!mounted) return;
 
     final settings = context.read<SettingsProvider>();
-    
+
     // Check if we already prompted in this session
     if (settings.reviewPromptedThisSession) {
       return;
@@ -544,7 +558,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         return;
       }
     } else {
-      // In debug, if they already manually said they gave review, maybe stop? 
+      // In debug, if they already manually said they gave review, maybe stop?
       // But user said "for the session if the user avoids giving feedback in debug app mode"
     }
 
@@ -559,7 +573,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       if (await inAppReview.isAvailable()) {
         // Mark as prompted for this session BEFORE showing, so returning to home doesn't trigger it again
         settings.setReviewPromptedThisSession(true);
-        
+
         await settings.incrementReviewPromptCountAndSetNextDate();
         await inAppReview.requestReview();
       } else if (Platform.isLinux) {
@@ -568,31 +582,32 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         settings.setReviewPromptedThisSession(true);
         showDialog(
           context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Enjoying hdict?'),
-              content: const Text(
-                  'If you find this app useful, please consider giving it a rating or review on the Snap Store.'),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    settings.incrementReviewPromptCountAndSetNextDate();
-                  },
-                  child: const Text('Later'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    if (!kDebugMode) {
-                      settings.setHasGivenReview(true);
-                    }
-                    launchUrl(Uri.parse('https://snapcraft.io/hdict')); 
-                  },
-                  child: const Text('Rate on Snap Store'),
-                ),
-              ],
+          builder: (ctx) => AlertDialog(
+            title: const Text('Enjoying hdict?'),
+            content: const Text(
+              'If you find this app useful, please consider giving it a rating or review on the Snap Store.',
             ),
-          );
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  settings.incrementReviewPromptCountAndSetNextDate();
+                },
+                child: const Text('Later'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  if (!kDebugMode) {
+                    settings.setHasGivenReview(true);
+                  }
+                  launchUrl(Uri.parse('https://snapcraft.io/hdict'));
+                },
+                child: const Text('Rate on Snap Store'),
+              ),
+            ],
+          ),
+        );
       }
     }
   }
@@ -1144,7 +1159,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     final totalMs = searchTotalMs ?? _searchTotalMs;
                     final otherMs = searchOtherMs ?? _searchOtherMs;
                     final resultCount = searchResultCount ?? _searchResultCount;
-                    final dictName = defMap['dict_name'] ?? 'Unknown Dictionary';
+                    final dictName =
+                        defMap['dict_name'] ?? 'Unknown Dictionary';
 
                     return Text(
                       'Dictionary: $dictName\n'
@@ -1184,7 +1200,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
                     definitionHtml = '${defData['headwordHtml']}\n$processed';
                     if (showHtmlProcessing) {
-                      hDebugPrint('HomeScreen: Final definitionHtml: [$definitionHtml]');
+                      hDebugPrint(
+                        'HomeScreen: Final definitionHtml: [$definitionHtml]',
+                      );
                     }
                     defData['processedHtml'] =
                         definitionHtml; // Cache for subsequent scrolls
@@ -1197,8 +1215,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         children: [
                           MouseRegion(
                             cursor: settings.isTapOnMeaningEnabled
-                              ? SystemMouseCursors.click
-                              : MouseCursor.defer,
+                                ? SystemMouseCursors.click
+                                : MouseCursor.defer,
                             child: Builder(
                               builder: (ctx) => GestureDetector(
                                 behavior: HitTestBehavior.translucent,
@@ -1213,7 +1231,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                   final RenderBox? renderBox =
                                       ctx.findRenderObject() as RenderBox?;
                                   if (renderBox == null) {
-                                    hDebugPrint('Tap ignored: renderBox is null');
+                                    hDebugPrint(
+                                      'Tap ignored: renderBox is null',
+                                    );
                                     return;
                                   }
 
@@ -1226,7 +1246,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                     ),
                                   );
 
-                                  for (final HitTestEntry entry in result.path) {
+                                  for (final HitTestEntry entry
+                                      in result.path) {
                                     final target = entry.target;
                                     if (target is RenderParagraph) {
                                       final String text = target.text
@@ -1239,7 +1260,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                         continue;
 
                                       final Offset localOffset = target
-                                          .globalToLocal(details.globalPosition);
+                                          .globalToLocal(
+                                            details.globalPosition,
+                                          );
                                       final TextPosition pos = target
                                           .getPositionForOffset(localOffset);
                                       final String charAtOffset =
@@ -1255,8 +1278,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                         'Calculated TextOffset: ${pos.offset}, Char: "$charAtOffset"',
                                       );
 
-                                      final String? word = util
-                                          .WordBoundary.wordAt(text, pos.offset);
+                                      final String? word =
+                                          util.WordBoundary.wordAt(
+                                            text,
+                                            pos.offset,
+                                          );
                                       hDebugPrint(
                                         'Word tapped for search: $word',
                                       );
@@ -1280,7 +1306,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                       lineHeight: LineHeight.em(1.5),
                                       margin: Margins.zero,
                                       padding: HtmlPaddings.zero,
-                                      color: settings.getEffectiveTextColor(context),
+                                      color: settings.getEffectiveTextColor(
+                                        context,
+                                      ),
                                       fontFamily: settings.fontFamily,
                                     ),
                                     "a": Style(
@@ -1290,7 +1318,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                     "mark": Style(
                                       backgroundColor: Color(
                                         int.parse(
-                                          highlightCol.replaceFirst('#', '0xFF'),
+                                          highlightCol.replaceFirst(
+                                            '#',
+                                            '0xFF',
+                                          ),
                                         ),
                                       ),
                                       color: Colors.black,
@@ -1300,11 +1331,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                       textDecoration: TextDecoration.none,
                                     ),
                                     ".headword": Style(
-                                      color: settings.getEffectiveHeadwordColor(context),
+                                      color: settings.getEffectiveHeadwordColor(
+                                        context,
+                                      ),
                                       fontWeight: FontWeight.bold,
                                     ),
                                     ".headword a": Style(
-                                      color: settings.getEffectiveHeadwordColor(context),
+                                      color: settings.getEffectiveHeadwordColor(
+                                        context,
+                                      ),
                                       textDecoration: TextDecoration.none,
                                     ),
                                     ".headword .dict-word": Style(
@@ -1326,12 +1361,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                         if (await canLaunchUrl(uri)) {
                                           await launchUrl(
                                             uri,
-                                            mode: LaunchMode.externalApplication,
+                                            mode:
+                                                LaunchMode.externalApplication,
                                           );
                                         }
                                       } else {
                                         String wordToLookup = url;
-                                        if (wordToLookup.startsWith('look_up:')) {
+                                        if (wordToLookup.startsWith(
+                                          'look_up:',
+                                        )) {
                                           wordToLookup = wordToLookup.substring(
                                             8,
                                           );
@@ -1343,8 +1381,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                           );
                                         }
                                         try {
-                                          final word = wordToLookup.contains('%')
-                                              ? Uri.decodeComponent(wordToLookup)
+                                          final word =
+                                              wordToLookup.contains('%')
+                                              ? Uri.decodeComponent(
+                                                  wordToLookup,
+                                                )
                                               : wordToLookup;
                                           _showWordPopup(word);
                                         } catch (e) {
@@ -1562,24 +1603,37 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       groupedResults[dictId]![wordValue]!.add(res);
                     }
 
-                    // Sort by display order
-                    final List<({int dictId, int displayOrder, MapEntry<int, Map<String, List<Map<String, dynamic>>>> entry})> sortData = await Future.wait(
-                      groupedResults.entries.map((entry) async {
-                        final dict = await _dbHelper.getDictionaryById(entry.key);
-                        return (
-                          dictId: entry.key,
-                          displayOrder: (dict?['display_order'] as int?) ?? 999,
-                          entry: entry
-                        );
-                      }),
-                    );
-                    
-                    sortData.sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
+                    // Sort by display order - first warm cache then use sync lookup
+                    await _dbHelper.getDictionaries();
+
+                    final List<
+                      ({
+                        int displayOrder,
+                        int dictId,
+                        MapEntry<int, Map<String, List<Map<String, dynamic>>>>
+                        entry,
+                      })
+                    >
+                    sortData = groupedResults.entries.map((entry) {
+                      final dict = _dbHelper.getDictionaryByIdSync(entry.key);
+                      return (
+                        displayOrder: (dict?['display_order'] as int?) ?? 999,
+                        dictId: entry.key,
+                        entry: entry,
+                      );
+                    }).toList();
+
+                    sortData.sort((a, b) {
+                      final orderCompare = a.displayOrder.compareTo(
+                        b.displayOrder,
+                      );
+                      if (orderCompare != 0) return orderCompare;
+                      return a.dictId.compareTo(b.dictId);
+                    });
                     final sortedEntries = sortData.map((d) => d.entry).toList();
 
-                    final consolidated = await HomeScreen.consolidateDefinitions(
-                      sortedEntries,
-                    );
+                    final consolidated =
+                        await HomeScreen.consolidateDefinitions(sortedEntries);
 
                     HPerf.end(enrichmentWatch, 'Pop-up_Enrichment');
                     HPerf.end(totalWatch, 'Pop-up_Total');

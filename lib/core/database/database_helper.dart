@@ -31,7 +31,9 @@ class DatabaseHelper {
   DatabaseHelper._internal();
 
   /// LRU Cache for SQLite search results.
-  /// Key: "$headwordQuery|$headwordMode|$definitionQuery|$definitionMode|$dictId|$limit"
+  /// Key: "$headwordQuery|$headwordMode|$definitionQuery|$definitionMode|$dictId|$limit|$dictOrderKey"
+  /// where dictOrderKey is either "dictId1:order1,dictId2:order2,..." for multi-dict
+  /// or "dictId:order" for single-dict searches.
   final LinkedHashMap<String, List<Map<String, dynamic>>> _queryCache =
       LinkedHashMap<String, List<Map<String, dynamic>>>();
   static const int _maxQueryCacheEntries = 100;
@@ -940,6 +942,12 @@ class DatabaseHelper {
       storedPath = path.substring(path.indexOf('dictionaries/'));
     }
 
+    // Get the next display_order (max + 1) to ensure correct ordering
+    final maxOrderResult = await db.rawQuery(
+      'SELECT COALESCE(MAX(display_order), -1) + 1 as next_order FROM dictionaries',
+    );
+    final nextOrder = maxOrderResult.first['next_order'] as int;
+
     clearQueryCache();
     clearDictionaryCache();
     return await db.insert('dictionaries', {
@@ -955,6 +963,7 @@ class DatabaseHelper {
       'source_type': sourceType,
       'source_bookmark': sourceBookmark,
       'companion_uri': companionUri,
+      'display_order': nextOrder,
     });
   }
 
@@ -1457,6 +1466,10 @@ class DatabaseHelper {
     _dictionaryMapCache = {for (final d in dicts) d['id'] as int: d};
   }
 
+  Map<String, dynamic>? getDictionaryByIdSync(int id) {
+    return _dictionaryMapCache?[id];
+  }
+
   Future<Map<String, dynamic>?> getDictionaryById(int id) async {
     await _ensureDictionaryMapCache();
     return _dictionaryMapCache?[id];
@@ -1615,8 +1628,25 @@ class DatabaseHelper {
     int? dictId,
     int limit = 50,
   }) async {
+    // Include enabled dictionaries and their order in cache key to ensure
+    // results respect user-configured dictionary priority.
+    String dictOrderKey = '';
+    if (dictId == null) {
+      // Multi-dictionary search: include all enabled dict IDs and their display_order
+      final enabledDicts = await getEnabledDictionaries();
+      dictOrderKey = enabledDicts
+          .map((d) => '${d['id']}:${d['display_order']}')
+          .join(',');
+    } else {
+      // Single dictionary search: include that dict's display_order
+      final dict = await getDictionaryById(dictId);
+      if (dict != null) {
+        dictOrderKey = '${dict['id']}:${dict['display_order']}';
+      }
+    }
+
     final String cacheKey =
-        '$headwordQuery|$headwordMode|$definitionQuery|$definitionMode|$dictId|$limit';
+        '$headwordQuery|$headwordMode|$definitionQuery|$definitionMode|$dictId|$limit|$dictOrderKey';
     final cachedResults = _getFromQueryCache(cacheKey);
     if (cachedResults != null) {
       HPerf.record('searchWords_CacheHit', 0);
@@ -1794,7 +1824,8 @@ class DatabaseHelper {
         ORDER BY 
           d.display_order ASC,
           ${headwordQuery != null ? "(m.word = ?) DESC," : ""}
-          m.word ASC
+          m.word ASC,
+          d.id ASC
         LIMIT ?
       ''';
 
@@ -1868,6 +1899,7 @@ class DatabaseHelper {
     final List<Object?> args = [];
 
     for (int i = 0; i < dicts.length; i++) {
+      final sortOrder = dicts[i]['display_order'] as int? ?? i;
       subQueries.add('''
         SELECT * FROM (
           SELECT word, dict_id, offset, length, ? as sort_order 
@@ -1876,7 +1908,7 @@ class DatabaseHelper {
           ORDER BY word ASC LIMIT ?
         )
       ''');
-      args.addAll([i, dicts[i]['id'], likePattern, limit]);
+      args.addAll([sortOrder, dicts[i]['id'], likePattern, limit]);
     }
 
     final String finalSql =
@@ -1885,7 +1917,7 @@ class DatabaseHelper {
       FROM (
         ${subQueries.join(' UNION ALL ')}
       )
-      ORDER BY sort_order ASC, word ASC
+      ORDER BY sort_order ASC, dict_id ASC, word ASC
       LIMIT ?
     ''';
     args.add(limit);
