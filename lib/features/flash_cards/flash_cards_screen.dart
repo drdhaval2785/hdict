@@ -46,10 +46,10 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
       vsync: this,
       duration: const Duration(milliseconds: 100),
     );
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(1.0, 0),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic));
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(1.0, 0), end: Offset.zero).animate(
+          CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic),
+        );
     _loadDictionaries();
   }
 
@@ -93,17 +93,22 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
 
       final List<Map<String, dynamic>> allAvailableWordMetas = [];
       final List<int> selectedDictIdsList = _selectedDictIds.toList();
-      
+
       // If too many dictionaries selected, pick a reasonable subset to avoid massive query storms
       if (selectedDictIdsList.length > 50) {
         selectedDictIdsList.shuffle();
         selectedDictIdsList.removeRange(50, selectedDictIdsList.length);
       }
 
-      hDebugPrint('FlashCards: Fetching word metas from ${selectedDictIdsList.length} dicts for targetCount $targetCount');
+      hDebugPrint(
+        'FlashCards: Fetching word metas from ${selectedDictIdsList.length} dicts for targetCount $targetCount',
+      );
 
-      final results = await _dbHelper.getBatchSampleWords(targetCount, selectedDictIdsList);
-      
+      final results = await _dbHelper.getBatchSampleWords(
+        targetCount,
+        selectedDictIdsList,
+      );
+
       for (var meta in results) {
         allAvailableWordMetas.add({
           'word': meta['word'],
@@ -113,13 +118,17 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
         });
       }
 
-      hDebugPrint('FlashCards: Meta fetch complete. Found ${allAvailableWordMetas.length} words in ${stopwatch.elapsedMilliseconds}ms');
+      hDebugPrint(
+        'FlashCards: Meta fetch complete. Found ${allAvailableWordMetas.length} words in ${stopwatch.elapsedMilliseconds}ms',
+      );
 
       if (allAvailableWordMetas.length < targetCount) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Not enough words in selected dictionaries (need $targetCount).'),
+              content: Text(
+                'Not enough words in selected dictionaries (need $targetCount).',
+              ),
             ),
           );
         }
@@ -138,7 +147,9 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
         }
       }
 
-      hDebugPrint('FlashCards: Random selection complete. Initializing session without upfront meanings.');
+      hDebugPrint(
+        'FlashCards: Random selection complete. Initializing session without upfront meanings.',
+      );
 
       final List<Map<String, dynamic>> quizWords = [];
       for (var meta in allAvailableWordMetas) {
@@ -169,9 +180,9 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
     } catch (e, s) {
       hDebugPrint('FlashCards: Global error in _startQuiz: $e\n$s');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error starting quiz: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error starting quiz: $e')));
       }
     } finally {
       if (mounted) {
@@ -226,6 +237,11 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
         _currentIndex = 0;
       });
     } else {
+      _dbHelper.addFlashCardScore(
+        _score,
+        _quizWords.length,
+        _selectedDictIds.join(','),
+      );
       setState(() {
         _isQuizStarted = false;
       });
@@ -240,7 +256,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
     if (mounted) {
       setState(() => _isFetchingMeaning = true);
     }
-    
+
     try {
       final dict = await _dbHelper.getDictionaryById(wordData['dict_id']);
       if (dict != null) {
@@ -345,7 +361,9 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 50),
                 ),
-                child: Text('Start Random Session (${settings.flashCardWordCount} words)'),
+                child: Text(
+                  'Start Random Session (${settings.flashCardWordCount} words)',
+                ),
               ),
             ),
           ),
@@ -360,7 +378,9 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
 
     return Scaffold(
       drawer: const AppDrawer(),
-      appBar: AppBar(title: Text('Word ${_currentIndex + 1} of ${_quizWords.length}')),
+      appBar: AppBar(
+        title: Text('Word ${_currentIndex + 1} of ${_quizWords.length}'),
+      ),
       body: Column(
         children: [
           Container(
@@ -369,7 +389,10 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
               children: [
                 Text(
                   currentWord['word'],
-                  style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    fontSize: 48,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 32),
                 Row(
@@ -391,7 +414,11 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                 const SizedBox(height: 16),
                 TextButton.icon(
                   onPressed: _peekMeaning,
-                  icon: Icon(_isPeeking ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                  icon: Icon(
+                    _isPeeking
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                  ),
                   label: Text(_isPeeking ? 'Hide Meaning' : 'Check Meaning'),
                   style: TextButton.styleFrom(
                     foregroundColor: Theme.of(context).colorScheme.primary,
@@ -409,23 +436,39 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                       decoration: BoxDecoration(
                         color: settings.getEffectiveBackgroundColor(context),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Theme.of(context).dividerColor),
+                        border: Border.all(
+                          color: Theme.of(context).dividerColor,
+                        ),
                       ),
                       child: _isFetchingMeaning
                           ? const Center(child: CircularProgressIndicator())
                           : Column(
                               children: [
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.5),
-                                    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .secondaryContainer
+                                        .withValues(alpha: 0.5),
+                                    borderRadius: const BorderRadius.vertical(
+                                      top: Radius.circular(16),
+                                    ),
                                   ),
                                   child: const Row(
                                     children: [
                                       Icon(Icons.menu_book_outlined, size: 16),
                                       SizedBox(width: 8),
-                                      Text('Meaning Snippet', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                      Text(
+                                        'Meaning Snippet',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -440,48 +483,91 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                                         builder: (ctx) => GestureDetector(
                                           behavior: HitTestBehavior.translucent,
                                           onTapUp: (details) {
-                                            if (!settings.isTapOnMeaningEnabled) {
-                                              hDebugPrint('FlashCards (meaning header): Tap ignored: isTapOnMeaningEnabled is false');
+                                            if (!settings
+                                                .isTapOnMeaningEnabled) {
+                                              hDebugPrint(
+                                                'FlashCards (meaning header): Tap ignored: isTapOnMeaningEnabled is false',
+                                              );
                                               return;
                                             }
-                                            final RenderBox? renderBox = ctx.findRenderObject() as RenderBox?;
+                                            final RenderBox? renderBox =
+                                                ctx.findRenderObject()
+                                                    as RenderBox?;
                                             if (renderBox == null) {
-                                              hDebugPrint('FlashCards (meaning header): Tap ignored: renderBox is null');
+                                              hDebugPrint(
+                                                'FlashCards (meaning header): Tap ignored: renderBox is null',
+                                              );
                                               return;
                                             }
-                                            final BoxHitTestResult result = BoxHitTestResult();
-                                            renderBox.hitTest(result, position: renderBox.globalToLocal(details.globalPosition));
-                                            for (final HitTestEntry entry in result.path) {
+                                            final BoxHitTestResult result =
+                                                BoxHitTestResult();
+                                            renderBox.hitTest(
+                                              result,
+                                              position: renderBox.globalToLocal(
+                                                details.globalPosition,
+                                              ),
+                                            );
+                                            for (final HitTestEntry entry
+                                                in result.path) {
                                               final target = entry.target;
                                               if (target is RenderParagraph) {
-                                                final String text = target.text.toPlainText();
-                                                if (text.replaceAll('\uFFFC', '').trim().isEmpty) continue;
-                                                final Offset localOffset = target.globalToLocal(details.globalPosition);
-                                                final TextPosition pos = target.getPositionForOffset(localOffset);
-                                                final String? word = util.WordBoundary.wordAt(text, pos.offset);
-                                                hDebugPrint('FlashCards (meaning header): Word tapped for search: $word');
-                                                if (word != null && word.trim().isNotEmpty) {
+                                                final String text = target.text
+                                                    .toPlainText();
+                                                if (text
+                                                    .replaceAll('\uFFFC', '')
+                                                    .trim()
+                                                    .isEmpty)
+                                                  continue;
+                                                final Offset localOffset =
+                                                    target.globalToLocal(
+                                                      details.globalPosition,
+                                                    );
+                                                final TextPosition pos = target
+                                                    .getPositionForOffset(
+                                                      localOffset,
+                                                    );
+                                                final String? word =
+                                                    util.WordBoundary.wordAt(
+                                                      text,
+                                                      pos.offset,
+                                                    );
+                                                hDebugPrint(
+                                                  'FlashCards (meaning header): Word tapped for search: $word',
+                                                );
+                                                if (word != null &&
+                                                    word.trim().isNotEmpty) {
                                                   _showWordPopup(word);
                                                   return;
                                                 }
                                               }
                                             }
-                                            hDebugPrint('FlashCards (meaning header): HitTest found no valid text paragraph.');
+                                            hDebugPrint(
+                                              'FlashCards (meaning header): HitTest found no valid text paragraph.',
+                                            );
                                           },
                                           child: Html(
                                             data: currentWord['meaning'] ?? '',
                                             style: {
                                               "body": Style(
-                                                fontSize: FontSize(settings.fontSize - 2),
+                                                fontSize: FontSize(
+                                                  settings.fontSize - 2,
+                                                ),
                                                 lineHeight: LineHeight.em(1.4),
                                                 margin: Margins.zero,
                                                 padding: HtmlPaddings.zero,
-                                                color: settings.getEffectiveTextColor(context),
+                                                color: settings
+                                                    .getEffectiveTextColor(
+                                                      context,
+                                                    ),
                                                 fontFamily: settings.fontFamily,
                                               ),
                                               "a": Style(
-                                                color: settings.getEffectiveTextColor(context),
-                                                textDecoration: TextDecoration.none,
+                                                color: settings
+                                                    .getEffectiveTextColor(
+                                                      context,
+                                                    ),
+                                                textDecoration:
+                                                    TextDecoration.none,
                                               ),
                                             },
                                           ),
@@ -546,7 +632,9 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                     wasCorrect ? 'Correct Guess' : 'Incorrect Guess',
                     style: TextStyle(
                       fontSize: 12,
-                      color: wasCorrect ? Colors.green.withValues(alpha: 0.8) : Colors.red.withValues(alpha: 0.8),
+                      color: wasCorrect
+                          ? Colors.green.withValues(alpha: 0.8)
+                          : Colors.red.withValues(alpha: 0.8),
                     ),
                   ),
                   trailing: Row(
@@ -554,7 +642,9 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                     children: [
                       IconButton(
                         icon: Icon(
-                          wasCorrect ? Icons.check_circle : Icons.check_circle_outline,
+                          wasCorrect
+                              ? Icons.check_circle
+                              : Icons.check_circle_outline,
                           color: wasCorrect ? Colors.green : Colors.grey,
                         ),
                         onPressed: () {
@@ -586,79 +676,116 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                     Container(
                       padding: const EdgeInsets.all(16),
                       child: wordData['meaning'] == null
-                          ? const Center(child: Padding(
-                              padding: EdgeInsets.all(8.0),
-                              child: CircularProgressIndicator(),
-                            ))
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(8.0),
+                                child: CircularProgressIndicator(),
+                              ),
+                            )
                           : MouseRegion(
-                        cursor: settings.isTapOnMeaningEnabled
-                            ? SystemMouseCursors.click
-                            : MouseCursor.defer,
-                        child: Builder(
-                          builder: (ctx) => GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onTapUp: (details) {
-                            if (!settings.isTapOnMeaningEnabled) {
-                              hDebugPrint('FlashCards (review): Tap ignored: isTapOnMeaningEnabled is false');
-                              return;
-                            }
-                            final RenderBox? renderBox = ctx.findRenderObject() as RenderBox?;
-                            if (renderBox == null) {
-                              hDebugPrint('FlashCards (review): Tap ignored: renderBox is null');
-                              return;
-                            }
-                            final BoxHitTestResult result = BoxHitTestResult();
-                            renderBox.hitTest(result, position: renderBox.globalToLocal(details.globalPosition));
-                            for (final HitTestEntry entry in result.path) {
-                              final target = entry.target;
-                              if (target is RenderParagraph) {
-                                final String text = target.text.toPlainText();
-                                if (text.replaceAll('\uFFFC', '').trim().isEmpty) continue;
-                                final Offset localOffset = target.globalToLocal(details.globalPosition);
-                                final TextPosition pos = target.getPositionForOffset(localOffset);
-                                final String? word = util.WordBoundary.wordAt(text, pos.offset);
-                                hDebugPrint('FlashCards (review): Word tapped for search: $word');
-                                if (word != null && word.trim().isNotEmpty) {
-                                  _showWordPopup(word);
-                                  return;
-                                }
-                              }
-                            }
-                            hDebugPrint('FlashCards (review): HitTest found no valid text paragraph.');
-                          },
-                          child: Html(
-                            data: wordData['meaning'],
-                          style: {
-                            "body": Style(
-                              fontSize: FontSize(settings.fontSize),
-                              lineHeight: LineHeight.em(1.5),
-                              margin: Margins.zero,
-                              padding: HtmlPaddings.zero,
-                              color: settings.getEffectiveTextColor(context),
-                              fontFamily: settings.fontFamily,
+                              cursor: settings.isTapOnMeaningEnabled
+                                  ? SystemMouseCursors.click
+                                  : MouseCursor.defer,
+                              child: Builder(
+                                builder: (ctx) => GestureDetector(
+                                  behavior: HitTestBehavior.translucent,
+                                  onTapUp: (details) {
+                                    if (!settings.isTapOnMeaningEnabled) {
+                                      hDebugPrint(
+                                        'FlashCards (review): Tap ignored: isTapOnMeaningEnabled is false',
+                                      );
+                                      return;
+                                    }
+                                    final RenderBox? renderBox =
+                                        ctx.findRenderObject() as RenderBox?;
+                                    if (renderBox == null) {
+                                      hDebugPrint(
+                                        'FlashCards (review): Tap ignored: renderBox is null',
+                                      );
+                                      return;
+                                    }
+                                    final BoxHitTestResult result =
+                                        BoxHitTestResult();
+                                    renderBox.hitTest(
+                                      result,
+                                      position: renderBox.globalToLocal(
+                                        details.globalPosition,
+                                      ),
+                                    );
+                                    for (final HitTestEntry entry
+                                        in result.path) {
+                                      final target = entry.target;
+                                      if (target is RenderParagraph) {
+                                        final String text = target.text
+                                            .toPlainText();
+                                        if (text
+                                            .replaceAll('\uFFFC', '')
+                                            .trim()
+                                            .isEmpty)
+                                          continue;
+                                        final Offset localOffset = target
+                                            .globalToLocal(
+                                              details.globalPosition,
+                                            );
+                                        final TextPosition pos = target
+                                            .getPositionForOffset(localOffset);
+                                        final String? word =
+                                            util.WordBoundary.wordAt(
+                                              text,
+                                              pos.offset,
+                                            );
+                                        hDebugPrint(
+                                          'FlashCards (review): Word tapped for search: $word',
+                                        );
+                                        if (word != null &&
+                                            word.trim().isNotEmpty) {
+                                          _showWordPopup(word);
+                                          return;
+                                        }
+                                      }
+                                    }
+                                    hDebugPrint(
+                                      'FlashCards (review): HitTest found no valid text paragraph.',
+                                    );
+                                  },
+                                  child: Html(
+                                    data: wordData['meaning'],
+                                    style: {
+                                      "body": Style(
+                                        fontSize: FontSize(settings.fontSize),
+                                        lineHeight: LineHeight.em(1.5),
+                                        margin: Margins.zero,
+                                        padding: HtmlPaddings.zero,
+                                        color: settings.getEffectiveTextColor(
+                                          context,
+                                        ),
+                                        fontFamily: settings.fontFamily,
+                                      ),
+                                      "a": Style(
+                                        color: settings.getEffectiveTextColor(
+                                          context,
+                                        ),
+                                        textDecoration: TextDecoration.none,
+                                      ),
+                                    },
+                                    onLinkTap: (url, attributes, element) {
+                                      if (url != null &&
+                                          url.startsWith('look_up:')) {
+                                        final encodedWord = url.substring(8);
+                                        try {
+                                          final word = encodedWord.contains('%')
+                                              ? Uri.decodeComponent(encodedWord)
+                                              : encodedWord;
+                                          _showWordPopup(word);
+                                        } catch (e) {
+                                          _showWordPopup(encodedWord);
+                                        }
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ),
                             ),
-                            "a": Style(
-                              color: settings.getEffectiveTextColor(context),
-                              textDecoration: TextDecoration.none,
-                            ),
-                          },
-                          onLinkTap: (url, attributes, element) {
-                            if (url != null && url.startsWith('look_up:')) {
-                              final encodedWord = url.substring(8);
-                              try {
-                                final word = encodedWord.contains('%')
-                                    ? Uri.decodeComponent(encodedWord)
-                                    : encodedWord;
-                                _showWordPopup(word);
-                              } catch (e) {
-                                _showWordPopup(encodedWord);
-                              }
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                    ),
                     ),
                   ],
                 );
@@ -713,11 +840,17 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.primaryContainer,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(20),
+                ),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.info_outline, size: 20, color: Colors.orange),
+                  const Icon(
+                    Icons.info_outline,
+                    size: 20,
+                    color: Colors.orange,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -738,14 +871,13 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
             Expanded(
               child: FutureBuilder<List<Map<String, dynamic>>>(
                 future: () async {
-
                   // 1. Try exact match first
 
-                  List<Map<String, dynamic>> candidates =
-                      await _dbHelper.searchWords(
-                    headwordQuery: word,
-                    headwordMode: SearchMode.exact,
-                  );
+                  List<Map<String, dynamic>> candidates = await _dbHelper
+                      .searchWords(
+                        headwordQuery: word,
+                        headwordMode: SearchMode.exact,
+                      );
 
                   // 2. Fallback to prefix if exact fails
                   if (candidates.isEmpty) {
@@ -757,39 +889,49 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                   // 3. Parallel fetch & pre-process
 
                   // 3. Parallel fetch & pre-process
-                  final results = await Future.wait(candidates.map((res) async {
-                    final dict =
-                        await _dbHelper.getDictionaryById(res['dict_id']);
-                    if (dict == null || dict['is_enabled'] != 1) return null;
+                  final results = await Future.wait(
+                    candidates.map((res) async {
+                      final dict = await _dbHelper.getDictionaryById(
+                        res['dict_id'],
+                      );
+                      if (dict == null || dict['is_enabled'] != 1) return null;
 
-                    String content =
-                        await DictionaryManager.instance.fetchDefinition(
-                              dict,
-                              res['word'],
-                              res['offset'],
-                              res['length'],
-                            ) ??
-                            '';
+                      String content =
+                          await DictionaryManager.instance.fetchDefinition(
+                            dict,
+                            res['word'],
+                            res['offset'],
+                            res['length'],
+                          ) ??
+                          '';
 
-                    content = HtmlLookupWrapper.processRecord(
-                      html: content,
-                      format: dict['format'] ?? 'stardict',
-                      underlineQuery: word, // Performance: highlight is same as underline in this wrapper now
-                    );
+                      content = HtmlLookupWrapper.processRecord(
+                        html: content,
+                        format: dict['format'] ?? 'stardict',
+                        underlineQuery:
+                            word, // Performance: highlight is same as underline in this wrapper now
+                      );
 
-                    return {
-                      'word': res['word'],
-                      'dict_name': dict['name'],
-                      'definition': content,
-                    };
-                  }));
+                      return {
+                        'word': res['word'],
+                        'dict_name': dict['name'],
+                        'definition': content,
+                      };
+                    }),
+                  );
                   return results.whereType<Map<String, dynamic>>().toList();
                 }(),
                 builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-                  if (!snapshot.hasData || snapshot.data!.isEmpty) return const Center(child: Text('No definition found.'));
+                  if (snapshot.connectionState == ConnectionState.waiting)
+                    return const Center(child: CircularProgressIndicator());
+                  if (!snapshot.hasData || snapshot.data!.isEmpty)
+                    return const Center(child: Text('No definition found.'));
                   final defs = snapshot.data!;
-                  if (defs.length == 1) return _buildDefinitionContentInPopup(Theme.of(context), defs.first);
+                  if (defs.length == 1)
+                    return _buildDefinitionContentInPopup(
+                      Theme.of(context),
+                      defs.first,
+                    );
                   return DefaultTabController(
                     length: defs.length,
                     child: Column(
@@ -798,11 +940,20 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                           isScrollable: true,
                           labelColor: Theme.of(context).colorScheme.primary,
                           unselectedLabelColor: Colors.grey,
-                          tabs: defs.map((d) => Tab(text: d['dict_name'])).toList(),
+                          tabs: defs
+                              .map((d) => Tab(text: d['dict_name']))
+                              .toList(),
                         ),
                         Expanded(
                           child: TabBarView(
-                            children: defs.map((d) => _buildDefinitionContentInPopup(Theme.of(context), d)).toList(),
+                            children: defs
+                                .map(
+                                  (d) => _buildDefinitionContentInPopup(
+                                    Theme.of(context),
+                                    d,
+                                  ),
+                                )
+                                .toList(),
                           ),
                         ),
                       ],
@@ -817,19 +968,30 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
     );
   }
 
-  Widget _buildDefinitionContentInPopup(ThemeData theme, Map<String, dynamic> def) {
+  Widget _buildDefinitionContentInPopup(
+    ThemeData theme,
+    Map<String, dynamic> def,
+  ) {
     final settings = context.watch<SettingsProvider>();
     // HTML is now pre-processed and cached in the Future result
     final String definitionHtml = def['definition'];
 
     return Container(
-            color: settings.getEffectiveBackgroundColor(context),
+      color: settings.getEffectiveBackgroundColor(context),
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(def['word'], style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: settings.getEffectiveHeadwordColor(context), fontFamily: settings.fontFamily, fontSize: settings.fontSize + 8)),
+            Text(
+              def['word'],
+              style: theme.textTheme.headlineMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: settings.getEffectiveHeadwordColor(context),
+                fontFamily: settings.fontFamily,
+                fontSize: settings.fontSize + 8,
+              ),
+            ),
             const Divider(height: 32),
             MouseRegion(
               cursor: settings.isTapOnMeaningEnabled
@@ -837,54 +999,89 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                   : MouseCursor.defer,
               child: Builder(
                 builder: (ctx) => GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onTapUp: (details) {
-                  if (!settings.isTapOnMeaningEnabled) {
-                    hDebugPrint('FlashCards (popup): Tap ignored: isTapOnMeaningEnabled is false');
-                    return;
-                  }
-                  final RenderBox? renderBox = ctx.findRenderObject() as RenderBox?;
-                  if (renderBox == null) {
-                    hDebugPrint('FlashCards (popup): Tap ignored: renderBox is null');
-                    return;
-                  }
-                  final BoxHitTestResult result = BoxHitTestResult();
-                  renderBox.hitTest(result, position: renderBox.globalToLocal(details.globalPosition));
-                  for (final HitTestEntry entry in result.path) {
-                    final target = entry.target;
-                    if (target is RenderParagraph) {
-                      final String text = target.text.toPlainText();
-                      if (text.replaceAll('\uFFFC', '').trim().isEmpty) continue;
-                      final Offset localOffset = target.globalToLocal(details.globalPosition);
-                      final TextPosition pos = target.getPositionForOffset(localOffset);
-                      final String? tappedWord = util.WordBoundary.wordAt(text, pos.offset);
-                      hDebugPrint('FlashCards (popup): Word tapped for search: $tappedWord');
-                      if (tappedWord != null && tappedWord.trim().isNotEmpty) {
-                        Navigator.pop(context);
-                        _showWordPopup(tappedWord);
-                        return;
+                  behavior: HitTestBehavior.translucent,
+                  onTapUp: (details) {
+                    if (!settings.isTapOnMeaningEnabled) {
+                      hDebugPrint(
+                        'FlashCards (popup): Tap ignored: isTapOnMeaningEnabled is false',
+                      );
+                      return;
+                    }
+                    final RenderBox? renderBox =
+                        ctx.findRenderObject() as RenderBox?;
+                    if (renderBox == null) {
+                      hDebugPrint(
+                        'FlashCards (popup): Tap ignored: renderBox is null',
+                      );
+                      return;
+                    }
+                    final BoxHitTestResult result = BoxHitTestResult();
+                    renderBox.hitTest(
+                      result,
+                      position: renderBox.globalToLocal(details.globalPosition),
+                    );
+                    for (final HitTestEntry entry in result.path) {
+                      final target = entry.target;
+                      if (target is RenderParagraph) {
+                        final String text = target.text.toPlainText();
+                        if (text.replaceAll('\uFFFC', '').trim().isEmpty)
+                          continue;
+                        final Offset localOffset = target.globalToLocal(
+                          details.globalPosition,
+                        );
+                        final TextPosition pos = target.getPositionForOffset(
+                          localOffset,
+                        );
+                        final String? tappedWord = util.WordBoundary.wordAt(
+                          text,
+                          pos.offset,
+                        );
+                        hDebugPrint(
+                          'FlashCards (popup): Word tapped for search: $tappedWord',
+                        );
+                        if (tappedWord != null &&
+                            tappedWord.trim().isNotEmpty) {
+                          Navigator.pop(context);
+                          _showWordPopup(tappedWord);
+                          return;
+                        }
                       }
                     }
-                  }
-                  hDebugPrint('FlashCards (popup): HitTest found no valid text paragraph.');
-                },
-                child: Html(
-                  data: definitionHtml,
-                  style: {
-                    "body": Style(fontSize: FontSize(settings.fontSize), lineHeight: LineHeight.em(1.5), margin: Margins.zero, padding: HtmlPaddings.zero, color: settings.textColor, fontFamily: settings.fontFamily),
-                    "a": Style(color: settings.textColor, textDecoration: TextDecoration.none),
+                    hDebugPrint(
+                      'FlashCards (popup): HitTest found no valid text paragraph.',
+                    );
                   },
+                  child: Html(
+                    data: definitionHtml,
+                    style: {
+                      "body": Style(
+                        fontSize: FontSize(settings.fontSize),
+                        lineHeight: LineHeight.em(1.5),
+                        margin: Margins.zero,
+                        padding: HtmlPaddings.zero,
+                        color: settings.textColor,
+                        fontFamily: settings.fontFamily,
+                      ),
+                      "a": Style(
+                        color: settings.textColor,
+                        textDecoration: TextDecoration.none,
+                      ),
+                    },
+                  ),
                 ),
               ),
             ),
-          ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildActionButton(IconData icon, Color color, VoidCallback onPressed) {
+  Widget _buildActionButton(
+    IconData icon,
+    Color color,
+    VoidCallback onPressed,
+  ) {
     return Material(
       color: color,
       shape: const CircleBorder(),
