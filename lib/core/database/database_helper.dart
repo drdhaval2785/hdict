@@ -1021,20 +1021,37 @@ class DatabaseHelper {
     final random = Random();
     final List<Map<String, dynamic>> results = [];
 
-    // 2. High-speed O(1) rowid strategy (if metadata is available)
+    // 2. High-speed bulk rowid strategy (if metadata is available)
     if (startRowId != null && endRowId != null) {
       final int range = endRowId - startRowId + 1;
-      for (int i = 0; i < limit * 2 && results.length < limit; i++) {
-        int randomRowId = startRowId + random.nextInt(range);
+      final Set<int> randomIds = {};
+      // Oversample by 20% to account for potential gaps, but at least fetch 'limit' unique IDs or range size
+      int fetchCount = (limit * 1.2).ceil();
+      if (fetchCount > range) fetchCount = range;
+
+      while (randomIds.length < fetchCount && randomIds.length < range) {
+        randomIds.add(startRowId + random.nextInt(range));
+      }
+
+      if (randomIds.isNotEmpty) {
+        final String idList = randomIds.join(',');
         final res = await db.query(
           'word_metadata',
           columns: ['word', 'offset', 'length', 'dict_id'],
-          where: 'id = ? AND dict_id = ?',
-          whereArgs: [randomRowId, dictId],
+          where: 'id IN ($idList) AND dict_id = ?',
+          whereArgs: [dictId],
         );
-        if (res.isNotEmpty) results.add(res.first);
+        
+        if (res.isNotEmpty) {
+          results.addAll(res);
+          // Shuffle because IN clause doesn't guarantee order and we want randomness
+          results.shuffle();
+          if (results.length > limit) {
+            return results.sublist(0, limit);
+          }
+          return results;
+        }
       }
-      if (results.isNotEmpty) return results;
     }
 
     // 3. Fallback: Slow O(N) scan strategy (if rowid metadata missing)

@@ -51,7 +51,6 @@ class HomeScreen extends StatefulWidget {
     Map<int, Map<String, dynamic>>? dictMap,
   }) async {
     final List<Map<String, dynamic>> consolidated = [];
-    final dbHelper = DatabaseHelper();
     for (final dictEntry in groupedResults) {
       final dictId = dictEntry.key;
       final uniqueKeyMap = dictEntry.value;

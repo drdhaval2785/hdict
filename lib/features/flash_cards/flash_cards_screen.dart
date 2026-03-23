@@ -88,8 +88,23 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
     final targetCount = settings.flashCardWordCount;
 
     final List<Map<String, dynamic>> allAvailableWordMetas = [];
-    for (var dictId in _selectedDictIds) {
-      final metas = await _dbHelper.getSampleWords(dictId, limit: 100);
+    final List<int> selectedDictIdsList = _selectedDictIds.toList();
+    
+    // If too many dictionaries selected, pick a reasonable subset to avoid massive query storms
+    // 50 queries is a decent limit for a fast user experience
+    if (selectedDictIdsList.length > 50) {
+      selectedDictIdsList.shuffle();
+      selectedDictIdsList.removeRange(50, selectedDictIdsList.length);
+    }
+
+    // Calculate how many words to fetch from each dictionary to reach target
+    // We fetch a bit more (e.g. 2x) to ensure variety during local randomization
+    int fetchPerDict = (targetCount * 2 / selectedDictIdsList.length).ceil();
+    if (fetchPerDict < 5) fetchPerDict = 5;
+    if (fetchPerDict > 100) fetchPerDict = 100; // Cap at 100 even for single dict
+
+    for (var dictId in selectedDictIdsList) {
+      final metas = await _dbHelper.getSampleWords(dictId, limit: fetchPerDict);
       for (var meta in metas) {
         allAvailableWordMetas.add({
           'word': meta['word'],

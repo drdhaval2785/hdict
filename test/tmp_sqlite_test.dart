@@ -13,5 +13,6 @@ void main() async {
       SELECT * FROM (SELECT val, id, 2 as sort_order FROM foo WHERE id = 2 ORDER BY val ASC LIMIT 2)
     ) ORDER BY sort_order ASC, val ASC LIMIT 3
   ''');
+  // ignore: avoid_print
   print(res);
 }
