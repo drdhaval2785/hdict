@@ -1,18 +1,18 @@
 import 'dart:typed_data';
 import 'package:hdict/core/parser/random_access_source.dart';
-import 'mdict/mdict_parser.dart';
+import 'package:dict_reader/dict_reader.dart' as dr;
 
 class MddReader {
   final RandomAccessSource source;
   final String _path;
-  late MdxParser _parser;
+  late dr.DictReader _parser;
   bool _isInitialized = false;
 
   final Map<String, Uint8List> _resourceCache = {};
   static const int _maxCacheEntries = 100;
 
   MddReader(this._path, {required this.source}) {
-    _parser = MdxParser(source, _path);
+    _parser = dr.DictReader(_path);
   }
 
   Future<void> open() async {
