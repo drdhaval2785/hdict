@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.2] - 2026-03-23
+
+### Fixed
+- **Speed Improvements**: 
+    - **Optimized SAF reads**: Earlier byte by byte SAF read was creating latency of around 1000 ms in android even for small queries. Fixed it to regain around less than 100ms in reading files, even via SAF. This makes the speed comparable to storing in the App's Internal Storage where dart.io can access them directly.  
+    
 ## [1.5.1] - 2026-03-23
 
 ### Added
