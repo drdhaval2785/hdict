@@ -14,6 +14,9 @@ import 'package:hdict/features/settings/dictionary_management_screen.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:hdict/core/utils/word_boundary.dart' as util;
+import 'package:just_audio/just_audio.dart';
+import 'package:video_player/video_player.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_review/in_app_review.dart';
@@ -2110,7 +2113,7 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
   }
 }
 
-class _MediaPlayerDialog extends StatelessWidget {
+class _MediaPlayerDialog extends StatefulWidget {
   final Uint8List data;
   final String mediaType;
   final String filename;
@@ -2122,34 +2125,71 @@ class _MediaPlayerDialog extends StatelessWidget {
   });
 
   @override
+  State<_MediaPlayerDialog> createState() => _MediaPlayerDialogState();
+}
+
+class _MediaPlayerDialogState extends State<_MediaPlayerDialog> {
+  AudioPlayer? _audioPlayer;
+  VideoPlayerController? _videoController;
+  bool _isLoading = true;
+  String? _error;
+  String? _tempFilePath;
+
+  @override
+  void initState() {
+    super.initState();
+    _initPlayer();
+  }
+
+  Future<void> _initPlayer() async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final ext = widget.filename.split('.').last;
+      final tempFile = File(
+        '${tempDir.path}/mdd_media_${DateTime.now().millisecondsSinceEpoch}.$ext',
+      );
+      await tempFile.writeAsBytes(widget.data);
+      _tempFilePath = tempFile.path;
+
+      if (widget.mediaType == 'audio') {
+        _audioPlayer = AudioPlayer();
+        await _audioPlayer!.setFilePath(_tempFilePath!);
+      } else {
+        _videoController = VideoPlayerController.file(File(_tempFilePath!));
+        await _videoController!.initialize();
+      }
+
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = e.toString();
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _audioPlayer?.dispose();
+    _videoController?.dispose();
+    if (_tempFilePath != null) {
+      File(_tempFilePath!).delete().catchError((_) => File(''));
+    }
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(filename),
+      title: Text(widget.filename),
       content: SizedBox(
-        width: MediaQuery.of(context).size.width * 0.8,
-        height: mediaType == 'video' ? 300 : 100,
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                mediaType == 'audio' ? Icons.audiotrack : Icons.videocam,
-                size: 64,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                mediaType == 'audio' ? 'Audio file' : 'Video file',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '${(data.length / 1024).toStringAsFixed(1)} KB',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-          ),
-        ),
+        width: MediaQuery.of(context).size.width * 0.85,
+        height: widget.mediaType == 'video' ? 350 : 150,
+        child: _buildContent(context),
       ),
       actions: [
         TextButton(
@@ -2158,5 +2198,220 @@ class _MediaPlayerDialog extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  Widget _buildContent(BuildContext context) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 48,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Error loading media',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _error!,
+              style: Theme.of(context).textTheme.bodySmall,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (widget.mediaType == 'audio') {
+      return _buildAudioPlayer(context);
+    } else {
+      return _buildVideoPlayer(context);
+    }
+  }
+
+  Widget _buildAudioPlayer(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          Icons.audiotrack,
+          size: 64,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+        const SizedBox(height: 16),
+        Text(
+          '${(widget.data.length / 1024).toStringAsFixed(1)} KB',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 24),
+        StreamBuilder<Duration>(
+          stream: _audioPlayer!.positionStream,
+          builder: (context, snapshot) {
+            final position = snapshot.data ?? Duration.zero;
+            final duration = _audioPlayer!.duration ?? Duration.zero;
+            return Column(
+              children: [
+                Slider(
+                  value: position.inMilliseconds.toDouble(),
+                  max: duration.inMilliseconds.toDouble(),
+                  onChanged: (value) {
+                    _audioPlayer!.seek(Duration(milliseconds: value.toInt()));
+                  },
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(_formatDuration(position)),
+                    Text(_formatDuration(duration)),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.replay_10),
+              onPressed: () {
+                final pos = _audioPlayer!.position;
+                _audioPlayer!.seek(pos - const Duration(seconds: 10));
+              },
+            ),
+            StreamBuilder<PlayerState>(
+              stream: _audioPlayer!.playerStateStream,
+              builder: (context, snapshot) {
+                final playerState = snapshot.data;
+                final playing = playerState?.playing ?? false;
+                return IconButton(
+                  iconSize: 48,
+                  icon: Icon(
+                    playing
+                        ? Icons.pause_circle_filled
+                        : Icons.play_circle_filled,
+                  ),
+                  onPressed: () {
+                    if (playing) {
+                      _audioPlayer!.pause();
+                    } else {
+                      _audioPlayer!.play();
+                    }
+                  },
+                );
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.forward_10),
+              onPressed: () {
+                final pos = _audioPlayer!.position;
+                _audioPlayer!.seek(pos + const Duration(seconds: 10));
+              },
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVideoPlayer(BuildContext context) {
+    return Column(
+      children: [
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: AspectRatio(
+              aspectRatio: _videoController!.value.aspectRatio,
+              child: VideoPlayer(_videoController!),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.replay_10),
+              onPressed: () {
+                final pos = _videoController!.value.position;
+                _videoController!.seekTo(pos - const Duration(seconds: 10));
+              },
+            ),
+            ValueListenableBuilder<VideoPlayerValue>(
+              valueListenable: _videoController!,
+              builder: (context, value, child) {
+                final playing = value.isPlaying;
+                return IconButton(
+                  iconSize: 48,
+                  icon: Icon(
+                    playing
+                        ? Icons.pause_circle_filled
+                        : Icons.play_circle_filled,
+                  ),
+                  onPressed: () {
+                    if (playing) {
+                      _videoController!.pause();
+                    } else {
+                      _videoController!.play();
+                    }
+                  },
+                );
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.forward_10),
+              onPressed: () {
+                final pos = _videoController!.value.position;
+                _videoController!.seekTo(pos + const Duration(seconds: 10));
+              },
+            ),
+          ],
+        ),
+        ValueListenableBuilder<VideoPlayerValue>(
+          valueListenable: _videoController!,
+          builder: (context, value, child) {
+            final position = value.position;
+            final duration = value.duration;
+            if (duration == Duration.zero) return const SizedBox.shrink();
+            return Column(
+              children: [
+                Slider(
+                  value: position.inMilliseconds.toDouble(),
+                  max: duration.inMilliseconds.toDouble(),
+                  onChanged: (val) {
+                    _videoController!.seekTo(
+                      Duration(milliseconds: val.toInt()),
+                    );
+                  },
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(_formatDuration(position)),
+                    Text(_formatDuration(duration)),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
   }
 }

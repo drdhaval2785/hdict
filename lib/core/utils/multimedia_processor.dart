@@ -19,7 +19,40 @@ class MultimediaProcessor {
 
     processed = _addMediaTapHandlers(processed);
 
+    processed = injectCss(processed);
+
     return processed;
+  }
+
+  String injectCss(String html) {
+    final css = _cssContent;
+    if (css == null || css.isEmpty) return html;
+
+    final styleTag = '<style type="text/css">$css</style>';
+
+    if (html.toLowerCase().contains('<html')) {
+      final headMatch = RegExp(
+        r'<head([^>]*)>',
+        caseSensitive: false,
+      ).firstMatch(html);
+      if (headMatch != null) {
+        final headEnd = html.indexOf('>', headMatch.start);
+        return '${html.substring(0, headEnd + 1)}$styleTag${html.substring(headEnd + 1)}';
+      }
+    }
+
+    if (html.toLowerCase().contains('<body')) {
+      final bodyMatch = RegExp(
+        r'<body([^>]*)>',
+        caseSensitive: false,
+      ).firstMatch(html);
+      if (bodyMatch != null) {
+        final bodyEnd = html.indexOf('>', bodyMatch.start);
+        return '${html.substring(0, bodyEnd + 1)}$styleTag${html.substring(bodyEnd + 1)}';
+      }
+    }
+
+    return '$styleTag$html';
   }
 
   Future<String> _replaceImgSrcWithDataUris(String html) async {

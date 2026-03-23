@@ -1095,6 +1095,8 @@ class DictionaryManager {
     // Pre-resolved companion file URI stored at link-time (e.g. SAF .dict URI).
     // When present, eliminates all runtime DocumentFile calls for SAF dictionaries.
     final String? companionUri = dict['companion_uri'] as String?;
+    // Stored MDD path from database (preferred) or derived from MDX path
+    final String? storedMddPath = dict['mdd_path'] as String?;
 
     dynamic reader;
     if (sourceType == 'linked' && sourceBookmark != null) {
@@ -1103,11 +1105,13 @@ class DictionaryManager {
       final bool isIos = Platform.isIOS || Platform.isMacOS;
 
       if (format == 'mdict') {
-        final mddPath = _deriveMddPath(
-          rawPath,
-          isLinked: true,
-          sourceBookmark: sourceBookmark,
-        );
+        final mddPath =
+            storedMddPath ??
+            _deriveMddPath(
+              rawPath,
+              isLinked: true,
+              sourceBookmark: sourceBookmark,
+            );
         reader = await MdictReader.fromLinkedSource(
           isSaf ? rawPath : sourceBookmark,
           actualPath: rawPath,
@@ -1236,8 +1240,11 @@ class DictionaryManager {
     } else {
       final String dictPath = await _dbHelper.resolvePath(rawPath);
       if (format == 'mdict') {
-        final mddPath = _deriveMddPath(dictPath);
-        reader = await MdictReader.fromPath(dictPath, mddPath: mddPath);
+        final mddPath = storedMddPath ?? _deriveMddPath(dictPath);
+        final resolvedMddPath = mddPath != null
+            ? await _dbHelper.resolvePath(mddPath)
+            : null;
+        reader = await MdictReader.fromPath(dictPath, mddPath: resolvedMddPath);
       } else if (format == 'slob') {
         reader = await SlobReader.fromPath(dictPath);
       } else if (format == 'stardict') {
@@ -2866,6 +2873,7 @@ class DictionaryManager {
         sourceType: 'linked',
         sourceBookmark: bookmark,
         checksum: checksum,
+        mddPath: mddPath,
       );
 
       final receivePort = ReceivePort();
@@ -3777,11 +3785,9 @@ class DictionaryManager {
       final mddSourcePath =
           mddPath ??
           mdxPath.replaceAll(RegExp(r'\.mdx$', caseSensitive: false), '.mdd');
+      String? finalMddPath;
       if (await File(mddSourcePath).exists()) {
-        final finalMddPath = p.join(
-          permanentDir.path,
-          p.basename(mddSourcePath),
-        );
+        finalMddPath = p.join(permanentDir.path, p.basename(mddSourcePath));
         await File(mddSourcePath).copy(finalMddPath);
       }
 
@@ -3796,6 +3802,7 @@ class DictionaryManager {
         typeSequence: null,
         checksum: checksum,
         sourceUrl: _currentImportSourceUrl,
+        mddPath: finalMddPath,
       );
 
       yield ImportProgress(message: 'Indexing headwords...', value: 0.5);

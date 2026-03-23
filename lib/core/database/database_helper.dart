@@ -139,8 +139,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version:
-          31, // Version 31: Performance optimizations (WAL mode, synchronous=NORMAL)
+      version: 32, // Version 32: Add mdd_path column for MDD multimedia support
       onCreate: _onCreate,
       onConfigure: (db) async {
         try {
@@ -287,7 +286,8 @@ class DatabaseHelper {
         source_url TEXT,
         source_type TEXT DEFAULT 'managed',
         source_bookmark TEXT,
-        companion_uri TEXT
+        companion_uri TEXT,
+        mdd_path TEXT
       )
     ''');
 
@@ -818,6 +818,17 @@ class DatabaseHelper {
       } catch (e) {
         hDebugPrint('Migration error (version 31): $e');
       }
+
+      if (oldVersion < 32) {
+        try {
+          hDebugPrint(
+            'Migration to version 32: Adding mdd_path column to dictionaries',
+          );
+          await db.execute("ALTER TABLE dictionaries ADD COLUMN mdd_path TEXT");
+        } catch (e) {
+          hDebugPrint('Migration error (version 32): $e');
+        }
+      }
     }
   } // end _onUpgrade
 
@@ -933,6 +944,7 @@ class DatabaseHelper {
     String? sourceBookmark,
     String?
     companionUri, // Pre-resolved companion file URI (e.g. SAF .dict URI)
+    String? mddPath, // Path to the associated MDD file
   }) async {
     final db = await database;
 
@@ -940,6 +952,15 @@ class DatabaseHelper {
     String storedPath = path;
     if (!kIsWeb && path.contains('dictionaries/') && sourceType == 'managed') {
       storedPath = path.substring(path.indexOf('dictionaries/'));
+    }
+
+    // Store MDD path relative as well
+    String? storedMddPath = mddPath;
+    if (!kIsWeb &&
+        mddPath != null &&
+        mddPath.contains('dictionaries/') &&
+        sourceType == 'managed') {
+      storedMddPath = mddPath.substring(mddPath.indexOf('dictionaries/'));
     }
 
     // Get the next display_order (max + 1) to ensure correct ordering
@@ -963,6 +984,7 @@ class DatabaseHelper {
       'source_type': sourceType,
       'source_bookmark': sourceBookmark,
       'companion_uri': companionUri,
+      'mdd_path': storedMddPath,
       'display_order': nextOrder,
     });
   }
