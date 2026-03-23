@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'package:hdict/core/utils/logger.dart';
 import 'dart:io';
 import 'dart:isolate';
@@ -971,6 +972,27 @@ class DictionaryManager {
 
   /// Cache of open dictionary readers to avoid re-opening files.
   static final Map<int, dynamic> _readerCache = {};
+
+  /// LRU Cache for raw definition content.
+  /// Key: "dictId:offset:length" or "dictId:word" (for MDict)
+  final LinkedHashMap<String, String> _definitionCache = LinkedHashMap<String, String>();
+  static const int _maxCacheEntries = 500;
+
+  void _addToCache(String key, String value) {
+    if (_definitionCache.containsKey(key)) {
+      _definitionCache.remove(key);
+    } else if (_definitionCache.length >= _maxCacheEntries) {
+      _definitionCache.remove(_definitionCache.keys.first);
+    }
+    _definitionCache[key] = value;
+  }
+
+  String? _getFromCache(String key) {
+    if (!_definitionCache.containsKey(key)) return null;
+    final value = _definitionCache.remove(key);
+    _definitionCache[key] = value!;
+    return value;
+  }
 
   /// Per-dictionary locks to prevent concurrent file access on the same reader.
   static final Map<int, Future<void>> _readerLocks = {};
@@ -3909,6 +3931,17 @@ class DictionaryManager {
       final int? dictId = dictRecord['id'] as int?;
       if (dictId == null) return null;
 
+      // Check LRU Cache
+      final String cacheKey = format == 'mdict' 
+          ? '$dictId:$word' 
+          : '$dictId:$offset:$length';
+      final cachedContent = _getFromCache(cacheKey);
+      if (cachedContent != null) {
+        hDebugPrint('DictionaryManager: Cache HIT for $cacheKey');
+        HPerf.record('fetchDef_CacheHit', 0);
+        return cachedContent;
+      }
+
       // Fast path: plain .dict readers use File.openRead — fully stateless, one
       // fresh OS stream per call, no shared seek position. Concurrent reads are
       // safe without any lock once the reader is cached.
@@ -3962,6 +3995,14 @@ class DictionaryManager {
 
     HPerf.end(fetchWatch, 'fetchDef_Total[$format]');
 
+    if (result != null) {
+      final int? dictId = dictRecord['id'] as int?;
+      final String cacheKey = format == 'mdict' 
+          ? '$dictId:$word' 
+          : '$dictId:$offset:$length';
+      _addToCache(cacheKey, result);
+    }
+
     // We already recorded actual IO time inside the lock,
     // so Queue time is just (Total - IO).
     return result;
@@ -3985,74 +4026,112 @@ class DictionaryManager {
     final int? dictId = dictRecord['id'] as int?;
     if (dictId == null) return List.filled(requests.length, null);
 
+    final List<String?> results = List.filled(requests.length, null);
+    final List<int> missingIndices = [];
+    final List<Map<String, dynamic>> missingRequests = [];
+
+    // 1. Check LRU Cache for each request
+    for (int i = 0; i < requests.length; i++) {
+      final req = requests[i];
+      final String word = (req['word'] as String?) ?? '';
+      final int offset = (req['offset'] as int?) ?? 0;
+      final int length = (req['length'] as int?) ?? 0;
+
+      final String cacheKey = format == 'mdict' 
+          ? '$dictId:$word' 
+          : '$dictId:$offset:$length';
+      
+      final cached = _getFromCache(cacheKey);
+      if (cached != null) {
+        results[i] = cached;
+      } else {
+        missingIndices.add(i);
+        missingRequests.add(req);
+      }
+    }
+
+    if (missingRequests.isEmpty) {
+      HPerf.record('fetchBatch_AllCached', 0);
+      return results;
+    }
+
     final totalWatch = HPerf.start('fetchBatch_Total[$format]');
     
     try {
-      // 1. Check cache for fast path (plain .dict)
-      final cached = _readerCache[dictId];
-      if (cached is DictReader && !cached.isDz) {
-        // FAST PATH: uses optimized sequential bulk read to avoid handle conflicts
+      final List<String?> batchResults;
+
+      // 2. Optimized Fetch for Missing Entries
+      final cachedReader = _readerCache[dictId];
+      if (cachedReader is DictReader && !cachedReader.isDz) {
+        // FAST PATH: Statelss plain .dict (parallel batch)
         final ioWatch = HPerf.start('fetchBatch_IO_Batch[$format]');
-        final entries = requests.map((req) => (
+        final entries = missingRequests.map((req) => (
           offset: req['offset'] as int,
           length: req['length'] as int,
         )).toList();
-        final results = await cached.readBulk(entries);
+        batchResults = await cachedReader.readBulk(entries);
         HPerf.end(ioWatch, 'fetchBatch_IO_Batch[$format]');
-        HPerf.end(totalWatch, 'fetchBatch_Total[$format]');
-        for (int i = 0; i < requests.length; i++) {
-          hDebugPrint('DictionaryManager: Raw Result for "${requests[i]['word']}": [${results[i]}]');
-        }
-        return results;
+      } else {
+        // STATEFUL PATH: Lock and fetch
+        batchResults = await _synchronized(dictId, () async {
+          final reader = await _getReader(dictRecord);
+          if (reader == null) return List<String?>.filled(missingRequests.length, null);
+
+          final ioWatch = HPerf.start('fetchBatch_IO_Batch[$format]');
+          List<String?> fetched;
+          
+          if (reader is DictReader) {
+            final entries = missingRequests.map((req) => (
+              offset: req['offset'] as int,
+              length: req['length'] as int,
+            )).toList();
+            fetched = await reader.readBulk(entries);
+          } else if (reader is DictdReader) {
+            final entries = missingRequests.map((req) => (
+              offset: req['offset'] as int,
+              length: req['length'] as int,
+            )).toList();
+            fetched = await reader.readEntries(entries);
+          } else if (reader is SlobReader) {
+            final ids = missingRequests.map((req) => req['offset'] as int).toList();
+            fetched = await reader.getBlobsContentByIds(ids);
+          } else if (reader is MdictReader) {
+            fetched = [];
+            for (final req in missingRequests) {
+              fetched.add(await reader.lookup(req['word'] as String));
+            }
+          } else {
+            fetched = List.filled(missingRequests.length, null);
+          }
+
+          HPerf.end(ioWatch, 'fetchBatch_IO_Batch[$format]');
+          return fetched;
+        });
       }
 
-      // 2. Stateful readers (or first access): acquire lock ONCE for the whole batch
-      final results = await _synchronized(dictId, () async {
-        final reader = await _getReader(dictRecord);
-        if (reader == null) return List<String?>.filled(requests.length, null);
+      // 3. Map back to original results array and update LRU cache
+      for (int i = 0; i < missingIndices.length; i++) {
+        final originalIdx = missingIndices[i];
+        final res = batchResults[i];
+        results[originalIdx] = res;
 
-        final ioWatch = HPerf.start('fetchBatch_IO_Batch[$format]');
-        
-        List<String?> batchResults;
-        if (reader is DictReader) {
-          final entries = requests.map((req) => (
-            offset: req['offset'] as int,
-            length: req['length'] as int,
-          )).toList();
-          batchResults = await reader.readBulk(entries);
-        } else if (reader is DictdReader) {
-          final entries = requests.map((req) => (
-            offset: req['offset'] as int,
-            length: req['length'] as int,
-          )).toList();
-          batchResults = await reader.readEntries(entries);
-        } else if (reader is SlobReader) {
-          final ids = requests.map((req) => req['offset'] as int).toList();
-          batchResults = await reader.getBlobsContentByIds(ids);
-        } else if (reader is MdictReader) {
-          // Fallback to sequential for Mdict for now
-          batchResults = [];
-          for (final req in requests) {
-            batchResults.add(await reader.lookup(req['word'] as String));
-          }
-        } else {
-          batchResults = List.filled(requests.length, null);
+        if (res != null) {
+          final req = missingRequests[i];
+          final String word = (req['word'] as String?) ?? '';
+          final int offset = (req['offset'] as int?) ?? 0;
+          final int length = (req['length'] as int?) ?? 0;
+          final String cacheKey = format == 'mdict' 
+              ? '$dictId:$word' 
+              : '$dictId:$offset:$length';
+          _addToCache(cacheKey, res);
         }
-
-        HPerf.end(ioWatch, 'fetchBatch_IO_Batch[$format]');
-        for (int i = 0; i < requests.length; i++) {
-          hDebugPrint('DictionaryManager: Raw Result for "${requests[i]['word']}": [${batchResults[i]}]');
-        }
-        return batchResults;
-      });
-
-      HPerf.end(totalWatch, 'fetchBatch_Total[$format]');
-      return results;
+      }
     } catch (e) {
       hDebugPrint('Error in fetchDefinitionsBatch ($format): $e');
-      HPerf.end(totalWatch, 'fetchBatch_Total[$format]');
-      return List.filled(requests.length, null);
     }
+
+    HPerf.end(totalWatch, 'fetchBatch_Total[$format]');
+    return results;
   }
 
   Stream<ImportProgress> reIndexDictionariesStream() async* {

@@ -100,10 +100,21 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       version:
-          30, // Version 30: Added companion_uri to store pre-resolved SAF dict file URI
+          31, // Version 31: Performance optimizations (WAL mode, synchronous=NORMAL)
       onCreate: _onCreate,
-      onUpgrade: _onUpgrade,
+      onConfigure: (db) async {
+        try {
+          // Use rawQuery for PRAGMAs that return results to avoid "not an error" on Darwin
+          await db.rawQuery('PRAGMA journal_mode = WAL;');
+          await db.rawQuery('PRAGMA synchronous = NORMAL;');
+          hDebugPrint('DatabaseHelper: Performance PRAGMAs applied (WAL mode)');
+        } catch (e) {
+          hDebugPrint('DatabaseHelper: Failed to apply performance PRAGMAs: $e');
+          // We don't rethrow here so the database can still open in default mode
+        }
+      },
       onOpen: _onOpen,
+      onUpgrade: _onUpgrade,
     );
   }
 
@@ -753,6 +764,15 @@ class DatabaseHelper {
         );
       } catch (e) {
         hDebugPrint('Migration error (version 30): $e');
+      }
+    }
+    if (oldVersion < 31) {
+      try {
+        hDebugPrint('Migration to version 31: Performance optimizations (WAL mode)');
+        // PRAGMA journal_mode = WAL is already called in onOpen for every connection,
+        // but we bump the version to signal a performance-optimized state.
+      } catch (e) {
+        hDebugPrint('Migration error (version 31): $e');
       }
     }
   } // end _onUpgrade

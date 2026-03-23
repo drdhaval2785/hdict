@@ -22,7 +22,7 @@ class SafRandomAccessSource implements RandomAccessSource {
   Uint8List? _buffer;
   Completer<void>? _readLock;
 
-  SafRandomAccessSource(this.uri, {this.bufferSize = 65536});
+  SafRandomAccessSource(this.uri, {this.bufferSize = 262144});
 
   @override
   Future<void> open() async {
@@ -33,7 +33,7 @@ class SafRandomAccessSource implements RandomAccessSource {
   Future<int> get length async {
     final docFile = await DocumentFile.fromUri(uri);
     if (docFile == null) throw Exception('File not found: $uri');
-    return docFile.size ?? 0;
+    return docFile.size;
   }
 
   @override

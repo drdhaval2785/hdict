@@ -13,7 +13,9 @@ class HtmlLookupWrapper {
     String? underlineQuery,
   }) {
     if (html.isEmpty) return '';
-    hDebugPrint('HtmlLookupWrapper: Input: [$html]');
+    if (showHtmlProcessing) {
+      hDebugPrint('HtmlLookupWrapper: Input: [$html]');
+    }
 
     final String? lowerHighlight = highlightQuery?.toLowerCase();
     final String? lowerUnderline = underlineQuery?.toLowerCase();
@@ -82,7 +84,9 @@ class HtmlLookupWrapper {
     }
 
     final result = buffer.toString().trim();
-    hDebugPrint('HtmlLookupWrapper: Result: [$result]');
+    if (showHtmlProcessing) {
+      hDebugPrint('HtmlLookupWrapper: Result: [$result]');
+    }
     return result;
   }
 
