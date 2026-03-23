@@ -996,6 +996,67 @@ class DatabaseHelper {
   }
 
   /// Returns random sample words using O(1) rowid lookup if available, or O(N) fallback.
+  /// Returns a specified number of sample words across multiple dictionaries.
+  /// Uses a single SQL query for efficiency.
+  Future<List<Map<String, dynamic>>> getBatchSampleWords(int totalCount, List<int> dictIds) async {
+    final db = await database;
+    final List<int> allRandomIds = [];
+    final random = Random();
+
+    // 1. Generate random rowid candidates across requested dictionaries
+    for (final dictId in dictIds) {
+      final dict = await getDictionaryById(dictId);
+      if (dict == null) continue;
+
+      int wordCount = (dict['word_count'] as num).toInt();
+      if (wordCount == 0) continue;
+
+      int? start = dict['start_rowid'] as int?;
+      int? end = dict['end_rowid'] as int?;
+
+      // Auto-index row ID range if missing (migration or new import)
+      if (start == null || end == null) {
+        final String targetTable = (_fts5Available ?? true) ? 'word_metadata' : 'word_index';
+        final minMax = await db.rawQuery(
+          'SELECT MIN(rowid) as min, MAX(rowid) as max FROM $targetTable WHERE dict_id = ?',
+          [dictId],
+        );
+        if (minMax.isNotEmpty && minMax.first['min'] != null) {
+          start = (minMax.first['min'] as num).toInt();
+          end = (minMax.first['max'] as num).toInt();
+          await updateDictionaryRowIdRange(dictId, start, end);
+        } else {
+          continue; // Empty or invalid dictionary
+        }
+      }
+
+      // Distribute totalCount. Fetch a small excess (20%) to handle holes/interleaving
+      int toFetchThisDict = (totalCount * 1.2 / dictIds.length).ceil();
+      if (toFetchThisDict < 1) toFetchThisDict = 1;
+
+      for (int i = 0; i < toFetchThisDict; i++) {
+        int randomId = start! + random.nextInt(end! - start + 1);
+        allRandomIds.add(randomId);
+      }
+    }
+
+    if (allRandomIds.isEmpty) return [];
+
+    // 2. Perform ONE bulk query
+    final String targetTable = (_fts5Available ?? true) ? 'word_metadata' : 'word_index';
+    final idList = allRandomIds.join(',');
+    final dictIdList = dictIds.join(',');
+
+    final results = await db.rawQuery(
+      'SELECT word, dict_id, offset, length FROM $targetTable '
+      'WHERE rowid IN ($idList) AND dict_id IN ($dictIdList) '
+      'LIMIT ${totalCount + 5}'
+    );
+
+    hDebugPrint('DatabaseHelper: getBatchSampleWords fetched ${results.length} words for requested $totalCount from ${dictIds.length} dicts');
+    return results;
+  }
+
   Future<List<Map<String, dynamic>>> getSampleWords(
     int dictId, {
     int limit = 5,

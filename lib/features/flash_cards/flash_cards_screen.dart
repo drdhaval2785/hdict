@@ -99,23 +99,17 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
         selectedDictIdsList.removeRange(50, selectedDictIdsList.length);
       }
 
-      // Calculate how many words to fetch from each dictionary to reach target
-      int fetchPerDict = (targetCount * 2 / selectedDictIdsList.length).ceil();
-      if (fetchPerDict < 5) fetchPerDict = 5;
-      if (fetchPerDict > 100) fetchPerDict = 100;
+      hDebugPrint('FlashCards: Fetching word metas from ${selectedDictIdsList.length} dicts for targetCount $targetCount');
 
-      hDebugPrint('FlashCards: Fetching word metas from ${selectedDictIdsList.length} dicts, $fetchPerDict each');
-
-      for (var dictId in selectedDictIdsList) {
-        final metas = await _dbHelper.getSampleWords(dictId, limit: fetchPerDict);
-        for (var meta in metas) {
-          allAvailableWordMetas.add({
-            'word': meta['word'],
-            'dict_id': dictId,
-            'offset': meta['offset'],
-            'length': meta['length'],
-          });
-        }
+      final results = await _dbHelper.getBatchSampleWords(targetCount, selectedDictIdsList);
+      
+      for (var meta in results) {
+        allAvailableWordMetas.add({
+          'word': meta['word'],
+          'dict_id': meta['dict_id'],
+          'offset': meta['offset'],
+          'length': meta['length'],
+        });
       }
 
       hDebugPrint('FlashCards: Meta fetch complete. Found ${allAvailableWordMetas.length} words in ${stopwatch.elapsedMilliseconds}ms');
