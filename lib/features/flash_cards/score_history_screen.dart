@@ -84,11 +84,19 @@ class _ScoreHistoryScreenState extends State<ScoreHistoryScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(DateFormat('MMM dd, yyyy - hh:mm a').format(date)),
-                      Text(
-                        'Dictionaries: $dictNames',
-                        style: const TextStyle(fontSize: 12),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                      GestureDetector(
+                        onTap: () => _showDictionariesDialog(dictNames),
+                        child: Text(
+                          'Dictionaries: $dictNames',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.8),
+                            decoration: TextDecoration.underline,
+                            decorationStyle: TextDecorationStyle.dotted,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
                   ),
@@ -102,6 +110,40 @@ class _ScoreHistoryScreenState extends State<ScoreHistoryScreen> {
                 );
               },
             ),
+    );
+  }
+
+  void _showDictionariesDialog(String dictNames) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Selected Dictionaries'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: dictNames.split(', ').map((name) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('• ', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Expanded(child: Text(name)),
+                  ],
+                ),
+              )).toList(),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
     );
   }
 
