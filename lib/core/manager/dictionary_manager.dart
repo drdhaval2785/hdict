@@ -276,25 +276,33 @@ Future<void> _indexEntry(_IndexArgs args) async {
   final dbHelper = DatabaseHelper(); // Assumes singleton or initialized factory
 
   try {
-    final bool isLinked = args.sourceType == 'linked' && args.sourceBookmark != null;
-    
-    // StarDict indexing needs to parse IFO (already parsed but let's be safe), 
+    final bool isLinked =
+        args.sourceType == 'linked' && args.sourceBookmark != null;
+
+    // StarDict indexing needs to parse IFO (already parsed but let's be safe),
     // IDX (for word offsets), and potentially SYN (for synonyms).
-    
+
     // 1. IDX Parser
     final idxParser = IdxParser(args.ifoParser);
     final idxSource = (isLinked && Platform.isAndroid && args.idxUri != null)
         ? SafRandomAccessSource(args.idxUri!)
         : isLinked
-            ? BookmarkRandomAccessSource(args.sourceBookmark!, targetPath: p.basename(args.idxPath))
-            : FileRandomAccessSource(args.idxPath);
-    
+        ? BookmarkRandomAccessSource(
+            args.sourceBookmark!,
+            targetPath: p.basename(args.idxPath),
+          )
+        : FileRandomAccessSource(args.idxPath);
+
     // 2. Dict Reader
     final dictReader = (isLinked && Platform.isAndroid && args.dictUri != null)
         ? await DictReader.fromUri(args.dictUri!)
         : (isLinked
-            ? await DictReader.fromLinkedSource(args.sourceBookmark!, targetPath: p.basename(args.dictPath), actualPath: args.dictPath)
-            : await DictReader.fromPath(args.dictPath));
+              ? await DictReader.fromLinkedSource(
+                  args.sourceBookmark!,
+                  targetPath: p.basename(args.dictPath),
+                  actualPath: args.dictPath,
+                )
+              : await DictReader.fromPath(args.dictPath));
     await dictReader.open();
 
     List<({int offset, int length, String content})> wordOffsets = [];
@@ -383,9 +391,12 @@ Future<void> _indexEntry(_IndexArgs args) async {
       final synSource = (isLinked && Platform.isAndroid && args.synUri != null)
           ? SafRandomAccessSource(args.synUri!)
           : (isLinked
-              ? BookmarkRandomAccessSource(args.sourceBookmark!, targetPath: p.basename(args.synPath!))
-              : FileRandomAccessSource(args.synPath!));
-      
+                ? BookmarkRandomAccessSource(
+                    args.sourceBookmark!,
+                    targetPath: p.basename(args.synPath!),
+                  )
+                : FileRandomAccessSource(args.synPath!));
+
       List<Map<String, dynamic>> synBatch = [];
       try {
         await for (final syn in synParser.parse(synSource)) {
@@ -409,7 +420,8 @@ Future<void> _indexEntry(_IndexArgs args) async {
                 message:
                     '${args.ifoParser.bookName}: $headwordCount / $totalAll indexed',
                 value:
-                    0.5 + (headwordCount / (totalAll == 0 ? 1 : totalAll)) * 0.45,
+                    0.5 +
+                    (headwordCount / (totalAll == 0 ? 1 : totalAll)) * 0.45,
                 dictId: args.dictId,
                 headwordCount: headwordCount,
                 definitionWordCount: defWordCount,
@@ -466,11 +478,24 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
   final sendPort = args.sendPort;
 
   try {
-    final reader = (args.sourceType == 'linked' && Platform.isAndroid && args.mdxUri != null)
-        ? await MdictReader.fromUri(args.mdxUri!)
+    final mddPath =
+        args.mddUri ??
+        (args.mdxPath.replaceAll(
+          RegExp(r'\.mdx$', caseSensitive: false),
+          '.mdd',
+        ));
+    final reader =
+        (args.sourceType == 'linked' &&
+            Platform.isAndroid &&
+            args.mdxUri != null)
+        ? await MdictReader.fromUri(args.mdxUri!, mddPath: mddPath)
         : (args.sourceType == 'linked' && args.sourceBookmark != null
-            ? await MdictReader.fromLinkedSource(args.sourceBookmark!, actualPath: args.mdxPath)
-            : await MdictReader.fromPath(args.mdxPath));
+              ? await MdictReader.fromLinkedSource(
+                  args.sourceBookmark!,
+                  actualPath: args.mdxPath,
+                  mddPath: mddPath,
+                )
+              : await MdictReader.fromPath(args.mdxPath, mddPath: mddPath));
     await reader.open();
 
     // Fetch all keys via prefix search with empty prefix
@@ -561,11 +586,17 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
   final sendPort = args.sendPort;
 
   try {
-    final reader = (args.sourceType == 'linked' && Platform.isAndroid && args.slobPath.startsWith('content://'))
+    final reader =
+        (args.sourceType == 'linked' &&
+            Platform.isAndroid &&
+            args.slobPath.startsWith('content://'))
         ? await SlobReader.fromUri(args.slobPath)
         : (args.sourceType == 'linked' && args.sourceBookmark != null
-            ? await SlobReader.fromLinkedSource(args.sourceBookmark!, actualPath: args.slobPath)
-            : await SlobReader.fromPath(args.slobPath));
+              ? await SlobReader.fromLinkedSource(
+                  args.sourceBookmark!,
+                  actualPath: args.slobPath,
+                )
+              : await SlobReader.fromPath(args.slobPath));
     await reader.open();
 
     int headwordCount = 0;
@@ -684,23 +715,32 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
   final sendPort = args.sendPort;
 
   try {
-    final bool isLinked = args.sourceType == 'linked' && args.sourceBookmark != null;
+    final bool isLinked =
+        args.sourceType == 'linked' && args.sourceBookmark != null;
 
     final dictdParser = DictdParser();
 
     // 1. Index Source
-    final indexSource = (isLinked && Platform.isAndroid && args.indexUri != null)
+    final indexSource =
+        (isLinked && Platform.isAndroid && args.indexUri != null)
         ? SafRandomAccessSource(args.indexUri!)
         : isLinked
-            ? BookmarkRandomAccessSource(args.sourceBookmark!, targetPath: p.basename(args.indexPath))
-            : FileRandomAccessSource(args.indexPath);
+        ? BookmarkRandomAccessSource(
+            args.sourceBookmark!,
+            targetPath: p.basename(args.indexPath),
+          )
+        : FileRandomAccessSource(args.indexPath);
 
     // 2. Dict Reader
     final dictdReader = (isLinked && Platform.isAndroid && args.dictUri != null)
         ? await DictdReader.fromUri(args.dictUri!)
         : (isLinked
-            ? await DictdReader.fromLinkedSource(args.sourceBookmark!, targetPath: p.basename(args.dictPath), actualPath: args.dictPath)
-            : await DictdReader.fromPath(args.dictPath));
+              ? await DictdReader.fromLinkedSource(
+                  args.sourceBookmark!,
+                  targetPath: p.basename(args.dictPath),
+                  actualPath: args.dictPath,
+                )
+              : await DictdReader.fromPath(args.dictPath));
     await dictdReader.open();
 
     final List<Map<String, dynamic>> entriesList = [];
@@ -857,7 +897,9 @@ Future<void> _extractToWorkspaceSync(_ExtractArgs args) async {
         SZArchive.extract(filePath, workspacePath);
         return;
       } catch (e7z) {
-        hDebugPrint('flutter_7zip failed to extract: $e7z. Trying archive package.');
+        hDebugPrint(
+          'flutter_7zip failed to extract: $e7z. Trying archive package.',
+        );
       }
 
       // 3. Try pure-Dart archive package as last resort
@@ -975,7 +1017,8 @@ class DictionaryManager {
 
   /// LRU Cache for raw definition content.
   /// Key: "dictId:offset:length" or "dictId:word" (for MDict)
-  final LinkedHashMap<String, String> _definitionCache = LinkedHashMap<String, String>();
+  final LinkedHashMap<String, String> _definitionCache =
+      LinkedHashMap<String, String>();
   static const int _maxCacheEntries = 500;
 
   void _addToCache(String key, String value) {
@@ -1055,13 +1098,26 @@ class DictionaryManager {
 
     dynamic reader;
     if (sourceType == 'linked' && sourceBookmark != null) {
-      final isSaf = Platform.isAndroid && sourceBookmark.startsWith('content://');
+      final isSaf =
+          Platform.isAndroid && sourceBookmark.startsWith('content://');
       final bool isIos = Platform.isIOS || Platform.isMacOS;
-      
+
       if (format == 'mdict') {
-        reader = await MdictReader.fromLinkedSource(isSaf ? rawPath : sourceBookmark, actualPath: rawPath);
+        final mddPath = _deriveMddPath(
+          rawPath,
+          isLinked: true,
+          sourceBookmark: sourceBookmark,
+        );
+        reader = await MdictReader.fromLinkedSource(
+          isSaf ? rawPath : sourceBookmark,
+          actualPath: rawPath,
+          mddPath: mddPath,
+        );
       } else if (format == 'slob') {
-        reader = await SlobReader.fromLinkedSource(isSaf ? rawPath : sourceBookmark, actualPath: rawPath);
+        reader = await SlobReader.fromLinkedSource(
+          isSaf ? rawPath : sourceBookmark,
+          actualPath: rawPath,
+        );
       } else if (format == 'stardict') {
         if (isSaf) {
           // Fast path: use the pre-resolved companion URI stored at link-time.
@@ -1070,24 +1126,39 @@ class DictionaryManager {
           if (dictUri == null) {
             // Fallback for dictionaries linked before companion_uri was introduced.
             // Use the serialized SAF action queue to avoid concurrent docman calls.
-            final docFile = await _runSafAction(() => DocumentFile.fromUri(rawPath));
+            final docFile = await _runSafAction(
+              () => DocumentFile.fromUri(rawPath),
+            );
             if (docFile == null) return null;
             final baseName = p.basenameWithoutExtension(docFile.name);
             dictUri = await _resolveSafFile(sourceBookmark, baseName, [
-              '.dict', '.dict.dz', '.dict.gz', '.dict.bz2', '.dict.xz',
+              '.dict',
+              '.dict.dz',
+              '.dict.gz',
+              '.dict.bz2',
+              '.dict.xz',
             ]);
           }
           if (dictUri == null) return null;
-          reader = await DictReader.fromLinkedSource(dictUri, actualPath: rawPath);
+          reader = await DictReader.fromLinkedSource(
+            dictUri,
+            actualPath: rawPath,
+          );
         } else {
           String? actualDictPath;
           if (isIos) {
-            final resolvedPath = await BookmarkManager.resolveBookmark(sourceBookmark);
+            final resolvedPath = await BookmarkManager.resolveBookmark(
+              sourceBookmark,
+            );
             if (resolvedPath != null) {
               try {
                 final basePath = p.withoutExtension(rawPath);
                 actualDictPath = _resolveLocalFile(basePath, [
-                  '.dict', '.dict.dz', '.dict.gz', '.dict.bz2', '.dict.xz',
+                  '.dict',
+                  '.dict.dz',
+                  '.dict.gz',
+                  '.dict.bz2',
+                  '.dict.xz',
                 ]);
               } finally {
                 await BookmarkManager.stopAccess(sourceBookmark);
@@ -1097,11 +1168,19 @@ class DictionaryManager {
             final String dictPath = await _dbHelper.resolvePath(rawPath);
             final basePath = p.withoutExtension(dictPath);
             actualDictPath = _resolveLocalFile(basePath, [
-              '.dict', '.dict.dz', '.dict.gz', '.dict.bz2', '.dict.xz',
+              '.dict',
+              '.dict.dz',
+              '.dict.gz',
+              '.dict.bz2',
+              '.dict.xz',
             ]);
           }
           if (actualDictPath == null) return null;
-          reader = await DictReader.fromLinkedSource(sourceBookmark, targetPath: p.basename(actualDictPath), actualPath: actualDictPath);
+          reader = await DictReader.fromLinkedSource(
+            sourceBookmark,
+            targetPath: p.basename(actualDictPath),
+            actualPath: actualDictPath,
+          );
         }
       } else if (format == 'dictd') {
         if (isSaf) {
@@ -1109,21 +1188,34 @@ class DictionaryManager {
           String? dictUri = companionUri;
           if (dictUri == null) {
             // Fallback for dictionaries linked before companion_uri was introduced.
-            final docFile = await _runSafAction(() => DocumentFile.fromUri(rawPath));
+            final docFile = await _runSafAction(
+              () => DocumentFile.fromUri(rawPath),
+            );
             if (docFile == null) return null;
             final baseName = p.basenameWithoutExtension(docFile.name);
-            dictUri = await _resolveSafFile(sourceBookmark, baseName, ['.dict.dz', '.dict']);
+            dictUri = await _resolveSafFile(sourceBookmark, baseName, [
+              '.dict.dz',
+              '.dict',
+            ]);
           }
           if (dictUri == null) return null;
-          reader = await DictdReader.fromLinkedSource(dictUri, actualPath: rawPath);
+          reader = await DictdReader.fromLinkedSource(
+            dictUri,
+            actualPath: rawPath,
+          );
         } else {
           String? actualDictPath;
           if (isIos) {
-            final resolvedPath = await BookmarkManager.resolveBookmark(sourceBookmark);
+            final resolvedPath = await BookmarkManager.resolveBookmark(
+              sourceBookmark,
+            );
             if (resolvedPath != null) {
               try {
                 final basePath = p.withoutExtension(rawPath);
-                actualDictPath = _resolveLocalFile(basePath, ['.dict.dz', '.dict']);
+                actualDictPath = _resolveLocalFile(basePath, [
+                  '.dict.dz',
+                  '.dict',
+                ]);
               } finally {
                 await BookmarkManager.stopAccess(sourceBookmark);
               }
@@ -1134,13 +1226,18 @@ class DictionaryManager {
             actualDictPath = _resolveLocalFile(basePath, ['.dict.dz', '.dict']);
           }
           if (actualDictPath == null) return null;
-          reader = await DictdReader.fromLinkedSource(sourceBookmark, targetPath: p.basename(actualDictPath), actualPath: actualDictPath);
+          reader = await DictdReader.fromLinkedSource(
+            sourceBookmark,
+            targetPath: p.basename(actualDictPath),
+            actualPath: actualDictPath,
+          );
         }
       }
     } else {
       final String dictPath = await _dbHelper.resolvePath(rawPath);
       if (format == 'mdict') {
-        reader = await MdictReader.fromPath(dictPath);
+        final mddPath = _deriveMddPath(dictPath);
+        reader = await MdictReader.fromPath(dictPath, mddPath: mddPath);
       } else if (format == 'slob') {
         reader = await SlobReader.fromPath(dictPath);
       } else if (format == 'stardict') {
@@ -1160,6 +1257,27 @@ class DictionaryManager {
     return reader;
   }
 
+  String? _deriveMddPath(
+    String mdxPath, {
+    bool isLinked = false,
+    String? sourceBookmark,
+  }) {
+    if (isLinked && sourceBookmark != null) {
+      if (Platform.isAndroid && sourceBookmark.startsWith('content://')) {
+        return mdxPath.replaceAll(
+          RegExp(r'\.mdx$', caseSensitive: false),
+          '.mdd',
+        );
+      } else if (Platform.isIOS || Platform.isMacOS) {
+        return mdxPath.replaceAll(
+          RegExp(r'\.mdx$', caseSensitive: false),
+          '.mdd',
+        );
+      }
+    }
+    return mdxPath.replaceAll(RegExp(r'\.mdx$', caseSensitive: false), '.mdd');
+  }
+
   /// Closes and removes a reader from the cache.
   static Future<void> closeReader(int dictId) async {
     final reader = _readerCache.remove(dictId);
@@ -1169,6 +1287,20 @@ class DictionaryManager {
       if (reader is DictReader) await reader.close();
       if (reader is DictdReader) await reader.close();
     }
+  }
+
+  /// Gets the cached reader for a dictionary (useful for accessing MDD resources).
+  dynamic getReader(int dictId) {
+    return _readerCache[dictId];
+  }
+
+  /// Gets the MdictReader specifically for a dictionary (if it's an MDict).
+  MdictReader? getMdictReader(int dictId) {
+    final reader = _readerCache[dictId];
+    if (reader is MdictReader) {
+      return reader;
+    }
+    return null;
   }
 
   /// Calculates the MD5 checksum of a file.
@@ -1418,18 +1550,19 @@ class DictionaryManager {
         await for (final progress in subStream) {
           if (progress.error == 'ALREADY_EXISTS') {
             alreadyExistsList.add(
-              progress.dictionaryName ?? p.basenameWithoutExtension(primaryPath),
+              progress.dictionaryName ??
+                  p.basenameWithoutExtension(primaryPath),
             );
             break;
           }
           yield ImportProgress(
-            message:
-                total > 1
-                    ? '[$current/$total] ${progress.message}'
-                    : progress.message,
+            message: total > 1
+                ? '[$current/$total] ${progress.message}'
+                : progress.message,
             value: 0.5 + ((current - 1) + progress.value) / total * 0.5,
             headwordCount: progress.headwordCount,
-            isCompleted: false, // Only the final yield of importDictionaryStream should be isCompleted: true
+            isCompleted:
+                false, // Only the final yield of importDictionaryStream should be isCompleted: true
             dictId: progress.dictId,
             sampleWords: progress.sampleWords,
             error: progress.error,
@@ -1442,8 +1575,9 @@ class DictionaryManager {
         message: 'Import process complete',
         value: 1.0,
         isCompleted: true,
-        alreadyExistsEntries:
-            alreadyExistsList.isEmpty ? null : alreadyExistsList,
+        alreadyExistsEntries: alreadyExistsList.isEmpty
+            ? null
+            : alreadyExistsList,
       );
     } catch (e, s) {
       hDebugPrint('Error in importDictionaryStream: $e\n$s');
@@ -1661,7 +1795,8 @@ class DictionaryManager {
             value:
                 0.45 + ((currentDict - 1) + progress.value) / totalDicts * 0.55,
             headwordCount: progress.headwordCount,
-            isCompleted: false, // Only the final yield of importMultipleFilesStream should be isCompleted: true
+            isCompleted:
+                false, // Only the final yield of importMultipleFilesStream should be isCompleted: true
             dictId: progress.dictId,
             sampleWords: progress.sampleWords,
             error: progress.error,
@@ -1676,8 +1811,12 @@ class DictionaryManager {
         message: 'All imports complete.',
         value: 1.0,
         isCompleted: true,
-        incompleteEntries: incompleteMessages.isEmpty ? null : incompleteMessages,
-        alreadyExistsEntries: alreadyExistsList.isEmpty ? null : alreadyExistsList,
+        incompleteEntries: incompleteMessages.isEmpty
+            ? null
+            : incompleteMessages,
+        alreadyExistsEntries: alreadyExistsList.isEmpty
+            ? null
+            : alreadyExistsList,
       );
     } catch (e) {
       yield ImportProgress(
@@ -1842,7 +1981,8 @@ class DictionaryManager {
             value:
                 0.2 + ((currentDict - 1) + progress.value) / totalDicts * 0.8,
             headwordCount: progress.headwordCount,
-            isCompleted: false, // Only the final yield of importFolderStream should be isCompleted: true
+            isCompleted:
+                false, // Only the final yield of importFolderStream should be isCompleted: true
             dictId: progress.dictId,
             sampleWords: progress.sampleWords,
             error: progress.error,
@@ -1991,7 +2131,8 @@ class DictionaryManager {
             value:
                 0.2 + ((currentDict - 1) + progress.value) / totalDicts * 0.8,
             headwordCount: progress.headwordCount,
-            isCompleted: false, // Only the final yield of this stream should be isCompleted: true
+            isCompleted:
+                false, // Only the final yield of this stream should be isCompleted: true
             dictId: progress.dictId,
             sampleWords: progress.sampleWords,
             error: progress.error,
@@ -2029,7 +2170,8 @@ class DictionaryManager {
 
     // docman's DirectoryInfo for the tree URI
     final dir = await DocumentFile.fromUri(treeUri);
-    if (dir == null) return const FolderScanResult(discovered: [], incomplete: []);
+    if (dir == null)
+      return const FolderScanResult(discovered: [], incomplete: []);
 
     // We need to list files recursively. docman might not have a recursive list,
     // so we'll implement a simple one.
@@ -2073,7 +2215,8 @@ class DictionaryManager {
                 final n = f.name.toLowerCase();
                 if (n.startsWith(baseName.toLowerCase())) {
                   if (n.endsWith('.idx')) idxUri = f.uri;
-                  if (n.endsWith('.dict') || n.endsWith('.dict.dz')) dictUri = f.uri;
+                  if (n.endsWith('.dict') || n.endsWith('.dict.dz'))
+                    dictUri = f.uri;
                   if (n.endsWith('.syn')) synUri = f.uri;
                 }
               }
@@ -2146,9 +2289,7 @@ class DictionaryManager {
                   format: 'dictd',
                   companionPath: dictPath,
                   parentFolderName: parentName,
-                  safUris: {
-                    'tree': treeUri,
-                  },
+                  safUris: {'tree': treeUri},
                 ),
               );
             } else {
@@ -2197,11 +2338,11 @@ class DictionaryManager {
     }
 
     // Extract folder name from path or URI
-    final String decoded = folderPath.startsWith('content://') 
-        ? Uri.decodeComponent(folderPath) 
+    final String decoded = folderPath.startsWith('content://')
+        ? Uri.decodeComponent(folderPath)
         : folderPath;
     final String folderName = p.basename(decoded.replaceAll(RegExp(r'/$'), ''));
-    
+
     final List<String> linkedEntries = [];
     final List<String> importedEntries = [];
     final List<String> incompleteEntries = [];
@@ -2228,8 +2369,12 @@ class DictionaryManager {
       int currentLinked = 0;
       // --- 1. Deduplication and Existence Checks ---------------------------
       final existingDicts = await getDictionaries();
-      final Set<String> alreadyInLibraryPaths = existingDicts.map((d) => d['path'] as String).toSet();
-      final Set<String> alreadyInLibraryNames = existingDicts.map((d) => (d['name'] as String).toLowerCase()).toSet();
+      final Set<String> alreadyInLibraryPaths = existingDicts
+          .map((d) => d['path'] as String)
+          .toSet();
+      final Set<String> alreadyInLibraryNames = existingDicts
+          .map((d) => (d['name'] as String).toLowerCase())
+          .toSet();
       final Set<String> alreadyInLibraryBookmarks = existingDicts
           .where((d) => d['source_bookmark'] != null)
           .map((d) => d['source_bookmark'] as String)
@@ -2246,9 +2391,10 @@ class DictionaryManager {
         final lowerName = name.toLowerCase();
 
         // Check if path or name already in library
-        bool exists = alreadyInLibraryPaths.contains(item.path) || 
-                      alreadyInLibraryBookmarks.contains(item.path) ||
-                      alreadyInLibraryNames.contains(lowerName);
+        bool exists =
+            alreadyInLibraryPaths.contains(item.path) ||
+            alreadyInLibraryBookmarks.contains(item.path) ||
+            alreadyInLibraryNames.contains(lowerName);
 
         if (exists) {
           alreadyExistsEntries.add(name);
@@ -2258,14 +2404,16 @@ class DictionaryManager {
           );
           continue;
         }
-        
+
         // Mark as encountered to skip in archives
         processedInThisSessionPaths.add(item.path);
         processedInThisSessionNames.add(lowerName);
 
         yield ImportProgress(
           message: 'Linking dictionary $currentLinked of $totalLinked: $name',
-          value: (totalTasks == 0) ? 0.0 : (currentLinked - 1) / totalTasks * 0.4,
+          value: (totalTasks == 0)
+              ? 0.0
+              : (currentLinked - 1) / totalTasks * 0.4,
           dictionaryName: name,
         );
 
@@ -2306,7 +2454,9 @@ class DictionaryManager {
         await for (final progress in subStream) {
           yield ImportProgress(
             message: progress.message,
-            value: (totalTasks == 0) ? 0.0 : (currentLinked - 1 + progress.value) / totalTasks * 0.4,
+            value: (totalTasks == 0)
+                ? 0.0
+                : (currentLinked - 1 + progress.value) / totalTasks * 0.4,
             dictId: progress.dictId,
             groupName: folderName,
             dictionaryName: progress.dictionaryName ?? name,
@@ -2318,7 +2468,9 @@ class DictionaryManager {
               // Update with final name if different, though basename is primary for deduplication
               if (finalName != name) processedInThisSessionNames.add(finalName);
             } else {
-              incompleteEntries.add('$name (${item.format}): ${progress.error}');
+              incompleteEntries.add(
+                '$name (${item.format}): ${progress.error}',
+              );
             }
             break;
           }
@@ -2332,13 +2484,18 @@ class DictionaryManager {
 
       for (final archiveFullPath in scanResult.foundArchives) {
         currentArchive++;
-        final archiveDispName = p.basename(archiveFullPath.startsWith('content://') 
-            ? Uri.decodeComponent(archiveFullPath) 
-            : archiveFullPath);
-            
+        final archiveDispName = p.basename(
+          archiveFullPath.startsWith('content://')
+              ? Uri.decodeComponent(archiveFullPath)
+              : archiveFullPath,
+        );
+
         yield ImportProgress(
-          message: 'Processing archive $currentArchive of $totalArchives: $archiveDispName',
-          value: totalTasks == 0 ? 0.5 : (totalLinked + currentArchive - 1) / totalTasks * 0.8,
+          message:
+              'Processing archive $currentArchive of $totalArchives: $archiveDispName',
+          value: totalTasks == 0
+              ? 0.5
+              : (totalLinked + currentArchive - 1) / totalTasks * 0.8,
         );
 
         final workspaceDir = await tempBaseDir.createTemp('merged_import_');
@@ -2348,8 +2505,13 @@ class DictionaryManager {
             // Use URI directly
             final archiveFile = await DocumentFile.fromUri(archiveFullPath);
             if (archiveFile == null) continue;
-            final localArchiveFile = File(p.join(workspaceDir.path, archiveDispName));
-            final bytes = await archiveFile.readAsBytes().fold<List<int>>([], (p, e) => p..addAll(e));
+            final localArchiveFile = File(
+              p.join(workspaceDir.path, archiveDispName),
+            );
+            final bytes = await archiveFile.readAsBytes().fold<List<int>>(
+              [],
+              (p, e) => p..addAll(e),
+            );
             await localArchiveFile.writeAsBytes(bytes);
             archivePath = localArchiveFile.path;
           } else {
@@ -2364,7 +2526,9 @@ class DictionaryManager {
           );
 
           if (innerScan.discovered.isEmpty) {
-            incompleteEntries.add('$archiveDispName: No valid dictionaries found inside.');
+            incompleteEntries.add(
+              '$archiveDispName: No valid dictionaries found inside.',
+            );
             continue;
           }
 
@@ -2372,16 +2536,19 @@ class DictionaryManager {
             final innerName = p.basenameWithoutExtension(innerItem.path);
             final innerLowerName = innerName.toLowerCase();
 
-            bool innerExists = alreadyInLibraryPaths.contains(innerItem.path) ||
-                               alreadyInLibraryNames.contains(innerLowerName) ||
-                               processedInThisSessionPaths.contains(innerItem.path) ||
-                               processedInThisSessionNames.contains(innerLowerName);
+            bool innerExists =
+                alreadyInLibraryPaths.contains(innerItem.path) ||
+                alreadyInLibraryNames.contains(innerLowerName) ||
+                processedInThisSessionPaths.contains(innerItem.path) ||
+                processedInThisSessionNames.contains(innerLowerName);
 
             if (innerExists) {
               alreadyExistsEntries.add('$innerName (from $archiveDispName)');
               yield ImportProgress(
                 message: 'Skipping $innerName from archive (Already exists)',
-                value: (totalTasks == 0) ? 1.0 : (totalLinked + currentArchive) / totalTasks,
+                value: (totalTasks == 0)
+                    ? 1.0
+                    : (totalLinked + currentArchive) / totalTasks,
               );
               continue;
             }
@@ -2428,7 +2595,10 @@ class DictionaryManager {
             await for (final progress in importSubStream) {
               yield ImportProgress(
                 message: progress.message,
-                value: (totalTasks == 0) ? 1.0 : (totalLinked + currentArchive - 1 + progress.value) / totalTasks,
+                value: (totalTasks == 0)
+                    ? 1.0
+                    : (totalLinked + currentArchive - 1 + progress.value) /
+                          totalTasks,
                 dictId: progress.dictId,
                 groupName: folderName,
                 dictionaryName: progress.dictionaryName ?? innerName,
@@ -2437,11 +2607,17 @@ class DictionaryManager {
                 if (progress.error == null) {
                   final finalInnerName = progress.dictionaryName ?? innerName;
                   importedEntries.add(finalInnerName);
-                  if (finalInnerName != innerName) processedInThisSessionNames.add(finalInnerName);
-                } else if (progress.error != null && progress.error!.contains('ALREADY_EXISTS')) {
-                  alreadyExistsEntries.add('$innerName (from $archiveDispName)');
+                  if (finalInnerName != innerName)
+                    processedInThisSessionNames.add(finalInnerName);
+                } else if (progress.error != null &&
+                    progress.error!.contains('ALREADY_EXISTS')) {
+                  alreadyExistsEntries.add(
+                    '$innerName (from $archiveDispName)',
+                  );
                 } else {
-                  incompleteEntries.add('$innerName (from $archiveDispName): ${progress.error}');
+                  incompleteEntries.add(
+                    '$innerName (from $archiveDispName): ${progress.error}',
+                  );
                 }
                 break;
               }
@@ -2468,7 +2644,9 @@ class DictionaryManager {
         linkedEntries: linkedEntries.isEmpty ? null : linkedEntries,
         importedEntries: importedEntries.isEmpty ? null : importedEntries,
         incompleteEntries: incompleteEntries.isEmpty ? null : incompleteEntries,
-        alreadyExistsEntries: alreadyExistsEntries.isEmpty ? null : alreadyExistsEntries,
+        alreadyExistsEntries: alreadyExistsEntries.isEmpty
+            ? null
+            : alreadyExistsEntries,
       );
     } catch (e, s) {
       hDebugPrint('Error in addFolderStream: $e\n$s');
@@ -2493,7 +2671,11 @@ class DictionaryManager {
     return null;
   }
 
-  Future<String?> _resolveSafFile(String treeUri, String baseName, List<String> extensions) async {
+  Future<String?> _resolveSafFile(
+    String treeUri,
+    String baseName,
+    List<String> extensions,
+  ) async {
     // All DocumentFile operations must be serialized globally to avoid
     // the docman "AlreadyRunning" error from concurrent channel calls.
     return _runSafAction(() async {
@@ -2524,27 +2706,29 @@ class DictionaryManager {
       final ifoSource = isSaf
           ? SafRandomAccessSource(ifoPath)
           : FileRandomAccessSource(ifoPath);
-      
+
       try {
         await ifoParser.parseSource(ifoSource);
       } finally {
         await ifoSource.close();
       }
-      final bookName = ifoParser.bookName ?? p.basenameWithoutExtension(ifoPath);
+      final bookName =
+          ifoParser.bookName ?? p.basenameWithoutExtension(ifoPath);
 
       // Create bookmark for the parent folder to allow access to all sibling files (.idx, .dict, etc.)
       // For SAF, we use the tree URI if available to allow listing siblings later.
-      final String folderPath = isSaf && safUris != null && safUris.containsKey('tree')
+      final String folderPath =
+          isSaf && safUris != null && safUris.containsKey('tree')
           ? safUris['tree']!
           : (isSaf ? ifoPath : p.dirname(ifoPath));
-          
+
       final String? bookmark = await BookmarkManager.createBookmark(folderPath);
       if (bookmark == null) throw Exception('Failed to create bookmark');
 
       final String idxPath;
       final String dictPath;
       final String? synPath;
-      
+
       if (isSaf && safUris != null) {
         idxPath = safUris['idx']!;
         dictPath = safUris['dict']!;
@@ -2639,15 +2823,25 @@ class DictionaryManager {
     yield ImportProgress(message: 'Linking MDict...', value: 0.1);
     try {
       final isSaf = Platform.isAndroid && mdxPath.startsWith('content://');
-      final String folderPath = isSaf && safUris != null && safUris.containsKey('tree')
+      final String folderPath =
+          isSaf && safUris != null && safUris.containsKey('tree')
           ? safUris['tree']!
           : mdxPath;
       final String? bookmark = await BookmarkManager.createBookmark(folderPath);
       if (bookmark == null) throw Exception('Failed to create bookmark');
 
-      final reader = isSaf 
-          ? await MdictReader.fromUri(mdxPath)
-          : await MdictReader.fromLinkedSource(bookmark, actualPath: mdxPath);
+      final mddPath = mdxPath.replaceAll(
+        RegExp(r'\.mdx$', caseSensitive: false),
+        '.mdd',
+      );
+
+      final reader = isSaf
+          ? await MdictReader.fromUri(mdxPath, mddPath: mddPath)
+          : await MdictReader.fromLinkedSource(
+              bookmark,
+              actualPath: mdxPath,
+              mddPath: mddPath,
+            );
       await reader.open();
       // MDict book name usually comes from the header or filename
       final bookName = p.basenameWithoutExtension(mdxPath);
@@ -2714,7 +2908,8 @@ class DictionaryManager {
     yield ImportProgress(message: 'Linking Slob...', value: 0.1);
     try {
       final isSaf = Platform.isAndroid && slobPath.startsWith('content://');
-      final String folderPath = isSaf && safUris != null && safUris.containsKey('tree')
+      final String folderPath =
+          isSaf && safUris != null && safUris.containsKey('tree')
           ? safUris['tree']!
           : slobPath;
       final String? bookmark = await BookmarkManager.createBookmark(folderPath);
@@ -2725,7 +2920,8 @@ class DictionaryManager {
       final existing = await _dbHelper.getDictionaryByChecksum(checksum);
       if (existing != null) {
         yield ImportProgress(
-          message: 'Slob dictionary "${existing['name']}" is already in your library.',
+          message:
+              'Slob dictionary "${existing['name']}" is already in your library.',
           value: 1.0,
           error: 'ALREADY_EXISTS',
           isCompleted: true,
@@ -2782,7 +2978,8 @@ class DictionaryManager {
       final isSaf = Platform.isAndroid && indexPath.startsWith('content://');
 
       // Create bookmark for the parent folder to allow access to all sibling files (.index, .dict, etc.)
-      final String folderPath = isSaf && safUris != null && safUris.containsKey('tree')
+      final String folderPath =
+          isSaf && safUris != null && safUris.containsKey('tree')
           ? safUris['tree']!
           : (isSaf ? indexPath : p.dirname(indexPath));
       final String? bookmark = await BookmarkManager.createBookmark(folderPath);
@@ -3325,7 +3522,10 @@ class DictionaryManager {
       );
 
       final idxParser = IdxParser(ifoParser);
-      final dictReader = await DictReader.fromPath(finalDictName, dictId: dictId);
+      final dictReader = await DictReader.fromPath(
+        finalDictName,
+        dictId: dictId,
+      );
       await dictReader.open();
 
       List<Map<String, dynamic>> batch = [];
@@ -3535,7 +3735,10 @@ class DictionaryManager {
     yield ImportProgress(message: 'Opening MDict file...', value: 0.05);
 
     try {
-      final reader = await MdictReader.fromPath(mdxPath);
+      final mdd =
+          mddPath ??
+          mdxPath.replaceAll(RegExp(r'\.mdx$', caseSensitive: false), '.mdd');
+      final reader = await MdictReader.fromPath(mdxPath, mddPath: mdd);
       await reader.open();
 
       final checksum = await _calculateChecksum(mdxPath);
@@ -3932,8 +4135,8 @@ class DictionaryManager {
       if (dictId == null) return null;
 
       // Check LRU Cache
-      final String cacheKey = format == 'mdict' 
-          ? '$dictId:$word' 
+      final String cacheKey = format == 'mdict'
+          ? '$dictId:$word'
           : '$dictId:$offset:$length';
       final cachedContent = _getFromCache(cacheKey);
       if (cachedContent != null) {
@@ -3997,8 +4200,8 @@ class DictionaryManager {
 
     if (result != null) {
       final int? dictId = dictRecord['id'] as int?;
-      final String cacheKey = format == 'mdict' 
-          ? '$dictId:$word' 
+      final String cacheKey = format == 'mdict'
+          ? '$dictId:$word'
           : '$dictId:$offset:$length';
       _addToCache(cacheKey, result);
     }
@@ -4037,10 +4240,10 @@ class DictionaryManager {
       final int offset = (req['offset'] as int?) ?? 0;
       final int length = (req['length'] as int?) ?? 0;
 
-      final String cacheKey = format == 'mdict' 
-          ? '$dictId:$word' 
+      final String cacheKey = format == 'mdict'
+          ? '$dictId:$word'
           : '$dictId:$offset:$length';
-      
+
       final cached = _getFromCache(cacheKey);
       if (cached != null) {
         results[i] = cached;
@@ -4057,7 +4260,7 @@ class DictionaryManager {
     }
 
     final totalWatch = HPerf.start('fetchBatch_Total[$format]');
-    
+
     try {
       final List<String?> batchResults;
 
@@ -4066,35 +4269,48 @@ class DictionaryManager {
       if (cachedReader is DictReader && !cachedReader.isDz) {
         // FAST PATH: Statelss plain .dict (parallel batch)
         final ioWatch = HPerf.start('fetchBatch_IO_Batch[$format]');
-        final entries = missingRequests.map((req) => (
-          offset: req['offset'] as int,
-          length: req['length'] as int,
-        )).toList();
+        final entries = missingRequests
+            .map(
+              (req) =>
+                  (offset: req['offset'] as int, length: req['length'] as int),
+            )
+            .toList();
         batchResults = await cachedReader.readBulk(entries);
         HPerf.end(ioWatch, 'fetchBatch_IO_Batch[$format]');
       } else {
         // STATEFUL PATH: Lock and fetch
         batchResults = await _synchronized(dictId, () async {
           final reader = await _getReader(dictRecord);
-          if (reader == null) return List<String?>.filled(missingRequests.length, null);
+          if (reader == null)
+            return List<String?>.filled(missingRequests.length, null);
 
           final ioWatch = HPerf.start('fetchBatch_IO_Batch[$format]');
           List<String?> fetched;
-          
+
           if (reader is DictReader) {
-            final entries = missingRequests.map((req) => (
-              offset: req['offset'] as int,
-              length: req['length'] as int,
-            )).toList();
+            final entries = missingRequests
+                .map(
+                  (req) => (
+                    offset: req['offset'] as int,
+                    length: req['length'] as int,
+                  ),
+                )
+                .toList();
             fetched = await reader.readBulk(entries);
           } else if (reader is DictdReader) {
-            final entries = missingRequests.map((req) => (
-              offset: req['offset'] as int,
-              length: req['length'] as int,
-            )).toList();
+            final entries = missingRequests
+                .map(
+                  (req) => (
+                    offset: req['offset'] as int,
+                    length: req['length'] as int,
+                  ),
+                )
+                .toList();
             fetched = await reader.readEntries(entries);
           } else if (reader is SlobReader) {
-            final ids = missingRequests.map((req) => req['offset'] as int).toList();
+            final ids = missingRequests
+                .map((req) => req['offset'] as int)
+                .toList();
             fetched = await reader.getBlobsContentByIds(ids);
           } else if (reader is MdictReader) {
             fetched = [];
@@ -4121,8 +4337,8 @@ class DictionaryManager {
           final String word = (req['word'] as String?) ?? '';
           final int offset = (req['offset'] as int?) ?? 0;
           final int length = (req['length'] as int?) ?? 0;
-          final String cacheKey = format == 'mdict' 
-              ? '$dictId:$word' 
+          final String cacheKey = format == 'mdict'
+              ? '$dictId:$word'
               : '$dictId:$offset:$length';
           _addToCache(cacheKey, res);
         }
@@ -4190,7 +4406,8 @@ class DictionaryManager {
 
       switch (format) {
         case 'mdict':
-          final isSafMdict = Platform.isAndroid && dictPath.startsWith('content://');
+          final isSafMdict =
+              Platform.isAndroid && dictPath.startsWith('content://');
           await Isolate.spawn(
             _indexMdictEntry,
             _IndexMdictArgs(
@@ -4216,8 +4433,14 @@ class DictionaryManager {
               slobPath: dictPath,
               indexDefinitions: indexDefinitions,
               bookName: bookName,
-              sourceType: (Platform.isAndroid && dictPath.startsWith('content://')) ? 'linked' : null,
-              sourceBookmark: (Platform.isAndroid && dictPath.startsWith('content://')) ? dictPath : null,
+              sourceType:
+                  (Platform.isAndroid && dictPath.startsWith('content://'))
+                  ? 'linked'
+                  : null,
+              sourceBookmark:
+                  (Platform.isAndroid && dictPath.startsWith('content://'))
+                  ? dictPath
+                  : null,
               sendPort: receivePort.sendPort,
               rootIsolateToken: rootIsolateToken,
             ),
@@ -4225,7 +4448,8 @@ class DictionaryManager {
           break;
 
         case 'dictd':
-          final isSafDictd = Platform.isAndroid && dictPath.startsWith('content://');
+          final isSafDictd =
+              Platform.isAndroid && dictPath.startsWith('content://');
           // For DICTD, we need the .index file. It should be in the same folder.
           final indexPath = dictPath.replaceFirst(
             RegExp(r'\.dict(\.dz)?$'),
@@ -4361,9 +4585,10 @@ class DictionaryManager {
   /// Supports: x-checksum-md5, content-md5 (base64), etag, x-amz-meta-md5.
   String? _getChecksumFromHeaders(Map<String, String> headers) {
     // 1. Direct hex MD5 headers
-    final directMd5 = headers['x-checksum-md5'] ?? 
-                      headers['x-amz-meta-md5'] ?? 
-                      headers['x-md5-checksum'];
+    final directMd5 =
+        headers['x-checksum-md5'] ??
+        headers['x-amz-meta-md5'] ??
+        headers['x-md5-checksum'];
     if (directMd5 != null && directMd5.length == 32) {
       return directMd5.toLowerCase();
     }
@@ -4373,7 +4598,10 @@ class DictionaryManager {
     if (contentMd5 != null) {
       try {
         final bytes = base64.decode(contentMd5);
-        return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join().toLowerCase();
+        return bytes
+            .map((b) => b.toRadixString(16).padLeft(2, '0'))
+            .join()
+            .toLowerCase();
       } catch (_) {}
     }
 
@@ -4382,7 +4610,8 @@ class DictionaryManager {
     if (etag != null) {
       String cleanEtag = etag.replaceAll('"', '');
       if (cleanEtag.startsWith('W/')) cleanEtag = cleanEtag.substring(2);
-      if (cleanEtag.length == 32 && RegExp(r'^[a-fA-F0-9]{32}$').hasMatch(cleanEtag)) {
+      if (cleanEtag.length == 32 &&
+          RegExp(r'^[a-fA-F0-9]{32}$').hasMatch(cleanEtag)) {
         return cleanEtag.toLowerCase();
       }
     }
@@ -4390,14 +4619,23 @@ class DictionaryManager {
     // 4. Digest header (RFC 3230) - e.g. "md5=..."
     final digest = headers['digest'];
     if (digest != null) {
-      final md5Match = RegExp(r'md5=([a-fA-F0-9]{32})', caseSensitive: false).firstMatch(digest);
+      final md5Match = RegExp(
+        r'md5=([a-fA-F0-9]{32})',
+        caseSensitive: false,
+      ).firstMatch(digest);
       if (md5Match != null) return md5Match.group(1)!.toLowerCase();
-      
-      final base64Match = RegExp(r'md5=([a-zA-Z0-9+/=]+)', caseSensitive: false).firstMatch(digest);
+
+      final base64Match = RegExp(
+        r'md5=([a-zA-Z0-9+/=]+)',
+        caseSensitive: false,
+      ).firstMatch(digest);
       if (base64Match != null) {
         try {
           final bytes = base64.decode(base64Match.group(1)!);
-          return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join().toLowerCase();
+          return bytes
+              .map((b) => b.toRadixString(16).padLeft(2, '0'))
+              .join()
+              .toLowerCase();
         } catch (_) {}
       }
     }
@@ -4405,11 +4643,17 @@ class DictionaryManager {
     // 5. x-goog-hash (Google Cloud Storage) - e.g. "crc32c=XXXX,md5=YYYY=="
     final googHash = headers['x-goog-hash'];
     if (googHash != null) {
-      final md5Match = RegExp(r'md5=([a-zA-Z0-9+/=]+)', caseSensitive: false).firstMatch(googHash);
+      final md5Match = RegExp(
+        r'md5=([a-zA-Z0-9+/=]+)',
+        caseSensitive: false,
+      ).firstMatch(googHash);
       if (md5Match != null) {
         try {
           final bytes = base64.decode(md5Match.group(1)!);
-          return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join().toLowerCase();
+          return bytes
+              .map((b) => b.toRadixString(16).padLeft(2, '0'))
+              .join()
+              .toLowerCase();
         } catch (_) {}
       }
     }
@@ -4460,10 +4704,15 @@ class DictionaryManager {
       try {
         final response = await http.get(Uri.parse(effectiveUrl));
         if (response.statusCode == 200) {
-          yield ImportProgress(message: 'Checking checksum of the dictionary...', value: 0.0);
+          yield ImportProgress(
+            message: 'Checking checksum of the dictionary...',
+            value: 0.0,
+          );
           final headerChecksum = _getChecksumFromHeaders(response.headers);
           if (headerChecksum != null) {
-            final existing = await _dbHelper.getDictionaryByChecksum(headerChecksum);
+            final existing = await _dbHelper.getDictionaryByChecksum(
+              headerChecksum,
+            );
             if (existing != null) {
               yield ImportProgress(
                 message: 'Already Exists: ${existing['name']}',
@@ -4517,10 +4766,15 @@ class DictionaryManager {
         throw Exception('Failed to download: HTTP ${response.statusCode}');
       }
 
-      yield ImportProgress(message: 'Checking checksum of the dictionary...', value: 0.0);
+      yield ImportProgress(
+        message: 'Checking checksum of the dictionary...',
+        value: 0.0,
+      );
       final headerChecksum = _getChecksumFromHeaders(response.headers);
       if (headerChecksum != null) {
-        final existing = await _dbHelper.getDictionaryByChecksum(headerChecksum);
+        final existing = await _dbHelper.getDictionaryByChecksum(
+          headerChecksum,
+        );
         if (existing != null) {
           yield ImportProgress(
             message: 'Already Exists: ${existing['name']}',

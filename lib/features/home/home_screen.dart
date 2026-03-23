@@ -6,6 +6,7 @@ import 'package:hdict/core/manager/dictionary_manager.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:flutter/services.dart';
 import 'package:hdict/core/utils/html_lookup_wrapper.dart';
+import 'package:hdict/core/utils/multimedia_processor.dart';
 import 'package:provider/provider.dart';
 import 'package:hdict/features/settings/settings_provider.dart';
 import 'package:hdict/features/home/widgets/app_drawer.dart';
@@ -1092,6 +1093,45 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     int? searchTotalMs,
     int? searchResultCount,
   }) {
+    final int dictId = defMap['dict_id'] as int;
+    final String format = defMap['format'] as String? ?? 'stardict';
+
+    if (format == 'mdict') {
+      return _MdictDefinitionContent(
+        defMap: defMap,
+        dictId: dictId,
+        theme: theme,
+        highlightHeadword: highlightHeadword,
+        highlightDefinition: highlightDefinition,
+        searchSqliteMs: searchSqliteMs,
+        searchOtherMs: searchOtherMs,
+        searchTotalMs: searchTotalMs,
+        searchResultCount: searchResultCount,
+      );
+    }
+
+    return _buildDefinitionContentSync(
+      theme,
+      defMap,
+      highlightHeadword: highlightHeadword,
+      highlightDefinition: highlightDefinition,
+      searchSqliteMs: searchSqliteMs,
+      searchOtherMs: searchOtherMs,
+      searchTotalMs: searchTotalMs,
+      searchResultCount: searchResultCount,
+    );
+  }
+
+  Widget _buildDefinitionContentSync(
+    ThemeData theme,
+    Map<String, dynamic> defMap, {
+    String? highlightHeadword,
+    String? highlightDefinition,
+    int? searchSqliteMs,
+    int? searchOtherMs,
+    int? searchTotalMs,
+    int? searchResultCount,
+  }) {
     final settings = context.watch<SettingsProvider>();
     final List<Map<String, dynamic>> rawDefinitions =
         List<Map<String, dynamic>>.from(defMap['definitions']);
@@ -1187,7 +1227,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         defMap['type_sequence'] as String?;
 
                     // Wrap and Highlight (Word wrapping removed in favor of tap-position detection)
-                    final processed = HtmlLookupWrapper.processRecord(
+                    String processed = HtmlLookupWrapper.processRecord(
                       html: HomeScreen.normalizeWhitespace(
                         rawContent,
                         format: format,
@@ -1720,6 +1760,403 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         );
       },
+    );
+  }
+}
+
+class _MdictDefinitionContent extends StatefulWidget {
+  final Map<String, dynamic> defMap;
+  final int dictId;
+  final ThemeData theme;
+  final String? highlightHeadword;
+  final String? highlightDefinition;
+  final int? searchSqliteMs;
+  final int? searchOtherMs;
+  final int? searchTotalMs;
+  final int? searchResultCount;
+
+  const _MdictDefinitionContent({
+    required this.defMap,
+    required this.dictId,
+    required this.theme,
+    this.highlightHeadword,
+    this.highlightDefinition,
+    this.searchSqliteMs,
+    this.searchOtherMs,
+    this.searchTotalMs,
+    this.searchResultCount,
+  });
+
+  @override
+  State<_MdictDefinitionContent> createState() =>
+      _MdictDefinitionContentState();
+}
+
+class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
+  bool _isProcessing = false;
+  late List<Map<String, dynamic>> _rawDefinitions;
+
+  @override
+  void initState() {
+    super.initState();
+    _rawDefinitions = List<Map<String, dynamic>>.from(
+      widget.defMap['definitions'],
+    );
+    _processMultimedia();
+  }
+
+  Future<void> _processMultimedia() async {
+    if (_isProcessing) return;
+    setState(() => _isProcessing = true);
+
+    final mdictReader = DictionaryManager.instance.getMdictReader(
+      widget.dictId,
+    );
+    if (mdictReader == null || !mdictReader.hasMdd) {
+      setState(() => _isProcessing = false);
+      return;
+    }
+
+    final mp = MultimediaProcessor(mdictReader, mdictReader.cssContent);
+    final format = widget.defMap['format'] as String? ?? 'mdict';
+    final typeSequence = widget.defMap['type_sequence'] as String?;
+
+    for (final defData in _rawDefinitions) {
+      if (defData['processedHtml'] != null) continue;
+
+      final rawContent = defData['rawContent'] as String;
+
+      String processed = HtmlLookupWrapper.processRecord(
+        html: HomeScreen.normalizeWhitespace(
+          rawContent,
+          format: format,
+          typeSequence: typeSequence,
+        ),
+        format: format,
+        typeSequence: typeSequence,
+        underlineQuery: widget.highlightDefinition,
+      );
+
+      processed = await mp.processHtmlWithMedia(processed);
+
+      final headwordHtml = defData['headwordHtml'] as String;
+      defData['processedHtml'] = '$headwordHtml\n$processed';
+    }
+
+    if (mounted) {
+      setState(() => _isProcessing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isProcessing) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return _buildDefinitionContentSync(
+      widget.theme,
+      widget.defMap,
+      highlightHeadword: widget.highlightHeadword,
+      highlightDefinition: widget.highlightDefinition,
+      searchSqliteMs: widget.searchSqliteMs,
+      searchOtherMs: widget.searchOtherMs,
+      searchTotalMs: widget.searchTotalMs,
+      searchResultCount: widget.searchResultCount,
+    );
+  }
+
+  Widget _buildDefinitionContentSync(
+    ThemeData theme,
+    Map<String, dynamic> defMap, {
+    String? highlightHeadword,
+    String? highlightDefinition,
+    int? searchSqliteMs,
+    int? searchOtherMs,
+    int? searchTotalMs,
+    int? searchResultCount,
+  }) {
+    final settings = context.watch<SettingsProvider>();
+
+    final highlightCol =
+        ThemeData.estimateBrightnessForColor(settings.backgroundColor) ==
+            Brightness.dark
+        ? '#ff9900'
+        : '#ffeb3b';
+
+    return Container(
+      color: settings.getEffectiveBackgroundColor(context),
+      child: Column(
+        children: [
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              icon: const Icon(Icons.copy_all, size: 18),
+              label: const Text('Copy All'),
+              onPressed: () {
+                final allText = _rawDefinitions
+                    .map((d) {
+                      final String html =
+                          d['processedHtml'] ??
+                          '${d['headwordHtml']}\n${d['rawContent']}';
+                      return html.replaceAll(
+                        RegExp(
+                          r'<[^>]*>',
+                          multiLine: true,
+                          caseSensitive: true,
+                        ),
+                        '',
+                      );
+                    })
+                    .join('\n\n');
+                Clipboard.setData(ClipboardData(text: allText));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Copied all definitions to clipboard'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              },
+            ),
+          ),
+          Expanded(
+            child: SafeArea(
+              top: false,
+              child: ListView.separated(
+                padding: const EdgeInsets.only(left: 20, right: 20, bottom: 20),
+                itemCount: _rawDefinitions.length + 1,
+                separatorBuilder: (context, index) {
+                  if (index == _rawDefinitions.length - 1) {
+                    return const Divider(
+                      height: 48,
+                      thickness: 1,
+                      color: Colors.transparent,
+                    );
+                  }
+                  return const Divider(height: 32, thickness: 2);
+                },
+                itemBuilder: (context, index) {
+                  if (index == _rawDefinitions.length) {
+                    final sqliteMs = searchSqliteMs ?? 0;
+                    final totalMs = searchTotalMs ?? 0;
+                    final otherMs = searchOtherMs ?? 0;
+                    final resultCount = searchResultCount ?? 0;
+                    final dictName =
+                        defMap['dict_name'] ?? 'Unknown Dictionary';
+
+                    return Text(
+                      'Dictionary: $dictName\n'
+                      'Showed $resultCount results in $totalMs ms.\n'
+                      'Sqlite query took $sqliteMs ms.\n'
+                      'Other work took $otherMs ms.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      textAlign: TextAlign.center,
+                    );
+                  }
+
+                  final Map<String, dynamic> defData = _rawDefinitions[index];
+                  String? definitionHtml = defData['processedHtml'];
+
+                  if (definitionHtml == null) {
+                    final String rawContent = defData['rawContent'] as String;
+                    final String format =
+                        defMap['format'] as String? ?? 'stardict';
+                    final String? typeSequence =
+                        defMap['type_sequence'] as String?;
+
+                    String processed = HtmlLookupWrapper.processRecord(
+                      html: HomeScreen.normalizeWhitespace(
+                        rawContent,
+                        format: format,
+                        typeSequence: typeSequence,
+                      ),
+                      format: format,
+                      typeSequence: typeSequence,
+                      underlineQuery: highlightDefinition,
+                    );
+
+                    definitionHtml = '${defData['headwordHtml']}\n$processed';
+                    defData['processedHtml'] = definitionHtml;
+                  }
+
+                  return Stack(
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          GestureDetector(
+                            behavior: HitTestBehavior.translucent,
+                            child: Html(
+                              data: definitionHtml,
+                              style: {
+                                "body": Style(
+                                  fontSize: FontSize(settings.fontSize),
+                                  lineHeight: LineHeight.em(1.5),
+                                  margin: Margins.zero,
+                                  padding: HtmlPaddings.zero,
+                                  color: settings.getEffectiveTextColor(
+                                    context,
+                                  ),
+                                  fontFamily: settings.fontFamily,
+                                ),
+                                "a": Style(
+                                  color: theme.colorScheme.primary,
+                                  textDecoration: TextDecoration.underline,
+                                ),
+                                "mark": Style(
+                                  backgroundColor: Color(
+                                    int.parse(
+                                      highlightCol.replaceFirst('#', '0xFF'),
+                                    ),
+                                  ),
+                                  color: Colors.black,
+                                ),
+                                ".dict-word": Style(
+                                  color: settings.textColor,
+                                  textDecoration: TextDecoration.none,
+                                ),
+                                ".headword": Style(
+                                  color: settings.getEffectiveHeadwordColor(
+                                    context,
+                                  ),
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              },
+                              onLinkTap: (url, attributes, element) {
+                                if (url != null && url.startsWith('mdd-')) {
+                                  _showMediaPlayer(url);
+                                } else if (url != null &&
+                                    (url.startsWith('http://') ||
+                                        url.startsWith('https://'))) {
+                                  launchUrl(
+                                    Uri.parse(url),
+                                    mode: LaunchMode.externalApplication,
+                                  );
+                                } else if (url != null) {
+                                  String wordToLookup = url;
+                                  if (wordToLookup.startsWith('look_up:')) {
+                                    wordToLookup = wordToLookup.substring(8);
+                                  } else if (wordToLookup.startsWith(
+                                    'bword://',
+                                  )) {
+                                    wordToLookup = wordToLookup.substring(8);
+                                  }
+                                  final decoded = wordToLookup.contains('%')
+                                      ? Uri.decodeComponent(wordToLookup)
+                                      : wordToLookup;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Search for: $decoded'),
+                                    ),
+                                  );
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showMediaPlayer(String url) async {
+    final parts = url.split(':');
+    if (parts.length != 2) return;
+
+    final mediaType = parts[0];
+    final resourceKey = parts[1];
+
+    final mdictReader = DictionaryManager.instance.getMdictReader(
+      widget.dictId,
+    );
+    if (mdictReader == null) return;
+
+    Uint8List? data;
+    if (mediaType == 'mdd-audio') {
+      data = await mdictReader.getMddResourceBytes(resourceKey);
+    } else if (mediaType == 'mdd-video') {
+      data = await mdictReader.getMddResourceBytes(resourceKey);
+    }
+
+    if (data == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Media not found')));
+      }
+      return;
+    }
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => _MediaPlayerDialog(
+        data: data!,
+        mediaType: mediaType == 'mdd-audio' ? 'audio' : 'video',
+        filename: resourceKey,
+      ),
+    );
+  }
+}
+
+class _MediaPlayerDialog extends StatelessWidget {
+  final Uint8List data;
+  final String mediaType;
+  final String filename;
+
+  const _MediaPlayerDialog({
+    required this.data,
+    required this.mediaType,
+    required this.filename,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(filename),
+      content: SizedBox(
+        width: MediaQuery.of(context).size.width * 0.8,
+        height: mediaType == 'video' ? 300 : 100,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                mediaType == 'audio' ? Icons.audiotrack : Icons.videocam,
+                size: 64,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                mediaType == 'audio' ? 'Audio file' : 'Video file',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${(data.length / 1024).toStringAsFixed(1)} KB',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
     );
   }
 }

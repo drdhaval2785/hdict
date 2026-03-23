@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'mdict/mdict_parser.dart';
+import 'mdd_reader.dart';
 import 'package:hdict/core/parser/random_access_source.dart';
 import 'package:hdict/core/parser/saf_random_access_source.dart';
 import 'package:hdict/core/parser/bookmark_random_access_source.dart';
@@ -16,45 +17,101 @@ class MdictReader {
   late MdxParser _parser;
   bool _isInitialized = false;
 
-  MdictReader(this.mdxPath, {required this.source}) {
+  final String? _mddPath;
+  MddReader? _mddReader;
+  String? _cssContent;
+
+  MdictReader(this.mdxPath, {required this.source, String? mddPath})
+    : _mddPath = mddPath {
     _parser = MdxParser(source, mdxPath);
   }
 
   /// Factory to create an MdictReader from a local file path.
-  static Future<MdictReader> fromPath(String path) async {
-    return MdictReader(path, source: FileRandomAccessSource(path));
+  static Future<MdictReader> fromPath(String path, {String? mddPath}) async {
+    return MdictReader(
+      path,
+      source: FileRandomAccessSource(path),
+      mddPath: mddPath,
+    );
   }
 
   /// Factory to create an instance from a linked source (SAF or Bookmark).
-  static Future<MdictReader> fromLinkedSource(String source, {String? targetPath, String? actualPath}) async {
+  static Future<MdictReader> fromLinkedSource(
+    String source, {
+    String? targetPath,
+    String? actualPath,
+    String? mddPath,
+  }) async {
     final String path = actualPath ?? targetPath ?? source;
+    RandomAccessSource src;
     if (Platform.isAndroid) {
-      return MdictReader(path, source: SafRandomAccessSource(source));
+      src = SafRandomAccessSource(source);
     } else if (Platform.isIOS || Platform.isMacOS) {
-      return MdictReader(path, source: BookmarkRandomAccessSource(source, targetPath: targetPath));
+      src = BookmarkRandomAccessSource(source, targetPath: targetPath);
     } else {
-      // For Linux/Windows, linked source is just a direct path for now
-      final String fullPath = targetPath != null ? join(source, targetPath) : source;
-      return MdictReader(fullPath, source: FileRandomAccessSource(fullPath));
+      final String fullPath = targetPath != null
+          ? join(source, targetPath)
+          : source;
+      src = FileRandomAccessSource(fullPath);
     }
+    return MdictReader(path, source: src, mddPath: mddPath);
   }
 
   /// Factory to create an MdictReader from an Android SAF URI.
-  static Future<MdictReader> fromUri(String uri) async {
-    return MdictReader(uri, source: SafRandomAccessSource(uri));
+  static Future<MdictReader> fromUri(String uri, {String? mddPath}) async {
+    return MdictReader(
+      uri,
+      source: SafRandomAccessSource(uri),
+      mddPath: mddPath,
+    );
   }
 
-  /// Opens the MDX file.
+  /// Opens the MDX file and optionally initializes MDD reader.
   Future<void> open() async {
     if (kIsWeb) throw UnsupportedError('MDict is not supported on Web.');
     if (_isInitialized) return;
     try {
       await _parser.initDict();
       _isInitialized = true;
+
+      if (_mddPath != null) {
+        await _openMdd();
+      }
     } catch (e) {
       debugPrint('Error initializing MDict: $e');
       rethrow;
     }
+  }
+
+  Future<void> _openMdd() async {
+    final mddPath = _mddPath;
+    if (mddPath == null) return;
+    try {
+      final mddSource = FileRandomAccessSource(mddPath);
+      _mddReader = MddReader(mddPath, source: mddSource);
+      await _mddReader!.open();
+      _cssContent = await _mddReader!.getCssContent();
+    } catch (e) {
+      debugPrint('Error initializing MDD: $e');
+    }
+  }
+
+  /// Gets CSS content from MDD file if available.
+  String? get cssContent => _cssContent;
+
+  /// Checks if MDD is available.
+  bool get hasMdd => _mddReader != null;
+
+  /// Gets a resource from the MDD file by key.
+  Future<List<int>?> getMddResource(String key) async {
+    if (_mddReader == null) return null;
+    return _mddReader!.getResource(key);
+  }
+
+  /// Gets a resource from the MDD file as bytes.
+  Future<Uint8List?> getMddResourceBytes(String key) async {
+    if (_mddReader == null) return null;
+    return _mddReader!.getResourceAsBytes(key);
   }
 
   /// Looks up the HTML definition for a word.
@@ -64,7 +121,7 @@ class MdictReader {
     try {
       final info = await _parser.locate(word);
       if (info == null) return null;
-      
+
       return await _parser.readOneMdx(info);
     } catch (e) {
       debugPrint('Error looking up $word: $e');
@@ -73,7 +130,10 @@ class MdictReader {
   }
 
   /// Returns up to [limit] headwords that start with [prefix].
-  Future<List<(String, int)>> prefixSearch(String prefix, {int limit = 50000}) async {
+  Future<List<(String, int)>> prefixSearch(
+    String prefix, {
+    int limit = 50000,
+  }) async {
     if (kIsWeb) throw UnsupportedError('MDict is not supported on Web.');
     if (!_isInitialized) await open();
     try {
@@ -83,11 +143,15 @@ class MdictReader {
     }
   }
 
-  /// Closes the MDX file.
+  /// Closes the MDX and MDD files.
   Future<void> close() async {
     if (kIsWeb) return;
     try {
       await _parser.close();
+      if (_mddReader != null) {
+        await _mddReader!.close();
+        _mddReader = null;
+      }
       _isInitialized = false;
     } catch (_) {}
   }
