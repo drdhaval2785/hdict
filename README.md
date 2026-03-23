@@ -26,16 +26,15 @@ A high-performance, feature-rich dictionary application built with Flutter. Opti
 
 ### 📖 Universal Word Lookup & Native Tap-to-Search
 - **Tap-on-Meaning**: Every word in a definition is interactive using native hit-testing (without character limits). Tap any word to instantly look it up.
-- **Desktop Ready**: Hover hand cursors for clickable definition texts on macOS, Linux, and Windows.
-- **Language Agnostic**: Built with Unicode support to work seamlessly with English, Vietnamese, and other languages.
+- **Language Agnostic**: Built with Unicode support to work seamlessly with English, Hindi, Vietnamese, or any other languages.
 - **Nested Lookups**: Lookup results open in a full-width bottom popup, allowing you to explore meanings without losing your place.
 
 ### 📚 Massive Dictionary Support & Web Import
-- **Select Dictionaries by Language**: Browse and download from around 1900 FreeDict dictionaries organized by origin and target languages directly within the app.
-- **Extensive Format Support**: Read from **StarDict**, **MDict** (`.mdx`, `.mdd`), **Slob** (`.slob`), and **DICTD** formats.
+- **Select Dictionaries by Language**: Browse and download from around 1800 FreeDict dictionaries organized by origin and target languages directly within the app.
+- **Extensive Format Support**: Read from **StarDict** (`.dict/.dict.dz`, `.idx`, `.ifo` and optionally `.syn`), **MDict** (`.mdx`, `.mdd`), **Slob** (`.slob`), and **DICTD** (`.dict/.dict.dz`, `.index`) formats.
 - **Archive Extracting**: Native ingestion of dictionaries compressed in `.zip`, `.tar.gz`, `.tar.xz`, `.bz2`, and `.7z` formats. Support for importing entire folders of dictionaries at once via the unified **Add Folder** action.
-- **Smart Grouping**: Dictionaries can now belong to multiple groups. When using "Add Folder", dictionaries are automatically assigned to a group named after the source folder.
-- **Manage Dictionaries**: Delete, update, securely clean orphaned data and prioritize dictionaries via standard display ordering.
+- **Smart Grouping**: Dictionaries can now belong to multiple groups. When using "Add Folder", dictionaries are automatically assigned to a group named after the source folder (if added by 'Add Folder') or Language pair (if downloaded from 'Select by Language').
+- **Manage Dictionaries**: Delete, update, and prioritize dictionaries via standard display ordering.
 
 ### 🗂️ Flash Cards & Learning
 - **Truly Random Quizzes**: Pull random words from your selected dictionaries for rapid learning.
@@ -49,13 +48,41 @@ A high-performance, feature-rich dictionary application built with Flutter. Opti
 - **Typography & UI**: Choose from curated Google Fonts, adjust font sizes globally, and enjoy reliable boundary padding for seamless interaction on mobile devices.
 - **History Retention**: Automatically clean up your search history after a set number of days.
 
-### Importing Dictionaries
-`hdict` supports multiple dictionary formats including StarDict, MDict, Slob, and DICTD.
+### 📥 Importing Dictionaries
+`hdict` offers four ways to build your local library. All methods support automatic deduplication via MD5 checksums.
 
-1. Open the **Manage Dictionaries** menu in the sidebar.
-2. Choose **Select by Language** to instantly browse and download 1900+ dictionaries.
-3. Alternatively, tap the **Import File**, **Import Folder**, or **Download from Web** button.
-4. Choose your `.slob`, `.mdx`, `.zip`, `.7z`, or `.tar.xz` dictionary files or folders to parse entirely offline into the local database.
+#### 1. Select by Language (Recommended)
+The easiest way to get started with high-quality, open-source dictionaries.
+1. Open the **Sidebar** and navigate to **Manage Dictionaries**.
+2. Tap **Select by Language**.
+3. Browse the list (e.g., *English-Hindi*, *French-English*).
+4. Tap the **Download** icon next to your choice.
+- **Example**: Selecting `English-German` will download a `.tar.gz` or `.zip` or similar file from upstream resource and automatically index it into the `English-German` group.
+
+#### 2. Add Folder
+Perfect for bulk importing large existing collections or entire StarDict/MDict directories.
+1. Tap **Add Folder** in the dictionary management menu.
+2. Select a directory containing dictionary files (and their subfolders).
+3. The app will recursively scan for all supported formats.
+- **Example**: Selecting a folder `Downloads/MyDicts/` containing 50 `.mdx` and `.dict.dz` files will import them all in one go and group them under `MyDicts`.
+
+#### 3. Import File
+Use this for single dictionary files or compressed archives (`.zip`, `.7z`, `.tar.xz`, etc.).
+1. Tap **Import File**.
+2. Pick a single dictionary file or a supported archive.
+3. Archives will be extracted and indexed automatically.
+- **Example**: Importing `Oxford_Advanced.zip` will extract the `.mdx` files inside and add the dictionary to your library.
+- **Note**: Importing StarDict dictionary would require selecting `.dict/.dict.dz, .ifo and .idx` files mandatorily and   `.syn` file optionally. 
+Importing Dictd dictionary would require selecting `.dict/.dict.dz, .index` files mandatorily. 
+Importing MDict dictionary would require selecting `.mdx` file mandatorily. 
+Importing Slob dictionary would require selecting `.slob` file  mandatorily. 
+
+#### 4. Download Web
+Import a dictionary directly from a direct download link.
+1. Tap **Download Web**.
+2. Paste the URL of the dictionary file or archive.
+3. The app will download, extract (if needed), and index the content.
+- **Example**: Paste `https://example.com/medical_dict.stardict.zip` to download and import a medical dictionary directly into the app.
 
 ---
 
