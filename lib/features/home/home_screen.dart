@@ -1144,8 +1144,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     final totalMs = searchTotalMs ?? _searchTotalMs;
                     final otherMs = searchOtherMs ?? _searchOtherMs;
                     final resultCount = searchResultCount ?? _searchResultCount;
+                    final dictName = defMap['dict_name'] ?? 'Unknown Dictionary';
 
                     return Text(
+                      'Dictionary: $dictName\n'
                       'Showed $resultCount results in $totalMs ms.\n'
                       'Sqlite query took $sqliteMs ms.\n'
                       'Other work took $otherMs ms.',
