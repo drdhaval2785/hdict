@@ -7,6 +7,9 @@ bool enableDebugLogs = true;
 /// Flag to control verbose HTML processing logs.
 bool showHtmlProcessing = true;
 
+/// Flag to control multimedia processing debug logs (images, audio, video).
+bool showMultimediaProcessing = false;
+
 /// A wrapper around [debugPrint] that checks the [enableDebugLogs] flag.
 void hDebugPrint(String? message, {int? wrapWidth}) {
   if (enableDebugLogs) {

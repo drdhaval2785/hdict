@@ -1448,9 +1448,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                         }
                                       } else if (url.startsWith('mdd-audio:') ||
                                           url.startsWith('mdd-video:')) {
-                                        hDebugPrint(
-                                          'MDD media link tapped: $url',
-                                        );
+                                        if (showMultimediaProcessing) {
+                                          hDebugPrint(
+                                            'MDD media link tapped: $url',
+                                          );
+                                        }
                                         final defId = defMap['dict_id'] as int?;
                                         if (defId != null) {
                                           _showMediaPlayer(url, defId);
@@ -2181,17 +2183,23 @@ class _MediaPlayerDialogState extends State<_MediaPlayerDialog> {
       );
       await tempFile.writeAsBytes(widget.data);
       _tempFilePath = tempFile.path;
-      hDebugPrint(
-        'MediaPlayer: temp file: $_tempFilePath, size: ${widget.data.length}, type: ${widget.mediaType}',
-      );
+      if (showMultimediaProcessing) {
+        hDebugPrint(
+          'MediaPlayer: temp file: $_tempFilePath, size: ${widget.data.length}, type: ${widget.mediaType}',
+        );
+      }
 
       if (widget.mediaType == 'audio') {
         _audioPlayer = AudioPlayer();
-        hDebugPrint('MediaPlayer: setting file path...');
+        if (showMultimediaProcessing) {
+          hDebugPrint('MediaPlayer: setting file path...');
+        }
         await _audioPlayer!.setFilePath(_tempFilePath!);
-        hDebugPrint(
-          'MediaPlayer: audio player ready, duration: ${_audioPlayer!.duration}',
-        );
+        if (showMultimediaProcessing) {
+          hDebugPrint(
+            'MediaPlayer: audio player ready, duration: ${_audioPlayer!.duration}',
+          );
+        }
       } else {
         _videoController = VideoPlayerController.file(File(_tempFilePath!));
         await _videoController!.initialize();
@@ -2202,12 +2210,18 @@ class _MediaPlayerDialogState extends State<_MediaPlayerDialog> {
       }
       // Auto-play after loading
       if (widget.mediaType == 'audio' && _audioPlayer != null) {
-        hDebugPrint('MediaPlayer: auto-playing...');
+        if (showMultimediaProcessing) {
+          hDebugPrint('MediaPlayer: auto-playing...');
+        }
         await _audioPlayer!.play();
-        hDebugPrint('MediaPlayer: play() called');
+        if (showMultimediaProcessing) {
+          hDebugPrint('MediaPlayer: play() called');
+        }
       }
     } catch (e) {
-      hDebugPrint('MediaPlayer error: $e');
+      if (showMultimediaProcessing) {
+        hDebugPrint('MediaPlayer error: $e');
+      }
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -2303,9 +2317,11 @@ class _MediaPlayerDialogState extends State<_MediaPlayerDialog> {
           builder: (context, snapshot) {
             final position = snapshot.data ?? Duration.zero;
             final duration = _audioPlayer!.duration ?? Duration.zero;
-            hDebugPrint(
-              'MediaPlayer: position: $position, duration: $duration',
-            );
+            if (showMultimediaProcessing) {
+              hDebugPrint(
+                'MediaPlayer: position: $position, duration: $duration',
+              );
+            }
             return Column(
               children: [
                 Slider(
@@ -2342,9 +2358,11 @@ class _MediaPlayerDialogState extends State<_MediaPlayerDialog> {
               builder: (context, snapshot) {
                 final playerState = snapshot.data;
                 final playing = playerState?.playing ?? false;
-                hDebugPrint(
-                  'MediaPlayer: play state changed - playing: $playing',
-                );
+                if (showMultimediaProcessing) {
+                  hDebugPrint(
+                    'MediaPlayer: play state changed - playing: $playing',
+                  );
+                }
                 return IconButton(
                   iconSize: 48,
                   icon: Icon(
@@ -2353,9 +2371,11 @@ class _MediaPlayerDialogState extends State<_MediaPlayerDialog> {
                         : Icons.play_circle_filled,
                   ),
                   onPressed: () {
-                    hDebugPrint(
-                      'MediaPlayer: play button pressed, currently playing: $playing',
-                    );
+                    if (showMultimediaProcessing) {
+                      hDebugPrint(
+                        'MediaPlayer: play button pressed, currently playing: $playing',
+                      );
+                    }
                     if (playing) {
                       _audioPlayer!.pause();
                     } else {

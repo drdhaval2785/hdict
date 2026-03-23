@@ -14,18 +14,22 @@ class MultimediaProcessor {
   Future<String> processHtmlWithMedia(String html) async {
     String processed = html;
 
-    hDebugPrint(
-      'MultimediaProcessor: Input HTML (first 500): ${html.substring(0, html.length > 500 ? 500 : html.length)}',
-    );
+    if (showMultimediaProcessing) {
+      hDebugPrint(
+        'MultimediaProcessor: Input HTML (first 500): ${html.substring(0, html.length > 500 ? 500 : html.length)}',
+      );
+    }
 
     if (_mddReader != null) {
       processed = await _replaceImgSrcWithDataUris(processed);
       processed = _addMediaTapHandlers(processed);
     }
 
-    hDebugPrint(
-      'MultimediaProcessor: Output HTML (first 500): ${processed.substring(0, processed.length > 500 ? 500 : processed.length)}',
-    );
+    if (showMultimediaProcessing) {
+      hDebugPrint(
+        'MultimediaProcessor: Output HTML (first 500): ${processed.substring(0, processed.length > 500 ? 500 : processed.length)}',
+      );
+    }
 
     processed = injectCss(processed);
 
@@ -76,15 +80,21 @@ class MultimediaProcessor {
       result.write(html.substring(lastEnd, match.start));
 
       final src = match.group(1);
-      hDebugPrint('MultimediaProcessor: Found img src: $src');
+      if (showMultimediaProcessing) {
+        hDebugPrint('MultimediaProcessor: Found img src: $src');
+      }
       if (src != null && !src.startsWith('data:') && !src.startsWith('http')) {
         final resourceKey = _extractResourceKey(src);
-        hDebugPrint(
-          'MultimediaProcessor: Extracted resource key: $resourceKey',
-        );
+        if (showMultimediaProcessing) {
+          hDebugPrint(
+            'MultimediaProcessor: Extracted resource key: $resourceKey',
+          );
+        }
         if (resourceKey != null) {
           final bytes = await _mddReader!.getMddResourceBytes(resourceKey);
-          hDebugPrint('MultimediaProcessor: Got bytes: ${bytes?.length}');
+          if (showMultimediaProcessing) {
+            hDebugPrint('MultimediaProcessor: Got bytes: ${bytes?.length}');
+          }
           if (bytes != null) {
             final mimeType = _getMimeType(resourceKey);
             final base64 = base64Encode(bytes);
