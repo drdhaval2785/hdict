@@ -4044,6 +4044,7 @@ class DictionaryManager {
       final cached = _getFromCache(cacheKey);
       if (cached != null) {
         results[i] = cached;
+        HPerf.record('fetchBatch_CacheHit', 0);
       } else {
         missingIndices.add(i);
         missingRequests.add(req);

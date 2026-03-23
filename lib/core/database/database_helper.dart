@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'package:hdict/core/utils/logger.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -28,6 +29,33 @@ class DatabaseHelper {
   }
 
   DatabaseHelper._internal();
+
+  /// LRU Cache for SQLite search results.
+  /// Key: "$headwordQuery|$headwordMode|$definitionQuery|$definitionMode|$dictId|$limit"
+  final LinkedHashMap<String, List<Map<String, dynamic>>> _queryCache = 
+      LinkedHashMap<String, List<Map<String, dynamic>>>();
+  static const int _maxQueryCacheEntries = 100;
+
+  void _addToQueryCache(String key, List<Map<String, dynamic>> value) {
+    if (_queryCache.containsKey(key)) {
+      _queryCache.remove(key);
+    } else if (_queryCache.length >= _maxQueryCacheEntries) {
+      _queryCache.remove(_queryCache.keys.first);
+    }
+    _queryCache[key] = value;
+  }
+
+  List<Map<String, dynamic>>? _getFromQueryCache(String key) {
+    if (!_queryCache.containsKey(key)) return null;
+    final value = _queryCache.remove(key);
+    _queryCache[key] = value!;
+    return value;
+  }
+
+  void clearQueryCache() {
+    _queryCache.clear();
+    hDebugPrint('DatabaseHelper: Query cache cleared.');
+  }
 
   void _log(String type, String sql, [dynamic args, dynamic result]) {
     hDebugPrint('--- SQL $type ---');
@@ -897,6 +925,7 @@ class DatabaseHelper {
       storedPath = path.substring(path.indexOf('dictionaries/'));
     }
 
+    clearQueryCache();
     return await db.insert('dictionaries', {
       'name': name,
       'path': storedPath,
@@ -1036,6 +1065,7 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [id],
     );
+    clearQueryCache();
   }
 
   Future<void> updateDictionaryIndexDefinitions(
@@ -1049,6 +1079,7 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [id],
     );
+    clearQueryCache();
   }
 
   Future<void> deleteWordsByDictionaryId(int dictId) async {
@@ -1081,6 +1112,7 @@ class DatabaseHelper {
     final db = await database;
     await db.transaction((txn) async {
       await txn.delete('dictionaries', where: 'id = ?', whereArgs: [id]);
+      clearQueryCache();
 
       final bool useFts5 = _fts5Available ?? true;
       if (useFts5) {
@@ -1191,6 +1223,7 @@ class DatabaseHelper {
         );
       }
     });
+    clearQueryCache();
   }
 
   Future<Map<String, dynamic>?> getDictionaryById(int id) async {
@@ -1289,6 +1322,7 @@ class DatabaseHelper {
     List<Map<String, dynamic>> words,
   ) async {
     if (words.isEmpty) return;
+    clearQueryCache();
     final db = await database;
     await db.transaction((txn) async {
       final bool useFts5 = _fts5Available ?? true;
@@ -1355,6 +1389,15 @@ class DatabaseHelper {
     int? dictId,
     int limit = 50,
   }) async {
+    final String cacheKey = '$headwordQuery|$headwordMode|$definitionQuery|$definitionMode|$dictId|$limit';
+    final cachedResults = _getFromQueryCache(cacheKey);
+    if (cachedResults != null) {
+      HPerf.record('searchWords_CacheHit', 0);
+      hDebugPrint('DatabaseHelper: Query cache HIT for $cacheKey');
+      return cachedResults;
+    }
+
+    final dbWatch = HPerf.start('searchWords_TotalExecution');
     try {
       final db = await database;
 
@@ -1363,12 +1406,15 @@ class DatabaseHelper {
       if (definitionQuery == null &&
           (headwordMode == SearchMode.prefix ||
               headwordMode == SearchMode.exact)) {
-        return await _searchWordsSequential(
+        final res = await _searchWordsSequential(
           headwordQuery: headwordQuery,
           headwordMode: headwordMode,
           dictId: dictId,
           limit: limit,
         );
+        _addToQueryCache(cacheKey, res);
+        HPerf.end(dbWatch, 'searchWords_TotalExecution');
+        return res;
       }
 
       final List<String> whereClauses = [];
@@ -1539,8 +1585,11 @@ class DatabaseHelper {
 
       final result = await db.rawQuery(sql, whereArgs);
       _log('RAW_QUERY [$opDescriptor]', sql, whereArgs, result);
+      _addToQueryCache(cacheKey, result);
+      HPerf.end(dbWatch, 'searchWords_TotalExecution');
       return result;
     } catch (e) {
+      HPerf.end(dbWatch, 'searchWords_TotalExecution');
       hDebugPrint("Search error: $e");
       return [];
     }
