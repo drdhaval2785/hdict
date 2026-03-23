@@ -288,5 +288,40 @@ void main() {
       expect(our3[1]['id'], id1, reason: 'Dict A should be second (display_order=1)');
       expect(our3[2]['id'], id2, reason: 'Dict B should be third (display_order=2)');
     });
+
+    test('getBatchSampleWords: Batch Indexing and Selection', () async {
+      final int dict1Id = await dbHelper.insertDictionary('Dict 1', '/path/1');
+      final int dict2Id = await dbHelper.insertDictionary('Dict 2', '/path/2');
+
+      // 1. Batch insert words for both (100 words each to reduce collision probability in small tests)
+      await dbHelper.batchInsertWords(dict1Id, List.generate(100, (i) => {'word': 'word1_$i', 'offset': i * 10, 'length': 10}));
+      await dbHelper.batchInsertWords(dict2Id, List.generate(100, (i) => {'word': 'word2_$i', 'offset': i * 10, 'length': 10}));
+
+      // 2. Set word_count and clear rowid ranges manually in DB to force auto-indexing
+      await db.update('dictionaries', {'word_count': 100, 'start_rowid': null, 'end_rowid': null});
+      dbHelper.clearDictionaryCache(); // Ensure cache is empty for the first read
+
+      // 3. Call getBatchSampleWords
+      // This should trigger batch indexing in a transaction
+      final results = await dbHelper.getBatchSampleWords(10, [dict1Id, dict2Id]);
+
+      // 4. Verify results
+      expect(results.length, greaterThanOrEqualTo(10), reason: 'Should fetch at least requested 10 words (internal fuzzy fetching included)');
+      expect(results.every((r) => r['word'] != null && r['dict_id'] != null), isTrue);
+
+      // 5. Verify rowid ranges are now indexed
+      final dicts = await dbHelper.getDictionaries();
+      final d1 = dicts.firstWhere((d) => d['id'] == dict1Id);
+      final d2 = dicts.firstWhere((d) => d['id'] == dict2Id);
+
+      expect(d1['start_rowid'], isNotNull, reason: 'Dict 1 should be indexed');
+      expect(d1['end_rowid'], isNotNull);
+      expect(d2['start_rowid'], isNotNull, reason: 'Dict 2 should be indexed');
+      expect(d2['end_rowid'], isNotNull);
+
+      // Verify range consistency (total 200 rows in word_metadata)
+      expect(d1['end_rowid']! - d1['start_rowid']! + 1, 100);
+      expect(d2['end_rowid']! - d2['start_rowid']! + 1, 100);
+    });
   });
 }
