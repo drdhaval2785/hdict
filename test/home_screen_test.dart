@@ -3,22 +3,29 @@ import 'package:hdict/features/home/home_screen.dart';
 
 void main() {
   group('consolidateDefinitions', () {
-    test('lists headword-definition pairs individually and joins keys for title', () {
+    test('lists headword-definition pairs individually and joins keys for title', () async {
       final grouped = <int, Map<String, List<Map<String, dynamic>>>>{
         1: {
           'alpha': [
-            {'word': 'alpha', 'dict_name': 'A', 'raw_content': 'def1'},
+            {'word': 'alpha', 'raw_content': 'def1'},
           ],
           'beta': [
-            {'word': 'beta', 'dict_name': 'A', 'raw_content': 'def1'},
+            {'word': 'beta', 'raw_content': 'def1'},
           ],
           'gamma': [
-            {'word': 'gamma', 'dict_name': 'A', 'raw_content': 'def2'},
+            {'word': 'gamma', 'raw_content': 'def2'},
           ],
         },
       };
 
-      final consolidated = HomeScreen.consolidateDefinitions(grouped);
+      final dictMap = <int, Map<String, dynamic>>{
+        1: {'id': 1, 'name': 'A', 'format': 'stardict'},
+      };
+
+      final consolidated = await HomeScreen.consolidateDefinitions(
+        grouped.entries.toList(),
+        dictMap: dictMap,
+      );
 
       expect(consolidated.length, 1);
       final dict1 = consolidated.first;

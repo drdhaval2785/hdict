@@ -46,26 +46,30 @@ class HomeScreen extends StatefulWidget {
   /// Takes results that have already been enriched with `dict_name` and
   /// `definition` and groups them first by dictionary id and then by the
   /// specific headword before producing a list suitable for the UI.
-  static List<Map<String, dynamic>> consolidateDefinitions(
-    Map<int, Map<String, List<Map<String, dynamic>>>> groupedResults,
-  ) {
+  static Future<List<Map<String, dynamic>>> consolidateDefinitions(
+    List<MapEntry<int, Map<String, List<Map<String, dynamic>>>>> groupedResults, {
+    Map<int, Map<String, dynamic>>? dictMap,
+  }) async {
     final List<Map<String, dynamic>> consolidated = [];
-    groupedResults.forEach((dictId, uniqueKeyMap) {
-      String? dictName;
-      String? format;
-      String? typeSequence;
+    final dbHelper = DatabaseHelper();
+    for (final dictEntry in groupedResults) {
+      final dictId = dictEntry.key;
+      final uniqueKeyMap = dictEntry.value;
+
+      final dictMeta = dictMap != null
+          ? dictMap[dictId]
+          : await DatabaseHelper().getDictionaryById(dictId);
+      final String dictName = dictMeta?['name'] ?? '';
+      final String? format = dictMeta?['format'];
+      final String? typeSequence = dictMeta?['type_sequence'];
+
       final List<String> allHeadwords = [];
       final List<Map<String, dynamic>> definitionsList = [];
+
       uniqueKeyMap.forEach((uniqueKey, entries) {
         if (entries.isEmpty) return;
-        dictName ??= entries.first['dict_name'] as String;
-        format ??= entries.first['format'] as String?;
-        typeSequence ??= entries.first['type_sequence'] as String?;
 
-        final headwords = entries
-            .map((e) => e['word'] as String)
-            .toSet()
-            .toList();
+        final headwords = entries.map((e) => e['word'] as String).toSet().toList();
         final headwordStr = headwords.join(' | ');
         allHeadwords.add(headwordStr);
 
@@ -80,13 +84,13 @@ class HomeScreen extends StatefulWidget {
 
       consolidated.add({
         'dict_id': dictId,
-        'dict_name': dictName ?? '',
+        'dict_name': dictName,
         'format': format,
         'type_sequence': typeSequence,
         'word': allHeadwords.join(' | '),
-        'definitions': definitionsList, // These will be pre-processed now
+        'definitions': definitionsList,
       });
-    });
+    }
     return consolidated;
   }
 
@@ -324,41 +328,33 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
       final enrichmentWatch = HPerf.start('Search_Enrichment');
 
-      // Pre-fetch unique dictionaries to avoid repeated SQL queries
-      final uniqueDictIds = results.map((r) => r['dict_id'] as int).toSet();
-      final Map<int, Map<String, dynamic>> dictCache = {};
-      for (final id in uniqueDictIds) {
-        final dict = await _dbHelper.getDictionaryById(id);
-        if (dict != null) dictCache[id] = dict;
-      }
+      // The database helper now internally caches dictionary metadata, 
+      // so we can rely on it and avoid manual pre-fetching logic here.
 
-      // Group results by dictionary for batch fetching
-      // This is critical for performance on stateful readers (.dz, .mdx)
+      // Group results by dictionary for batch fetching. 
+      // This is critical for performance on stateful readers (.dz, .mdx).
       final Map<int, List<Map<String, dynamic>>> resultsByDict = {};
       final Map<int, List<int>> originalIndicesByDict = {};
 
       for (int i = 0; i < results.length; i++) {
         final r = results[i];
         final dictId = r['dict_id'] as int;
-        if (dictCache[dictId]?['is_enabled'] == 1) {
+        // dictMap lookup is now a memory-based lookup inside _dbHelper.getDictionaryById
+        final dict = await _dbHelper.getDictionaryById(dictId);
+        if (dict != null && dict['is_enabled'] == 1) {
           resultsByDict.putIfAbsent(dictId, () => []).add(r);
           originalIndicesByDict.putIfAbsent(dictId, () => []).add(i);
         }
       }
 
       // Phase 1: Parallel definition fetching across dictionaries (IO bound)
-      // Within each dictionary, reads are sequential if the reader is stateful,
-      // or parallel if stateless (handled inside DictionaryManager).
-      // fetchAllDicts_Wall = actual wall-clock time (max of all parallel batches).
-      // fetchBatch_IO_Seq per-dict shows per-dictionary cost; "total" in the dump
-      // is a misleading sum of parallel calls — use "max" from the dump instead.
       final fetchAllDictsWatch = HPerf.start('fetchAllDicts_Wall');
       await Future.wait(
         resultsByDict.entries.map((entry) async {
           final dictId = entry.key;
           final requests = entry.value;
           final originalIndices = originalIndicesByDict[dictId]!;
-          final dict = dictCache[dictId]!;
+          final dict = (await _dbHelper.getDictionaryById(dictId))!;
 
           final batchContents = await _dictManager.fetchDefinitionsBatch(
             dict,
@@ -380,12 +376,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
             );
 
-            resultsMetadata.add({
-              ...req,
-              'dict_name': dict['name'],
-              'format': dict['format'],
-              'type_sequence': dict['type_sequence'],
-            });
+            // We store ONLY the original result reference and the dictId.
+            // Dictionary metadata like name/format will be looked up during 
+            // consolidation from the shared dictMap, avoiding 50k Map instances.
+            resultsMetadata.add(req);
           }
         }),
       );
@@ -418,17 +412,28 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         HPerf.end(enrichmentWatch, 'Search_Enrichment');
 
         // Sort finalGrouped by display_order so results respect user-configured priority.
-        // Future.wait completion order is non-deterministic, so we must sort explicitly here.
-        final sortedGrouped = Map.fromEntries(
-          finalGrouped.entries.toList()..sort((a, b) {
-            final orderA = (dictCache[a.key]?['display_order'] as int?) ?? 999;
-            final orderB = (dictCache[b.key]?['display_order'] as int?) ?? 999;
-            return orderA.compareTo(orderB);
+        final sortedGroupedList = finalGrouped.entries.toList();
+        
+        // Sorting is now asynchronous because it looks up metadata via the DB helper (cached).
+        // Since we know the internal cache is likely populated by now (due to previous fetches), 
+        // we can either await each or use a helper. 
+        // Let's use a Future.wait approach for maximum safety and concurrency.
+        final List<({int dictId, int displayOrder, MapEntry<int, Map<String, List<Map<String, dynamic>>>> entry})> sortData = await Future.wait(
+          sortedGroupedList.map((entry) async {
+            final dict = await _dbHelper.getDictionaryById(entry.key);
+            return (
+              dictId: entry.key,
+              displayOrder: (dict?['display_order'] as int?) ?? 999,
+              entry: entry
+            );
           }),
         );
+        
+        sortData.sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
+        final finalizedEntries = sortData.map((d) => d.entry).toList();
 
-        final consolidatedDefs = HomeScreen.consolidateDefinitions(
-          sortedGrouped,
+        final consolidatedDefs = await HomeScreen.consolidateDefinitions(
+          finalizedEntries,
         );
 
         HPerf.end(totalWatch, 'Search_Total');
@@ -1508,16 +1513,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
                     // Parallelize definition fetching and HTML pre-processing
 
-                    // Fix #2: Pre-fetch unique dicts in one pass to avoid N SQL
-                    // queries inside Future.wait (one per result, not per dict).
-                    final uniquePopupDictIds = candidates
-                        .map((r) => r['dict_id'] as int)
-                        .toSet();
-                    final Map<int, Map<String, dynamic>> popupDictCache = {};
-                    for (final id in uniquePopupDictIds) {
-                      final d = await _dbHelper.getDictionaryById(id);
-                      if (d != null) popupDictCache[id] = d;
-                    }
+                    // The database helper now internally caches dictionary metadata.
 
                     // fetchAllDefs_Wall = true wall-clock time of all parallel
                     // fetchDefinition calls. fetchDef_IO "total" is a misleading
@@ -1527,7 +1523,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       candidates.map((res) async {
                         final dictId = res['dict_id'] as int;
                         final wordValue = res['word'] as String;
-                        final dict = popupDictCache[dictId];
+                        final dict = await _dbHelper.getDictionaryById(dictId);
                         if (dict == null || dict['is_enabled'] != 1)
                           return null;
 
@@ -1565,8 +1561,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       groupedResults[dictId]![wordValue]!.add(res);
                     }
 
-                    final consolidated = HomeScreen.consolidateDefinitions(
-                      groupedResults,
+                    // Sort by display order
+                    final List<({int dictId, int displayOrder, MapEntry<int, Map<String, List<Map<String, dynamic>>>> entry})> sortData = await Future.wait(
+                      groupedResults.entries.map((entry) async {
+                        final dict = await _dbHelper.getDictionaryById(entry.key);
+                        return (
+                          dictId: entry.key,
+                          displayOrder: (dict?['display_order'] as int?) ?? 999,
+                          entry: entry
+                        );
+                      }),
+                    );
+                    
+                    sortData.sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
+                    final sortedEntries = sortData.map((d) => d.entry).toList();
+
+                    final consolidated = await HomeScreen.consolidateDefinitions(
+                      sortedEntries,
                     );
 
                     HPerf.end(enrichmentWatch, 'Pop-up_Enrichment');

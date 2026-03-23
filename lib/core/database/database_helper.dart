@@ -57,6 +57,16 @@ class DatabaseHelper {
     hDebugPrint('DatabaseHelper: Query cache cleared.');
   }
 
+  /// In-memory cache for dictionary metadata.
+  List<Map<String, dynamic>>? _dictionaryCache;
+  Map<int, Map<String, dynamic>>? _dictionaryMapCache;
+
+  void clearDictionaryCache() {
+    _dictionaryCache = null;
+    _dictionaryMapCache = null;
+    hDebugPrint('DatabaseHelper: Dictionary metadata cache cleared.');
+  }
+
   void _log(String type, String sql, [dynamic args, dynamic result]) {
     hDebugPrint('--- SQL $type ---');
     hDebugPrint('Query: $sql');
@@ -926,6 +936,7 @@ class DatabaseHelper {
     }
 
     clearQueryCache();
+    clearDictionaryCache();
     return await db.insert('dictionaries', {
       'name': name,
       'path': storedPath,
@@ -958,6 +969,7 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [id],
     );
+    clearDictionaryCache();
   }
 
   Future<void> updateDictionaryRowIdRange(int id, int start, int end) async {
@@ -968,6 +980,7 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [id],
     );
+    clearDictionaryCache();
   }
 
   Future<int> getWordCountForDict(int dictId) async {
@@ -1066,6 +1079,7 @@ class DatabaseHelper {
       whereArgs: [id],
     );
     clearQueryCache();
+    clearDictionaryCache();
   }
 
   Future<void> updateDictionaryIndexDefinitions(
@@ -1080,6 +1094,7 @@ class DatabaseHelper {
       whereArgs: [id],
     );
     clearQueryCache();
+    clearDictionaryCache();
   }
 
   Future<void> deleteWordsByDictionaryId(int dictId) async {
@@ -1113,6 +1128,7 @@ class DatabaseHelper {
     await db.transaction((txn) async {
       await txn.delete('dictionaries', where: 'id = ?', whereArgs: [id]);
       clearQueryCache();
+      clearDictionaryCache();
 
       final bool useFts5 = _fts5Available ?? true;
       if (useFts5) {
@@ -1172,9 +1188,14 @@ class DatabaseHelper {
   }
 
   Future<List<Map<String, dynamic>>> getDictionaries() async {
+    if (_dictionaryCache != null) return _dictionaryCache!;
     try {
       final db = await database;
-      return await db.query('dictionaries', orderBy: 'display_order ASC');
+      _dictionaryCache = await db.query(
+        'dictionaries',
+        orderBy: 'display_order ASC',
+      );
+      return _dictionaryCache!;
     } catch (e) {
       hDebugPrint('Error getting dictionaries: $e');
       return [];
@@ -1182,17 +1203,8 @@ class DatabaseHelper {
   }
 
   Future<List<Map<String, dynamic>>> getEnabledDictionaries() async {
-    try {
-      final db = await database;
-      return await db.query(
-        'dictionaries',
-        where: 'is_enabled = 1',
-        orderBy: 'display_order ASC',
-      );
-    } catch (e) {
-      hDebugPrint('Error getting enabled dictionaries: $e');
-      return [];
-    }
+    final all = await getDictionaries();
+    return all.where((d) => d['is_enabled'] == 1).toList();
   }
 
   Future<bool> isDictionaryUrlDownloaded(String url) async {
@@ -1224,17 +1236,18 @@ class DatabaseHelper {
       }
     });
     clearQueryCache();
+    clearDictionaryCache();
+  }
+
+  Future<void> _ensureDictionaryMapCache() async {
+    if (_dictionaryMapCache != null) return;
+    final dicts = await getDictionaries();
+    _dictionaryMapCache = {for (final d in dicts) d['id'] as int: d};
   }
 
   Future<Map<String, dynamic>?> getDictionaryById(int id) async {
-    final db = await database;
-    final results = await db.query(
-      'dictionaries',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-    if (results.isNotEmpty) return results.first;
-    return null;
+    await _ensureDictionaryMapCache();
+    return _dictionaryMapCache?[id];
   }
 
   Future<Map<String, dynamic>?> getDictionaryByChecksum(String checksum) async {
@@ -1323,6 +1336,7 @@ class DatabaseHelper {
   ) async {
     if (words.isEmpty) return;
     clearQueryCache();
+    clearDictionaryCache();
     final db = await database;
     await db.transaction((txn) async {
       final bool useFts5 = _fts5Available ?? true;
