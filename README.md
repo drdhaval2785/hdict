@@ -84,6 +84,15 @@ Import a dictionary directly from a direct download link.
 3. The app will download, extract (if needed), and index the content.
 - **Example**: Paste `https://example.com/medical_dict.stardict.zip` to download and import a medical dictionary directly into the app.
 
+### 📂 Dictionary Groups
+`hdict` automatically organizes your library into **Groups** for easier management and cleaner search results.
+
+- **Automatic Grouping**:
+    - **Add Folder**: Multi-imports are grouped by the **parent folder name** (e.g., `Downloads/En-Hi/` becomes the "En-Hi" group).
+    - **Select by Language**: Automatically grouped by the **language pair** (e.g., "English-Hindi").
+- **Smart Filtering**: Use the **Search Filter** (funnel icon) to toggle entire groups ON or OFF globally.
+- **Deduplication**: If you import the same dictionary into different groups (e.g., once individually and once as part of a folder), `hdict` uses MD5 checksums to ensure only one master copy exists, saving storage space.
+
 ---
 
 ## 🚀 Developers' Corner

@@ -16,31 +16,49 @@ To search for a word, simply type it into the top search bar. The app searches y
 
 ## 📚 2. Importing & Downloading Dictionaries
 
-**hdict** is a "shell" app—it doesn't come pre-loaded with any dictionaries, but it can read almost any dictionary format you find online. Here is how you can get your dictionaries.
+**hdict** is a "shell" app—it doesn't come pre-loaded with any dictionaries, but it can read almost any dictionary format you find online. All methods support automatic **deduplication** via MD5 checksums.
 
-*   **Select by Language**: The easiest way! Browse over 1,900 high-quality dictionaries by language pairs and tap to download.
-*   **Import File**: Use this for a single dictionary file or a compressed archive.
-*   **Import Folder**: Point the app to a folder on your device. It will scan every sub-folder and automatically detect valid dictionaries.
-*   **Download from Web**: If you have a direct link to a dictionary file, paste it here to download and install directly.
+#### 1. Select by Language (Recommended)
+The easiest way! Browse over 1,800 high-quality FreeDict dictionaries by language pairs directly in the app.
+1. Go to **Manage Dictionaries** > **Select by Language**.
+2. Tap the **Download** icon next to a dictionary (e.g., *English-Hindi*).
+3. It will be automatically downloaded, extracted, and grouped by its languages.
+
+#### 2. Add Folder
+Perfect for bulk importing entire collections from your device.
+1. Tap **Add Folder** in the dictionary management menu.
+2. Select a directory containing dictionary files.
+3. The app recursively scans for all supported formats and groups them under the folder's name.
+
+#### 3. Import File
+Use this for single dictionary files or compressed archives.
+1. Tap **Import File** and pick a file or archive (`.zip`, `.7z`, `.tar.xz`, etc.).
+2. **Mandatory Files per format**:
+    *   **StarDict**: Select `.dict/.dict.dz`, `.ifo`, and `.idx` files. Optionally `.syn`.
+    *   **MDict**: Select `.mdx` file. Optional `.mdd` for media.
+    *   **Slob**: Select a single `.slob` file.
+    *   **DICTD**: Select `.dict/.dict.dz` and `.index` files.
+
+#### 4. Download Web
+If you have a direct link to a dictionary file or archive:
+1. Tap **Download Web**.
+2. Paste the URL. The app will download, extract, and index it automatically.
 
 ### Supported Compression Formats
-The app can read:
-*   `.zip`
-*   `.7z`
-*   `.tar.gz` / `.tgz`
-*   `.tar.bz2` / `.tbz2`
-*   `.tar.xz` / `.txz`
-
-### Mandatory Files per Format
-If you are importing manually, ensure you have these files:
-*   **StarDict**: Requires `.ifo` (info), `.idx` (index), and `.dict` (data).
-*   **MDict**: Requires `.mdx` (data). Optional `.mdd` for images and sounds.
-*   **Slob**: A single `.slob` file is enough.
-*   **DICTD**: Requires `.index` and `.dict.dz / .dict`.
+The app supports: `.zip`, `.7z`, `.tar.gz`, `.tar.bz2`, `.tar.xz`, and `.bz2`.
 
 ---
 
-## 🔎 3. Deep Search (Inside Definitions)
+## 📂 3. Dictionary Groups
+To help you manage hundreds of dictionaries, `hdict` uses a smart **Grouping** system:
+
+*   **Automatic Groups**: When you use "Add Folder", dictionaries are automatically grouped by the folder name. Dictionaries downloaded via "Select by Language" are grouped by their language pair.
+*   **Toggle Groups**: In the main search view, use the **Filter icon** to quickly enable or disable entire groups of dictionaries.
+*   **Storage Efficiency**: The app uses MD5 checksums to prevent duplicate storage. If the same dictionary exists in multiple folders/groups, only one physical copy is stored.
+
+---
+
+## 🔎 4. Deep Search (Inside Definitions)
 
 By default, the app looks for "Headwords" (the main titles of entries). However, you can enable **"Index words in definitions"** during import, or subsequently by pressing 'Reindex' button in 'Manage Dictionaries' folder. It is available by clicking triple dots besides the dictionary name.
 
@@ -50,7 +68,7 @@ By default, the app looks for "Headwords" (the main titles of entries). However,
 
 ---
 
-## 🎓 4. Flash Cards & Learning
+## 🎓 5. Flash Cards & Learning
 
 Turn your dictionaries into a study tool!
 
@@ -61,7 +79,7 @@ Turn your dictionaries into a study tool!
 
 ---
 
-## ⚙️ 5. Customizing Your Experience
+## ⚙️ 6. Customizing Your Experience
 
 Head over to **Settings** to make the app your own:
 
@@ -77,7 +95,7 @@ Head over to **Settings** to make the app your own:
 
 ---
 
-## 🛠️ 6. Managing Your Library
+## 🛠️ 7. Managing Your Library
 
 In **Manage Dictionaries**, you have full control:
 
