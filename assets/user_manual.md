@@ -87,7 +87,7 @@ Head over to **Settings** to make the app your own:
 *   **Search Modes**: Set whether your search should match the start of the word (**Prefix**), the end (**Suffix**), the internal (**Substring**) or the **Exact** word.
 
 ### Appearance
-*   **Theme**: Pick from several vibrant colors.
+*   **Theme**: Pick from colours of your choice.
 *   **Typography**: Change the font family and adjust the font size so definitions are perfectly readable for you.
 
 ### Dictionary Interaction
