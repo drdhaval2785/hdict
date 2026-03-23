@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.5] - 2026-03-23
+
+### Fixed
+- **Flashcard Retrieval Issue**: Some bug was not allowing retrieval of flash cards. Fixed it.
+
 ## [1.5.4] - 2026-03-23
 
 ### Fixed
