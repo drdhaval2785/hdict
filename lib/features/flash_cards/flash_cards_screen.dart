@@ -152,7 +152,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
       );
 
       final List<Map<String, dynamic>> quizWords = [];
-      for (var meta in allAvailableWordMetas) {
+      for (var meta in selectedWordMetas) {
         final dict = await _dbHelper.getDictionaryById(meta['dict_id']);
         quizWords.add({
           'word': meta['word'],
