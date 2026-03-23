@@ -1009,6 +1009,7 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [dictId],
     );
+    hDebugPrint('DatabaseHelper: getSampleWords ($dictId) metadata fetch complete');
 
     if (dictResult.isEmpty) return [];
 

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:hdict/core/database/database_helper.dart';
-import 'package:hdict/core/parser/dict_reader.dart';
 import 'package:hdict/core/manager/dictionary_manager.dart';
 import 'package:hdict/core/utils/html_lookup_wrapper.dart';
 import 'package:hdict/features/settings/settings_provider.dart';
@@ -87,102 +86,135 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
     final settings = context.read<SettingsProvider>();
     final targetCount = settings.flashCardWordCount;
 
-    final List<Map<String, dynamic>> allAvailableWordMetas = [];
-    final List<int> selectedDictIdsList = _selectedDictIds.toList();
-    
-    // If too many dictionaries selected, pick a reasonable subset to avoid massive query storms
-    // 50 queries is a decent limit for a fast user experience
-    if (selectedDictIdsList.length > 50) {
-      selectedDictIdsList.shuffle();
-      selectedDictIdsList.removeRange(50, selectedDictIdsList.length);
-    }
+    try {
+      hDebugPrint('FlashCards: _startQuiz started. targetCount: $targetCount');
+      final stopwatch = Stopwatch()..start();
 
-    // Calculate how many words to fetch from each dictionary to reach target
-    // We fetch a bit more (e.g. 2x) to ensure variety during local randomization
-    int fetchPerDict = (targetCount * 2 / selectedDictIdsList.length).ceil();
-    if (fetchPerDict < 5) fetchPerDict = 5;
-    if (fetchPerDict > 100) fetchPerDict = 100; // Cap at 100 even for single dict
-
-    for (var dictId in selectedDictIdsList) {
-      final metas = await _dbHelper.getSampleWords(dictId, limit: fetchPerDict);
-      for (var meta in metas) {
-        allAvailableWordMetas.add({
-          'word': meta['word'],
-          'dict_id': dictId,
-          'offset': meta['offset'],
-          'length': meta['length'],
-        });
+      final List<Map<String, dynamic>> allAvailableWordMetas = [];
+      final List<int> selectedDictIdsList = _selectedDictIds.toList();
+      
+      // If too many dictionaries selected, pick a reasonable subset to avoid massive query storms
+      if (selectedDictIdsList.length > 50) {
+        selectedDictIdsList.shuffle();
+        selectedDictIdsList.removeRange(50, selectedDictIdsList.length);
       }
-    }
 
-    if (allAvailableWordMetas.length < targetCount) {
-      setState(() {
-        _isLoading = false;
-      });
+      // Calculate how many words to fetch from each dictionary to reach target
+      int fetchPerDict = (targetCount * 2 / selectedDictIdsList.length).ceil();
+      if (fetchPerDict < 5) fetchPerDict = 5;
+      if (fetchPerDict > 100) fetchPerDict = 100;
+
+      hDebugPrint('FlashCards: Fetching word metas from ${selectedDictIdsList.length} dicts, $fetchPerDict each');
+
+      for (var dictId in selectedDictIdsList) {
+        final metas = await _dbHelper.getSampleWords(dictId, limit: fetchPerDict);
+        for (var meta in metas) {
+          allAvailableWordMetas.add({
+            'word': meta['word'],
+            'dict_id': dictId,
+            'offset': meta['offset'],
+            'length': meta['length'],
+          });
+        }
+      }
+
+      hDebugPrint('FlashCards: Meta fetch complete. Found ${allAvailableWordMetas.length} words in ${stopwatch.elapsedMilliseconds}ms');
+      final metaTime = stopwatch.elapsedMilliseconds;
+
+      if (allAvailableWordMetas.length < targetCount) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Not enough words in selected dictionaries (need $targetCount).'),
+            ),
+          );
+        }
+        return;
+      }
+
+      final random = Random();
+      final List<Map<String, dynamic>> selectedWordMetas = [];
+      final Set<int> usedIndices = {};
+
+      while (selectedWordMetas.length < targetCount) {
+        int index = random.nextInt(allAvailableWordMetas.length);
+        if (!usedIndices.contains(index)) {
+          usedIndices.add(index);
+          selectedWordMetas.add(allAvailableWordMetas[index]);
+        }
+      }
+
+      hDebugPrint('FlashCards: Random selection complete. Fetching meanings for ${selectedWordMetas.length} words.');
+
+      final List<Map<String, dynamic>> selectedWords = await Future.wait(
+        selectedWordMetas.map((meta) async {
+          try {
+            final dict = await _dbHelper.getDictionaryById(meta['dict_id']);
+            if (dict != null) {
+              final meaning = await DictionaryManager.instance.fetchDefinition(
+                dict,
+                meta['word'],
+                meta['offset'],
+                meta['length'],
+              );
+              if (meaning != null) {
+                return {
+                  'word': meta['word'],
+                  'meaning': meaning,
+                  'dict_name': dict['name'],
+                };
+              }
+            }
+          } catch (e) {
+            hDebugPrint('FlashCards: Error fetching meaning for ${meta['word']}: $e');
+          }
+          return {};
+        }),
+      );
+
+      hDebugPrint('FlashCards: Meaning fetch complete in ${stopwatch.elapsedMilliseconds - metaTime}ms');
+      hDebugPrint('FlashCards: _startQuiz total time: ${stopwatch.elapsedMilliseconds}ms');
+
+      final filteredWords = selectedWords
+          .where((w) => w.isNotEmpty)
+          .toList()
+          .cast<Map<String, dynamic>>();
+
+      if (filteredWords.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not fetch any word meanings.')),
+          );
+        }
+        return;
+      }
+
+      if (mounted) {
+        setState(() {
+          _quizWords = filteredWords;
+          _isQuizStarted = true;
+          _currentIndex = 0;
+          _score = 0;
+          _showMeaning = false;
+          _isPeeking = false;
+          _peekCount = 0;
+          _results = List.filled(filteredWords.length, false);
+        });
+        _slideController.forward(from: 0);
+      }
+    } catch (e, s) {
+      hDebugPrint('FlashCards: Global error in _startQuiz: $e\n$s');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Not enough words in selected dictionaries (need $targetCount).'),
-          ),
+          SnackBar(content: Text('Error starting quiz: $e')),
         );
       }
-      return;
-    }
-
-    final random = Random();
-    final List<Map<String, dynamic>> selectedWordMetas = [];
-    final Set<int> usedIndices = {};
-
-    while (selectedWordMetas.length < targetCount) {
-      int index = random.nextInt(allAvailableWordMetas.length);
-      if (!usedIndices.contains(index)) {
-        usedIndices.add(index);
-        selectedWordMetas.add(allAvailableWordMetas[index]);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
       }
-    }
-
-    final List<Map<String, dynamic>> selectedWords = await Future.wait(
-      selectedWordMetas.map((meta) async {
-        final dict = await _dbHelper.getDictionaryById(meta['dict_id']);
-        if (dict != null) {
-          String dictPath = await _dbHelper.resolvePath(dict['path']);
-          if (dictPath.endsWith('.ifo')) {
-            dictPath = dictPath.replaceAll('.ifo', '.dict');
-          }
-          final reader = await DictReader.fromPath(dictPath, dictId: meta['dict_id']);
-          await reader.open();
-          final meaning = await reader.readEntry(
-            meta['offset'],
-            meta['length'],
-          );
-          return {
-            'word': meta['word'],
-            'meaning': meaning,
-            'dict_name': dict['name'],
-          };
-        }
-        return {};
-      }),
-    );
-
-    final filteredWords = selectedWords
-        .where((w) => w.isNotEmpty)
-        .toList()
-        .cast<Map<String, dynamic>>();
-
-    if (mounted) {
-      setState(() {
-        _quizWords = filteredWords;
-        _isQuizStarted = true;
-        _currentIndex = 0;
-        _score = 0;
-        _showMeaning = false;
-        _isLoading = false;
-        _isPeeking = false;
-        _peekCount = 0;
-        _results = List.filled(filteredWords.length, false);
-      });
-      _slideController.forward(from: 0);
     }
   }
 
