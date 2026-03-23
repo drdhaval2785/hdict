@@ -808,26 +808,25 @@ class DatabaseHelper {
         hDebugPrint('Migration error (version 30): $e');
       }
     }
+
     if (oldVersion < 31) {
       try {
         hDebugPrint(
           'Migration to version 31: Performance optimizations (WAL mode)',
         );
-        // PRAGMA journal_mode = WAL is already called in onOpen for every connection,
-        // but we bump the version to signal a performance-optimized state.
       } catch (e) {
         hDebugPrint('Migration error (version 31): $e');
       }
+    }
 
-      if (oldVersion < 32) {
-        try {
-          hDebugPrint(
-            'Migration to version 32: Adding mdd_path column to dictionaries',
-          );
-          await db.execute("ALTER TABLE dictionaries ADD COLUMN mdd_path TEXT");
-        } catch (e) {
-          hDebugPrint('Migration error (version 32): $e');
-        }
+    if (oldVersion < 32) {
+      try {
+        hDebugPrint(
+          'Migration to version 32: Adding mdd_path column to dictionaries',
+        );
+        await db.execute("ALTER TABLE dictionaries ADD COLUMN mdd_path TEXT");
+      } catch (e) {
+        hDebugPrint('Migration error (version 32): $e');
       }
     }
   } // end _onUpgrade

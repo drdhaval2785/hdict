@@ -89,6 +89,13 @@ class MddReader {
       if (exists != null) return key;
     }
 
+    final allKeys = await _parser.search('', limit: 10000);
+    for (final key in allKeys) {
+      if (key.toLowerCase().endsWith('.css')) {
+        return key;
+      }
+    }
+
     return null;
   }
 

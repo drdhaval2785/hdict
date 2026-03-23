@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:hdict/core/parser/mdict_reader.dart';
+import 'package:hdict/core/utils/logger.dart';
 
 class MultimediaProcessor {
   final MdictReader? _mddReader;
@@ -13,10 +14,18 @@ class MultimediaProcessor {
   Future<String> processHtmlWithMedia(String html) async {
     String processed = html;
 
+    hDebugPrint(
+      'MultimediaProcessor: Input HTML (first 500): ${html.substring(0, html.length > 500 ? 500 : html.length)}',
+    );
+
     if (_mddReader != null) {
       processed = await _replaceImgSrcWithDataUris(processed);
       processed = _addMediaTapHandlers(processed);
     }
+
+    hDebugPrint(
+      'MultimediaProcessor: Output HTML (first 500): ${processed.substring(0, processed.length > 500 ? 500 : processed.length)}',
+    );
 
     processed = injectCss(processed);
 
@@ -56,7 +65,7 @@ class MultimediaProcessor {
 
   Future<String> _replaceImgSrcWithDataUris(String html) async {
     final imgRegex = RegExp(
-      '<img\\s+[^>]*src\\s*=\\s*["\']([^"\']+)["\'][^>]*>',
+      '<img\\s+[^>]*src\\s*=\\s*["\']+([^"\']+)["\']+[^>]*>',
       caseSensitive: false,
     );
 
@@ -67,10 +76,15 @@ class MultimediaProcessor {
       result.write(html.substring(lastEnd, match.start));
 
       final src = match.group(1);
+      hDebugPrint('MultimediaProcessor: Found img src: $src');
       if (src != null && !src.startsWith('data:') && !src.startsWith('http')) {
         final resourceKey = _extractResourceKey(src);
+        hDebugPrint(
+          'MultimediaProcessor: Extracted resource key: $resourceKey',
+        );
         if (resourceKey != null) {
           final bytes = await _mddReader!.getMddResourceBytes(resourceKey);
+          hDebugPrint('MultimediaProcessor: Got bytes: ${bytes?.length}');
           if (bytes != null) {
             final mimeType = _getMimeType(resourceKey);
             final base64 = base64Encode(bytes);
@@ -103,10 +117,16 @@ class MultimediaProcessor {
       if (!path.contains('/')) return path;
       return path.split('/').last;
     }
-    if (!src.contains('/') && !src.startsWith('http')) {
+    if (src.startsWith('http')) {
+      return null;
+    }
+    if (src.startsWith('sound://')) {
+      return src.substring('sound://'.length);
+    }
+    if (!src.contains('/')) {
       return src;
     }
-    return null;
+    return src;
   }
 
   String _getMimeType(String filename) {
@@ -134,12 +154,12 @@ class MultimediaProcessor {
 
   String _addMediaTapHandlers(String html) {
     final audioRegex = RegExp(
-      '<audio\\s+[^>]*src\\s*=\\s*["\']([^"\']+)["\'][^>]*>',
+      '<audio\\s+[^>]*src\\s*=\\s*["\']+([^"\']+)["\']+[^>]*>',
       caseSensitive: false,
     );
 
     final videoRegex = RegExp(
-      '<video\\s+[^>]*src\\s*=\\s*["\']([^"\']+)["\'][^>]*>',
+      '<video\\s+[^>]*src\\s*=\\s*["\']+([^"\']+)["\']+[^>]*>',
       caseSensitive: false,
     );
 
@@ -153,7 +173,7 @@ class MultimediaProcessor {
           return '<a href="mdd-audio:$resourceKey">🎧 Play Audio</a>';
         }
       }
-      return match.group(0)!;
+      return match.group(0) ?? '';
     });
 
     processed = processed.replaceAllMapped(videoRegex, (match) {
@@ -164,7 +184,20 @@ class MultimediaProcessor {
           return '<a href="mdd-video:$resourceKey">🎬 Play Video</a>';
         }
       }
-      return match.group(0)!;
+      return match.group(0) ?? '';
+    });
+
+    final anchorSoundRegex = RegExp(
+      '<a[^>]*href\\s*=\\s*["\']+sound://([^"\']+)["\']+[^>]*>',
+      caseSensitive: false,
+    );
+
+    processed = processed.replaceAllMapped(anchorSoundRegex, (match) {
+      final resourceKey = match.group(1);
+      if (resourceKey != null) {
+        return '<a href="mdd-audio:$resourceKey">🔊</a>';
+      }
+      return match.group(0) ?? '';
     });
 
     return processed;

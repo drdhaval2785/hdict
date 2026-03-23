@@ -246,6 +246,44 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // SQL query on every widget rebuild (keyboard, theme, settings changes, etc.).
   late Future<List<Map<String, dynamic>>> _dictionariesFuture;
 
+  void _showMediaPlayer(String url, int dictId) async {
+    final parts = url.split(':');
+    if (parts.length != 2) return;
+
+    final mediaType = parts[0];
+    final resourceKey = parts[1];
+
+    final mdictReader = DictionaryManager.instance.getMdictReader(dictId);
+    if (mdictReader == null) return;
+
+    Uint8List? data;
+    if (mediaType == 'mdd-audio') {
+      data = await mdictReader.getMddResourceBytes(resourceKey);
+    } else if (mediaType == 'mdd-video') {
+      data = await mdictReader.getMddResourceBytes(resourceKey);
+    }
+
+    if (data == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Media not found')));
+      }
+      return;
+    }
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => _MediaPlayerDialog(
+        data: data!,
+        mediaType: mediaType == 'mdd-audio' ? 'audio' : 'video',
+        filename: resourceKey,
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _headwordController.dispose();
@@ -1408,6 +1446,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                                 LaunchMode.externalApplication,
                                           );
                                         }
+                                      } else if (url.startsWith('mdd-audio:') ||
+                                          url.startsWith('mdd-video:')) {
+                                        hDebugPrint(
+                                          'MDD media link tapped: $url',
+                                        );
+                                        final defId = defMap['dict_id'] as int?;
+                                        if (defId != null) {
+                                          _showMediaPlayer(url, defId);
+                                        }
                                       } else {
                                         String wordToLookup = url;
                                         if (wordToLookup.startsWith(
@@ -2028,9 +2075,33 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
                                   fontWeight: FontWeight.bold,
                                 ),
                               },
-                              onLinkTap: (url, attributes, element) {
+                              onLinkTap: (url, attributes, element) async {
                                 if (url != null && url.startsWith('mdd-')) {
-                                  _showMediaPlayer(url);
+                                  final defId = defMap['dict_id'] as int?;
+                                  if (defId != null) {
+                                    final parts = url.split(':');
+                                    if (parts.length != 2) return;
+                                    final mediaType = parts[0];
+                                    final resourceKey = parts[1];
+                                    final mdictReader = DictionaryManager
+                                        .instance
+                                        .getMdictReader(defId);
+                                    if (mdictReader == null) return;
+                                    final data = await mdictReader
+                                        .getMddResourceBytes(resourceKey);
+                                    if (data == null) return;
+                                    if (!context.mounted) return;
+                                    showDialog(
+                                      context: context,
+                                      builder: (ctx) => _MediaPlayerDialog(
+                                        data: data,
+                                        mediaType: mediaType == 'mdd-audio'
+                                            ? 'audio'
+                                            : 'video',
+                                        filename: resourceKey,
+                                      ),
+                                    );
+                                  }
                                 } else if (url != null &&
                                     (url.startsWith('http://') ||
                                         url.startsWith('https://'))) {
@@ -2068,46 +2139,6 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  void _showMediaPlayer(String url) async {
-    final parts = url.split(':');
-    if (parts.length != 2) return;
-
-    final mediaType = parts[0];
-    final resourceKey = parts[1];
-
-    final mdictReader = DictionaryManager.instance.getMdictReader(
-      widget.dictId,
-    );
-    if (mdictReader == null) return;
-
-    Uint8List? data;
-    if (mediaType == 'mdd-audio') {
-      data = await mdictReader.getMddResourceBytes(resourceKey);
-    } else if (mediaType == 'mdd-video') {
-      data = await mdictReader.getMddResourceBytes(resourceKey);
-    }
-
-    if (data == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Media not found')));
-      }
-      return;
-    }
-
-    if (!mounted) return;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => _MediaPlayerDialog(
-        data: data!,
-        mediaType: mediaType == 'mdd-audio' ? 'audio' : 'video',
-        filename: resourceKey,
       ),
     );
   }
@@ -2150,10 +2181,17 @@ class _MediaPlayerDialogState extends State<_MediaPlayerDialog> {
       );
       await tempFile.writeAsBytes(widget.data);
       _tempFilePath = tempFile.path;
+      hDebugPrint(
+        'MediaPlayer: temp file: $_tempFilePath, size: ${widget.data.length}, type: ${widget.mediaType}',
+      );
 
       if (widget.mediaType == 'audio') {
         _audioPlayer = AudioPlayer();
+        hDebugPrint('MediaPlayer: setting file path...');
         await _audioPlayer!.setFilePath(_tempFilePath!);
+        hDebugPrint(
+          'MediaPlayer: audio player ready, duration: ${_audioPlayer!.duration}',
+        );
       } else {
         _videoController = VideoPlayerController.file(File(_tempFilePath!));
         await _videoController!.initialize();
@@ -2162,7 +2200,14 @@ class _MediaPlayerDialogState extends State<_MediaPlayerDialog> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+      // Auto-play after loading
+      if (widget.mediaType == 'audio' && _audioPlayer != null) {
+        hDebugPrint('MediaPlayer: auto-playing...');
+        await _audioPlayer!.play();
+        hDebugPrint('MediaPlayer: play() called');
+      }
     } catch (e) {
+      hDebugPrint('MediaPlayer error: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -2258,6 +2303,9 @@ class _MediaPlayerDialogState extends State<_MediaPlayerDialog> {
           builder: (context, snapshot) {
             final position = snapshot.data ?? Duration.zero;
             final duration = _audioPlayer!.duration ?? Duration.zero;
+            hDebugPrint(
+              'MediaPlayer: position: $position, duration: $duration',
+            );
             return Column(
               children: [
                 Slider(
@@ -2294,6 +2342,9 @@ class _MediaPlayerDialogState extends State<_MediaPlayerDialog> {
               builder: (context, snapshot) {
                 final playerState = snapshot.data;
                 final playing = playerState?.playing ?? false;
+                hDebugPrint(
+                  'MediaPlayer: play state changed - playing: $playing',
+                );
                 return IconButton(
                   iconSize: 48,
                   icon: Icon(
@@ -2302,6 +2353,9 @@ class _MediaPlayerDialogState extends State<_MediaPlayerDialog> {
                         : Icons.play_circle_filled,
                   ),
                   onPressed: () {
+                    hDebugPrint(
+                      'MediaPlayer: play button pressed, currently playing: $playing',
+                    );
                     if (playing) {
                       _audioPlayer!.pause();
                     } else {
