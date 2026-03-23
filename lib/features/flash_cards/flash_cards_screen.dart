@@ -33,6 +33,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
   List<bool> _results = [];
   bool _isPeeking = false;
   int _peekCount = 0;
+  bool _isFetchingMeaning = false;
 
   // Animation controller for slide transition between cards
   late AnimationController _slideController;
@@ -138,61 +139,31 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
         }
       }
 
-      hDebugPrint('FlashCards: Random selection complete. Fetching meanings for ${selectedWordMetas.length} words.');
+      hDebugPrint('FlashCards: Random selection complete. Initializing session without upfront meanings.');
 
-      final List<Map<String, dynamic>> selectedWords = await Future.wait(
-        selectedWordMetas.map((meta) async {
-          try {
-            final dict = await _dbHelper.getDictionaryById(meta['dict_id']);
-            if (dict != null) {
-              final meaning = await DictionaryManager.instance.fetchDefinition(
-                dict,
-                meta['word'],
-                meta['offset'],
-                meta['length'],
-              );
-              if (meaning != null) {
-                return {
-                  'word': meta['word'],
-                  'meaning': meaning,
-                  'dict_name': dict['name'],
-                };
-              }
-            }
-          } catch (e) {
-            hDebugPrint('FlashCards: Error fetching meaning for ${meta['word']}: $e');
-          }
-          return {};
-        }),
-      );
-
-      hDebugPrint('FlashCards: Meaning fetch complete in ${stopwatch.elapsedMilliseconds - metaTime}ms');
-      hDebugPrint('FlashCards: _startQuiz total time: ${stopwatch.elapsedMilliseconds}ms');
-
-      final filteredWords = selectedWords
-          .where((w) => w.isNotEmpty)
-          .toList()
-          .cast<Map<String, dynamic>>();
-
-      if (filteredWords.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not fetch any word meanings.')),
-          );
-        }
-        return;
+      final List<Map<String, dynamic>> quizWords = [];
+      for (var meta in allAvailableWordMetas) {
+        final dict = await _dbHelper.getDictionaryById(meta['dict_id']);
+        quizWords.add({
+          'word': meta['word'],
+          'dict_id': meta['dict_id'],
+          'offset': meta['offset'],
+          'length': meta['length'],
+          'dict_name': dict?['name'] ?? 'Unknown Dictionary',
+          'meaning': null, // To be fetched lazily
+        });
       }
 
       if (mounted) {
         setState(() {
-          _quizWords = filteredWords;
+          _quizWords = quizWords;
           _isQuizStarted = true;
           _currentIndex = 0;
           _score = 0;
           _showMeaning = false;
           _isPeeking = false;
           _peekCount = 0;
-          _results = List.filled(filteredWords.length, false);
+          _results = List.filled(quizWords.length, false);
         });
         _slideController.forward(from: 0);
       }
@@ -262,7 +233,49 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
     }
   }
 
-  void _peekMeaning() {
+  Future<void> _fetchMeaningAtIndex(int index) async {
+    if (index < 0 || index >= _quizWords.length) return;
+    final wordData = _quizWords[index];
+    if (wordData['meaning'] != null) return;
+
+    if (mounted) {
+      setState(() => _isFetchingMeaning = true);
+    }
+    
+    try {
+      final dict = await _dbHelper.getDictionaryById(wordData['dict_id']);
+      if (dict != null) {
+        final meaning = await DictionaryManager.instance.fetchDefinition(
+          dict,
+          wordData['word'],
+          wordData['offset'],
+          wordData['length'],
+        );
+        if (mounted) {
+          setState(() {
+            wordData['meaning'] = meaning ?? 'No definition found.';
+          });
+        }
+      }
+    } catch (e) {
+      hDebugPrint('FlashCards: Error fetching meaning: $e');
+      if (mounted) {
+        setState(() {
+          wordData['meaning'] = 'Error loading definition.';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isFetchingMeaning = false);
+      }
+    }
+  }
+
+  void _peekMeaning() async {
+    if (!_isPeeking && _quizWords[_currentIndex]['meaning'] == null) {
+      await _fetchMeaningAtIndex(_currentIndex);
+    }
+    if (!mounted) return;
     setState(() {
       _isPeeking = !_isPeeking;
       if (_isPeeking) {
@@ -399,85 +412,87 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: Theme.of(context).dividerColor),
                       ),
-                      child: Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.5),
-                              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                            ),
-                            child: const Row(
+                      child: _isFetchingMeaning
+                          ? const Center(child: CircularProgressIndicator())
+                          : Column(
                               children: [
-                                Icon(Icons.menu_book_outlined, size: 16),
-                                SizedBox(width: 8),
-                                Text('Meaning Snippet', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.5),
+                                    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                                  ),
+                                  child: const Row(
+                                    children: [
+                                      Icon(Icons.menu_book_outlined, size: 16),
+                                      SizedBox(width: 8),
+                                      Text('Meaning Snippet', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                    ],
+                                  ),
+                                ),
+                                Expanded(
+                                  child: SingleChildScrollView(
+                                    padding: const EdgeInsets.all(12),
+                                    child: MouseRegion(
+                                      cursor: settings.isTapOnMeaningEnabled
+                                          ? SystemMouseCursors.click
+                                          : MouseCursor.defer,
+                                      child: Builder(
+                                        builder: (ctx) => GestureDetector(
+                                          behavior: HitTestBehavior.translucent,
+                                          onTapUp: (details) {
+                                            if (!settings.isTapOnMeaningEnabled) {
+                                              hDebugPrint('FlashCards (meaning header): Tap ignored: isTapOnMeaningEnabled is false');
+                                              return;
+                                            }
+                                            final RenderBox? renderBox = ctx.findRenderObject() as RenderBox?;
+                                            if (renderBox == null) {
+                                              hDebugPrint('FlashCards (meaning header): Tap ignored: renderBox is null');
+                                              return;
+                                            }
+                                            final BoxHitTestResult result = BoxHitTestResult();
+                                            renderBox.hitTest(result, position: renderBox.globalToLocal(details.globalPosition));
+                                            for (final HitTestEntry entry in result.path) {
+                                              final target = entry.target;
+                                              if (target is RenderParagraph) {
+                                                final String text = target.text.toPlainText();
+                                                if (text.replaceAll('\uFFFC', '').trim().isEmpty) continue;
+                                                final Offset localOffset = target.globalToLocal(details.globalPosition);
+                                                final TextPosition pos = target.getPositionForOffset(localOffset);
+                                                final String? word = util.WordBoundary.wordAt(text, pos.offset);
+                                                hDebugPrint('FlashCards (meaning header): Word tapped for search: $word');
+                                                if (word != null && word.trim().isNotEmpty) {
+                                                  _showWordPopup(word);
+                                                  return;
+                                                }
+                                              }
+                                            }
+                                            hDebugPrint('FlashCards (meaning header): HitTest found no valid text paragraph.');
+                                          },
+                                          child: Html(
+                                            data: currentWord['meaning'] ?? '',
+                                            style: {
+                                              "body": Style(
+                                                fontSize: FontSize(settings.fontSize - 2),
+                                                lineHeight: LineHeight.em(1.4),
+                                                margin: Margins.zero,
+                                                padding: HtmlPaddings.zero,
+                                                color: settings.getEffectiveTextColor(context),
+                                                fontFamily: settings.fontFamily,
+                                              ),
+                                              "a": Style(
+                                                color: settings.getEffectiveTextColor(context),
+                                                textDecoration: TextDecoration.none,
+                                              ),
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
-                          ),
-                          Expanded(
-                            child: SingleChildScrollView(
-                              padding: const EdgeInsets.all(12),
-                               child: MouseRegion(
-                                 cursor: settings.isTapOnMeaningEnabled
-                                     ? SystemMouseCursors.click
-                                     : MouseCursor.defer,
-                                 child: Builder(
-                                   builder: (ctx) => GestureDetector(
-                                  behavior: HitTestBehavior.translucent,
-                                  onTapUp: (details) {
-                                  if (!settings.isTapOnMeaningEnabled) {
-                                      hDebugPrint('FlashCards (meaning header): Tap ignored: isTapOnMeaningEnabled is false');
-                                      return;
-                                  }
-                                  final RenderBox? renderBox = ctx.findRenderObject() as RenderBox?;
-                                  if (renderBox == null) {
-                                      hDebugPrint('FlashCards (meaning header): Tap ignored: renderBox is null');
-                                      return;
-                                  }
-                                  final BoxHitTestResult result = BoxHitTestResult();
-                                  renderBox.hitTest(result, position: renderBox.globalToLocal(details.globalPosition));
-                                  for (final HitTestEntry entry in result.path) {
-                                    final target = entry.target;
-                                    if (target is RenderParagraph) {
-                                      final String text = target.text.toPlainText();
-                                      if (text.replaceAll('\uFFFC', '').trim().isEmpty) continue;
-                                      final Offset localOffset = target.globalToLocal(details.globalPosition);
-                                      final TextPosition pos = target.getPositionForOffset(localOffset);
-                                      final String? word = util.WordBoundary.wordAt(text, pos.offset);
-                                      hDebugPrint('FlashCards (meaning header): Word tapped for search: $word');
-                                      if (word != null && word.trim().isNotEmpty) {
-                                        _showWordPopup(word);
-                                        return;
-                                      }
-                                    }
-                                  }
-                                  hDebugPrint('FlashCards (meaning header): HitTest found no valid text paragraph.');
-                                },
-                                child: Html(
-                                  data: currentWord['meaning'],
-                                  style: {
-                                    "body": Style(
-                                      fontSize: FontSize(settings.fontSize - 2),
-                                      lineHeight: LineHeight.em(1.4),
-                                      margin: Margins.zero,
-                                      padding: HtmlPaddings.zero,
-                                      color: settings.getEffectiveTextColor(context),
-                                      fontFamily: settings.fontFamily,
-                                    ),
-                                    "a": Style(
-                                      color: settings.getEffectiveTextColor(context),
-                                      textDecoration: TextDecoration.none,
-                                    ),
-                                  },
-                                ),
-                              ),
-                             ),
-                            ),
-                           ),
-                          ),
-                        ],
-                      ),
                     )
                   : const SizedBox.shrink(),
             ),
@@ -523,6 +538,11 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                       color: wasCorrect ? Colors.green : Colors.red,
                     ),
                   ),
+                  onExpansionChanged: (expanded) {
+                    if (expanded && wordData['meaning'] == null) {
+                      _fetchMeaningAtIndex(index);
+                    }
+                  },
                   subtitle: Text(
                     wasCorrect ? 'Correct Guess' : 'Incorrect Guess',
                     style: TextStyle(
@@ -566,7 +586,12 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                   children: [
                     Container(
                       padding: const EdgeInsets.all(16),
-                      child: MouseRegion(
+                      child: wordData['meaning'] == null
+                          ? const Center(child: Padding(
+                              padding: EdgeInsets.all(8.0),
+                              child: CircularProgressIndicator(),
+                            ))
+                          : MouseRegion(
                         cursor: settings.isTapOnMeaningEnabled
                             ? SystemMouseCursors.click
                             : MouseCursor.defer,
