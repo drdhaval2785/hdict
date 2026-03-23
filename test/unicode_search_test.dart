@@ -31,7 +31,8 @@ void main() {
           source_url TEXT,
           source_type TEXT DEFAULT 'managed',
           source_bookmark TEXT,
-          companion_uri TEXT
+          companion_uri TEXT,
+          mdd_path TEXT
         )''');
       await db.execute('''
         CREATE TABLE word_metadata(

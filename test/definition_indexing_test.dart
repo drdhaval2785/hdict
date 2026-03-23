@@ -58,7 +58,8 @@ void main() {
             source_url TEXT,
             source_type TEXT DEFAULT 'managed',
             source_bookmark TEXT,
-          companion_uri TEXT
+            companion_uri TEXT,
+            mdd_path TEXT
           )
         ''');
           await db.execute('''
@@ -112,18 +113,18 @@ void main() {
       try {
         final entries = await parser.parseIndex(indexSource).toList();
         for (final entry in entries) {
-        headwordCount++;
-        final content = await reader.readEntry(
-          entry['offset'] as int,
-          entry['length'] as int,
-        );
-        if (content != null) {
-          defWordCount += content
-              .split(RegExp(r'\s+'))
-              .where((s) => s.isNotEmpty)
-              .length;
+          headwordCount++;
+          final content = await reader.readEntry(
+            entry['offset'] as int,
+            entry['length'] as int,
+          );
+          if (content != null) {
+            defWordCount += content
+                .split(RegExp(r'\s+'))
+                .where((s) => s.isNotEmpty)
+                .length;
+          }
         }
-      }
       } finally {
         await indexSource.close();
         await reader.close();
@@ -160,8 +161,11 @@ void main() {
       } finally {
         await ifoSource.close();
       }
-      
-      final reader = DictReader(dictPath, source: FileRandomAccessSource(dictPath));
+
+      final reader = DictReader(
+        dictPath,
+        source: FileRandomAccessSource(dictPath),
+      );
       final idx = IdxParser(ifo);
       final idxSource = FileRandomAccessSource(idxPath);
       final List<Map<String, dynamic>> entries = [];

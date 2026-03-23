@@ -11,13 +11,12 @@ class MultimediaProcessor {
   String? get cssContent => _cssContent;
 
   Future<String> processHtmlWithMedia(String html) async {
-    if (_mddReader == null) return html;
-
     String processed = html;
 
-    processed = await _replaceImgSrcWithDataUris(processed);
-
-    processed = _addMediaTapHandlers(processed);
+    if (_mddReader != null) {
+      processed = await _replaceImgSrcWithDataUris(processed);
+      processed = _addMediaTapHandlers(processed);
+    }
 
     processed = injectCss(processed);
 

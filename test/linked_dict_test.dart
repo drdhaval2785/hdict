@@ -16,7 +16,7 @@ void main() {
     setUp(() async {
       tempDir = await Directory.systemTemp.createTemp('hdict_linked_test_');
       db = await databaseFactory.openDatabase(inMemoryDatabasePath);
-      
+
       await db.execute('''
         CREATE TABLE dictionaries (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,7 +36,8 @@ void main() {
           source_url TEXT,
           source_type TEXT DEFAULT 'managed',
           source_bookmark TEXT,
-          companion_uri TEXT
+          companion_uri TEXT,
+          mdd_path TEXT
         )
       ''');
 
@@ -54,7 +55,7 @@ void main() {
     test('insertDictionary handles linked source type', () async {
       final ifoPath = p.join(tempDir.path, 'test.ifo');
       await File(ifoPath).writeAsString('BookName=Test Linked');
-      
+
       final dictId = await dbHelper.insertDictionary(
         'Test Linked',
         ifoPath,
@@ -77,7 +78,7 @@ void main() {
       final idxFile = File(p.join(tempDir.path, 'dict.idx'));
       await idxFile.create();
 
-      // We need to use reflection or a helper to test private methods, 
+      // We need to use reflection or a helper to test private methods,
       // but we can just test the public integration if possible.
       // However, we'll just verify the path logic manually by inspecting DictionaryManager.
       expect(p.withoutExtension(ifoFile.path), p.join(tempDir.path, 'dict'));

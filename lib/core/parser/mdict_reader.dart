@@ -7,6 +7,8 @@ import 'package:hdict/core/parser/bookmark_random_access_source.dart';
 import 'package:path/path.dart';
 import 'dart:io';
 
+enum MdictSourceType { local, saf, bookmark }
+
 /// Wrapper around the vendored MdxParser.
 ///
 /// Provides a unified interface for reading MDict (.mdx/.mdd) dictionaries.
@@ -18,11 +20,20 @@ class MdictReader {
   bool _isInitialized = false;
 
   final String? _mddPath;
+  final MdictSourceType _mddSourceType;
+  final String? _mddBookmark;
   MddReader? _mddReader;
   String? _cssContent;
 
-  MdictReader(this.mdxPath, {required this.source, String? mddPath})
-    : _mddPath = mddPath {
+  MdictReader(
+    this.mdxPath, {
+    required this.source,
+    String? mddPath,
+    MdictSourceType mddSourceType = MdictSourceType.local,
+    String? mddBookmark,
+  }) : _mddPath = mddPath,
+       _mddSourceType = mddSourceType,
+       _mddBookmark = mddBookmark {
     _parser = MdxParser(source, mdxPath);
   }
 
@@ -44,17 +55,27 @@ class MdictReader {
   }) async {
     final String path = actualPath ?? targetPath ?? source;
     RandomAccessSource src;
+    MdictSourceType mddSourceType;
     if (Platform.isAndroid) {
       src = SafRandomAccessSource(source);
+      mddSourceType = MdictSourceType.saf;
     } else if (Platform.isIOS || Platform.isMacOS) {
       src = BookmarkRandomAccessSource(source, targetPath: targetPath);
+      mddSourceType = MdictSourceType.bookmark;
     } else {
       final String fullPath = targetPath != null
           ? join(source, targetPath)
           : source;
       src = FileRandomAccessSource(fullPath);
+      mddSourceType = MdictSourceType.local;
     }
-    return MdictReader(path, source: src, mddPath: mddPath);
+    return MdictReader(
+      path,
+      source: src,
+      mddPath: mddPath,
+      mddSourceType: mddSourceType,
+      mddBookmark: source,
+    );
   }
 
   /// Factory to create an MdictReader from an Android SAF URI.
@@ -63,6 +84,7 @@ class MdictReader {
       uri,
       source: SafRandomAccessSource(uri),
       mddPath: mddPath,
+      mddSourceType: MdictSourceType.saf,
     );
   }
 
@@ -87,7 +109,21 @@ class MdictReader {
     final mddPath = _mddPath;
     if (mddPath == null) return;
     try {
-      final mddSource = FileRandomAccessSource(mddPath);
+      RandomAccessSource mddSource;
+
+      switch (_mddSourceType) {
+        case MdictSourceType.saf:
+          mddSource = SafRandomAccessSource(mddPath);
+        case MdictSourceType.bookmark:
+          final bookmark = _mddBookmark;
+          mddSource = BookmarkRandomAccessSource(
+            bookmark ?? mddPath,
+            targetPath: mddPath,
+          );
+        case MdictSourceType.local:
+          mddSource = FileRandomAccessSource(mddPath);
+      }
+
       _mddReader = MddReader(mddPath, source: mddSource);
       await _mddReader!.open();
       _cssContent = await _mddReader!.getCssContent();

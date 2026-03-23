@@ -36,7 +36,8 @@ void main() {
           source_url TEXT,
           source_type TEXT DEFAULT 'managed',
           source_bookmark TEXT,
-          companion_uri TEXT
+          companion_uri TEXT,
+          mdd_path TEXT
         )
       ''');
 
@@ -241,8 +242,14 @@ void main() {
     test('Dictionary display_order is respected in search results', () async {
       // Setup: Two dictionaries. dict_2 has a LOWER display_order (higher priority).
       // Even though dict_1 was inserted first (lower auto-id), dict_2 should appear first.
-      final int dict1Id = await dbHelper.insertDictionary('Dict Alpha', '/path/alpha');
-      final int dict2Id = await dbHelper.insertDictionary('Dict Zeta', '/path/zeta');
+      final int dict1Id = await dbHelper.insertDictionary(
+        'Dict Alpha',
+        '/path/alpha',
+      );
+      final int dict2Id = await dbHelper.insertDictionary(
+        'Dict Zeta',
+        '/path/zeta',
+      );
 
       // Set display_order: dict2 = 0 (first), dict1 = 1 (second)
       await dbHelper.reorderDictionaries([dict2Id, dict1Id]);
@@ -264,10 +271,18 @@ void main() {
       // Verify that results are returned in display_order:
       // dict2 (display_order=0) should come before dict1 (display_order=1)
       expect(results.length, 2);
-      expect(results[0]['dict_id'], dict2Id,
-          reason: 'dict2 has higher priority (lower display_order) so it should appear first');
-      expect(results[1]['dict_id'], dict1Id,
-          reason: 'dict1 has lower priority (higher display_order) so it should appear second');
+      expect(
+        results[0]['dict_id'],
+        dict2Id,
+        reason:
+            'dict2 has higher priority (lower display_order) so it should appear first',
+      );
+      expect(
+        results[1]['dict_id'],
+        dict1Id,
+        reason:
+            'dict1 has lower priority (higher display_order) so it should appear second',
+      );
     });
 
     test('Reordering dictionaries updates display_order correctly', () async {
@@ -280,13 +295,27 @@ void main() {
 
       final dicts = await dbHelper.getDictionaries();
       // Filter to just our three (setUp also inserts one dict)
-      final our3 = dicts.where((d) => [id1, id2, id3].contains(d['id'])).toList();
+      final our3 = dicts
+          .where((d) => [id1, id2, id3].contains(d['id']))
+          .toList();
       expect(our3.length, 3);
 
       // getDictionaries returns in display_order ASC, so order should be C, A, B
-      expect(our3[0]['id'], id3, reason: 'Dict C should be first (display_order=0)');
-      expect(our3[1]['id'], id1, reason: 'Dict A should be second (display_order=1)');
-      expect(our3[2]['id'], id2, reason: 'Dict B should be third (display_order=2)');
+      expect(
+        our3[0]['id'],
+        id3,
+        reason: 'Dict C should be first (display_order=0)',
+      );
+      expect(
+        our3[1]['id'],
+        id1,
+        reason: 'Dict A should be second (display_order=1)',
+      );
+      expect(
+        our3[2]['id'],
+        id2,
+        reason: 'Dict B should be third (display_order=2)',
+      );
     });
 
     test('getBatchSampleWords: Batch Indexing and Selection', () async {
@@ -294,20 +323,48 @@ void main() {
       final int dict2Id = await dbHelper.insertDictionary('Dict 2', '/path/2');
 
       // 1. Batch insert words for both (100 words each to reduce collision probability in small tests)
-      await dbHelper.batchInsertWords(dict1Id, List.generate(100, (i) => {'word': 'word1_$i', 'offset': i * 10, 'length': 10}));
-      await dbHelper.batchInsertWords(dict2Id, List.generate(100, (i) => {'word': 'word2_$i', 'offset': i * 10, 'length': 10}));
+      await dbHelper.batchInsertWords(
+        dict1Id,
+        List.generate(
+          100,
+          (i) => {'word': 'word1_$i', 'offset': i * 10, 'length': 10},
+        ),
+      );
+      await dbHelper.batchInsertWords(
+        dict2Id,
+        List.generate(
+          100,
+          (i) => {'word': 'word2_$i', 'offset': i * 10, 'length': 10},
+        ),
+      );
 
       // 2. Set word_count and clear rowid ranges manually in DB to force auto-indexing
-      await db.update('dictionaries', {'word_count': 100, 'start_rowid': null, 'end_rowid': null});
-      dbHelper.clearDictionaryCache(); // Ensure cache is empty for the first read
+      await db.update('dictionaries', {
+        'word_count': 100,
+        'start_rowid': null,
+        'end_rowid': null,
+      });
+      dbHelper
+          .clearDictionaryCache(); // Ensure cache is empty for the first read
 
       // 3. Call getBatchSampleWords
       // This should trigger batch indexing in a transaction
-      final results = await dbHelper.getBatchSampleWords(10, [dict1Id, dict2Id]);
+      final results = await dbHelper.getBatchSampleWords(10, [
+        dict1Id,
+        dict2Id,
+      ]);
 
       // 4. Verify results
-      expect(results.length, greaterThanOrEqualTo(10), reason: 'Should fetch at least requested 10 words (internal fuzzy fetching included)');
-      expect(results.every((r) => r['word'] != null && r['dict_id'] != null), isTrue);
+      expect(
+        results.length,
+        greaterThanOrEqualTo(10),
+        reason:
+            'Should fetch at least requested 10 words (internal fuzzy fetching included)',
+      );
+      expect(
+        results.every((r) => r['word'] != null && r['dict_id'] != null),
+        isTrue,
+      );
 
       // 5. Verify rowid ranges are now indexed
       final dicts = await dbHelper.getDictionaries();

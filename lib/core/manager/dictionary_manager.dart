@@ -2107,6 +2107,7 @@ class DictionaryManager {
             subStream = _linkMdict(
               item.path,
               indexDefinitions: indexDefinitions,
+              safUris: item.safUris,
             );
             break;
           case 'slob':
@@ -2233,14 +2234,11 @@ class DictionaryManager {
                   format: 'stardict',
                   parentFolderName: parentName,
                   safUris: {
-                    'ifo': path,
                     'tree': treeUri,
-                    // ignore: use_null_aware_elements
-                    if (idxUri != null) 'idx': idxUri,
-                    // ignore: use_null_aware_elements
-                    if (dictUri != null) 'dict': dictUri,
-                    // ignore: use_null_aware_elements
-                    if (synUri != null) 'syn': synUri,
+                    'ifo': path,
+                    ...?idxUri == null ? null : {'idx': idxUri},
+                    ...?dictUri == null ? null : {'dict': dictUri},
+                    ...?synUri == null ? null : {'syn': synUri},
                   },
                 ),
               );
@@ -2257,12 +2255,26 @@ class DictionaryManager {
           }
           // -- MDict --
           else if (lowerName.endsWith('.mdx')) {
+            // Check for companion MDD file in the same directory
+            String? mddUri;
+            final mdxBaseName = name.substring(0, name.length - 4);
+            for (final f in entities) {
+              final n = f.name.toLowerCase();
+              if (n == '$mdxBaseName.mdd') {
+                mddUri = f.uri;
+                break;
+              }
+            }
             discovered.add(
               DiscoveredDict(
                 path: path,
                 format: 'mdict',
                 parentFolderName: parentName,
-                safUris: {'tree': treeUri},
+                safUris: {
+                  'tree': treeUri,
+                  'mdx': path,
+                  ...?mddUri == null ? null : {'mdd': mddUri},
+                },
               ),
             );
           }
@@ -2837,10 +2849,10 @@ class DictionaryManager {
       final String? bookmark = await BookmarkManager.createBookmark(folderPath);
       if (bookmark == null) throw Exception('Failed to create bookmark');
 
-      final mddPath = mdxPath.replaceAll(
-        RegExp(r'\.mdx$', caseSensitive: false),
-        '.mdd',
-      );
+      // Use stored MDD URI from safUris if available, otherwise derive from MDX path
+      final mddPath = (safUris != null && safUris.containsKey('mdd'))
+          ? safUris['mdd']!
+          : mdxPath.replaceAll(RegExp(r'\.mdx$', caseSensitive: false), '.mdd');
 
       final reader = isSaf
           ? await MdictReader.fromUri(mdxPath, mddPath: mddPath)
