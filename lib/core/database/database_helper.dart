@@ -32,7 +32,7 @@ class DatabaseHelper {
 
   /// LRU Cache for SQLite search results.
   /// Key: "$headwordQuery|$headwordMode|$definitionQuery|$definitionMode|$dictId|$limit"
-  final LinkedHashMap<String, List<Map<String, dynamic>>> _queryCache = 
+  final LinkedHashMap<String, List<Map<String, dynamic>>> _queryCache =
       LinkedHashMap<String, List<Map<String, dynamic>>>();
   static const int _maxQueryCacheEntries = 100;
 
@@ -147,7 +147,9 @@ class DatabaseHelper {
           await db.rawQuery('PRAGMA synchronous = NORMAL;');
           hDebugPrint('DatabaseHelper: Performance PRAGMAs applied (WAL mode)');
         } catch (e) {
-          hDebugPrint('DatabaseHelper: Failed to apply performance PRAGMAs: $e');
+          hDebugPrint(
+            'DatabaseHelper: Failed to apply performance PRAGMAs: $e',
+          );
           // We don't rethrow here so the database can still open in default mode
         }
       },
@@ -806,7 +808,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 31) {
       try {
-        hDebugPrint('Migration to version 31: Performance optimizations (WAL mode)');
+        hDebugPrint(
+          'Migration to version 31: Performance optimizations (WAL mode)',
+        );
         // PRAGMA journal_mode = WAL is already called in onOpen for every connection,
         // but we bump the version to signal a performance-optimized state.
       } catch (e) {
@@ -925,7 +929,8 @@ class DatabaseHelper {
     String? sourceUrl,
     String sourceType = 'managed',
     String? sourceBookmark,
-    String? companionUri, // Pre-resolved companion file URI (e.g. SAF .dict URI)
+    String?
+    companionUri, // Pre-resolved companion file URI (e.g. SAF .dict URI)
   }) async {
     final db = await database;
 
@@ -987,7 +992,7 @@ class DatabaseHelper {
       updated['end_rowid'] = end;
       _dictionaryMapCache![id] = updated;
     }
-    _dictionaryCache = null; 
+    _dictionaryCache = null;
   }
 
   Future<int> getWordCountForDict(int dictId) async {
@@ -1005,7 +1010,10 @@ class DatabaseHelper {
   /// Returns random sample words using O(1) rowid lookup if available, or O(N) fallback.
   /// Returns a specified number of sample words across multiple dictionaries.
   /// Uses a single SQL query for efficiency.
-  Future<List<Map<String, dynamic>>> getBatchSampleWords(int totalCount, List<int> dictIds) async {
+  Future<List<Map<String, dynamic>>> getBatchSampleWords(
+    int totalCount,
+    List<int> dictIds,
+  ) async {
     final db = await database;
     final List<int> allRandomIds = [];
     final random = Random();
@@ -1013,48 +1021,8 @@ class DatabaseHelper {
     // 1. Ensure map cache is ready for O(1) lookups
     await _ensureDictionaryMapCache();
 
-    // 2. Identify missing indices and batch-update in a single transaction
-    final List<int> missingIndexIds = [];
-    for (final id in dictIds) {
-      final d = _dictionaryMapCache?[id];
-      if (d != null && (d['start_rowid'] == null || d['end_rowid'] == null)) {
-        missingIndexIds.add(id);
-      }
-    }
-
-    if (missingIndexIds.isNotEmpty) {
-      hDebugPrint('DatabaseHelper: Batch indexing ${missingIndexIds.length} dictionaries');
-      await db.transaction((txn) async {
-        final String targetTable = (_fts5Available ?? true) ? 'word_metadata' : 'word_index';
-        for (final id in missingIndexIds) {
-          // Use txn object to avoid lock warnings
-          final minMax = await txn.rawQuery(
-            'SELECT MIN(rowid) as min, MAX(rowid) as max FROM $targetTable WHERE dict_id = ?',
-            [id],
-          );
-          if (minMax.isNotEmpty && minMax.first['min'] != null) {
-            final int start = (minMax.first['min'] as num).toInt();
-            final int end = (minMax.first['max'] as num).toInt();
-            await txn.update(
-              'dictionaries',
-              {'start_rowid': start, 'end_rowid': end},
-              where: 'id = ?',
-              whereArgs: [id],
-            );
-            // In-place update to prevent next loop iteration from triggering a full cache reload
-            if (_dictionaryMapCache != null && _dictionaryMapCache!.containsKey(id)) {
-              final updated = Map<String, dynamic>.from(_dictionaryMapCache![id]!);
-              updated['start_rowid'] = start;
-              updated['end_rowid'] = end;
-              _dictionaryMapCache![id] = updated;
-            }
-          }
-        }
-      });
-      _dictionaryCache = null; // Sync list cache
-    }
-
-    // 3. Generate random rowid candidates across requested dictionaries
+    // 2. Generate random rowid candidates across requested dictionaries
+    // Always compute MIN/MAX inline to guarantee fresh, correct values.
     for (final dictId in dictIds) {
       final dict = _dictionaryMapCache?[dictId];
       if (dict == null) continue;
@@ -1062,36 +1030,132 @@ class DatabaseHelper {
       int wordCount = (dict['word_count'] as num).toInt();
       if (wordCount == 0) continue;
 
-      int? start = dict['start_rowid'] as int?;
-      int? end = dict['end_rowid'] as int?;
+      final targetTable = (_fts5Available ?? true)
+          ? 'word_metadata'
+          : 'word_index';
+      final minMax = await db.rawQuery(
+        'SELECT MIN(rowid) as min, MAX(rowid) as max FROM $targetTable WHERE dict_id = ?',
+        [dictId],
+      );
 
-      if (start == null || end == null) continue; // Should have been indexed above
+      if (minMax.isEmpty || minMax.first['min'] == null) {
+        hDebugPrint(
+          'DatabaseHelper: getBatchSampleWords: Warning: Dict $dictId has no words',
+        );
+        continue;
+      }
 
-      // Distribute totalCount. Fetch a small excess (20%) to handle holes/interleaving
-      int toFetchThisDict = (totalCount * 1.2 / dictIds.length).ceil();
-      if (toFetchThisDict < 1) toFetchThisDict = 1;
+      final int start = (minMax.first['min'] as num).toInt();
+      final int end = (minMax.first['max'] as num).toInt();
+      final int range = end - start + 1;
+      hDebugPrint(
+        'DatabaseHelper: getBatchSampleWords: Dict $dictId: start=$start, end=$end, range=$range, count=$wordCount',
+      );
+
+      // Distribute totalCount. Fetch a small excess (50% now instead of 20% to be safer)
+      int toFetchThisDict = (totalCount * 1.5 / dictIds.length).ceil();
+      if (toFetchThisDict < 2)
+        toFetchThisDict = 2; // Always get at least 2 candidates per dict
 
       for (int i = 0; i < toFetchThisDict; i++) {
-        int randomId = start + random.nextInt(end - start + 1);
+        int randomId = start + random.nextInt(range);
         allRandomIds.add(randomId);
       }
     }
 
-    if (allRandomIds.isEmpty) return [];
+    if (allRandomIds.isEmpty) {
+      hDebugPrint(
+        'DatabaseHelper: getBatchSampleWords: No candidates generated. Check dictionary word counts.',
+      );
+      return [];
+    }
 
-    // 2. Perform ONE bulk query
-    final String targetTable = (_fts5Available ?? true) ? 'word_metadata' : 'word_index';
+    // 4. Perform ONE bulk query
+    final bool useMetadataTable = (_fts5Available ?? true);
+    final String targetTable = useMetadataTable
+        ? 'word_metadata'
+        : 'word_index';
+    final String idColumn = useMetadataTable ? 'id' : 'rowid';
+
     final idList = allRandomIds.join(',');
     final dictIdList = dictIds.join(',');
 
-    final results = await db.rawQuery(
-      'SELECT word, dict_id, offset, length FROM $targetTable '
-      'WHERE rowid IN ($idList) AND dict_id IN ($dictIdList) '
-      'LIMIT ${totalCount + 5}'
+    List<Map<String, dynamic>> resultsList = [];
+    try {
+      final query =
+          'SELECT word, dict_id, offset, length FROM $targetTable '
+          'WHERE $idColumn IN ($idList) AND dict_id IN ($dictIdList) '
+          'LIMIT ${totalCount + 10}';
+      hDebugPrint('DatabaseHelper: getBatchSampleWords: Stage 1 Query: $query');
+
+      final results = await db.rawQuery(query);
+      resultsList = List<Map<String, dynamic>>.from(results);
+    } catch (e) {
+      hDebugPrint(
+        'DatabaseHelper: getBatchSampleWords: Stage 1 Query error: $e',
+      );
+    }
+
+    hDebugPrint(
+      'DatabaseHelper: getBatchSampleWords: Stage 1 fetched ${resultsList.length} words using $targetTable ($idColumn)',
     );
 
-    hDebugPrint('DatabaseHelper: getBatchSampleWords fetched ${results.length} words for requested $totalCount from ${dictIds.length} dicts');
-    return results;
+    // 5. Fallback Stage: If we didn't get enough words, fetch them one-by-one using OFFSET (Guaranteed but slower)
+    if (resultsList.length < totalCount) {
+      final int missing = totalCount - resultsList.length;
+      hDebugPrint(
+        'DatabaseHelper: getBatchSampleWords: Stage 2 Fallback: Fetching $missing more words from ${dictIds.length} possible dicts',
+      );
+
+      // Shuffle dictIds to not just pick from the first few
+      final shuffledDictIds = List<int>.from(dictIds)..shuffle();
+      hDebugPrint(
+        'DatabaseHelper: getBatchSampleWords: Shuffle order: ${shuffledDictIds.take(10).toList()}...',
+      );
+
+      int fetchedCount = 0;
+      for (
+        int i = 0;
+        i < missing * 10 && resultsList.length < totalCount;
+        i++
+      ) {
+        final dictId = shuffledDictIds[i % shuffledDictIds.length];
+        final dict = _dictionaryMapCache?[dictId];
+        if (dict == null) continue;
+
+        int wordCount = (dict['word_count'] as num).toInt();
+        if (wordCount == 0) continue;
+
+        int randomOffset = random.nextInt(wordCount);
+        final fallback = await db.rawQuery(
+          'SELECT word, dict_id, offset, length FROM $targetTable '
+          'WHERE dict_id = ? LIMIT 1 OFFSET ?',
+          [dictId, randomOffset],
+        );
+
+        if (fallback.isNotEmpty) {
+          final word = fallback.first['word'];
+          // Avoid duplicates if possible
+          bool isDuplicate = resultsList.any(
+            (r) => r['word'] == word && r['dict_id'] == dictId,
+          );
+          if (!isDuplicate) {
+            resultsList.add(fallback.first);
+            fetchedCount++;
+            hDebugPrint(
+              'DatabaseHelper: getBatchSampleWords: Stage 2: Added "$word" from dict $dictId (total: ${resultsList.length})',
+            );
+          }
+        }
+      }
+      hDebugPrint(
+        'DatabaseHelper: getBatchSampleWords: Stage 2 Fallback complete. Added $fetchedCount words.',
+      );
+    }
+
+    // Final Shuffle to ensure Stage 1 and Stage 2 words are mixed
+    resultsList.shuffle();
+    return resultsList;
   }
 
   Future<List<Map<String, dynamic>>> getSampleWords(
@@ -1107,7 +1171,9 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [dictId],
     );
-    hDebugPrint('DatabaseHelper: getSampleWords ($dictId) metadata fetch complete');
+    hDebugPrint(
+      'DatabaseHelper: getSampleWords ($dictId) metadata fetch complete',
+    );
 
     if (dictResult.isEmpty) return [];
 
@@ -1140,7 +1206,7 @@ class DatabaseHelper {
           where: 'id IN ($idList) AND dict_id = ?',
           whereArgs: [dictId],
         );
-        
+
         if (res.isNotEmpty) {
           results.addAll(res);
           // Shuffle because IN clause doesn't guarantee order and we want randomness
@@ -1156,7 +1222,7 @@ class DatabaseHelper {
     // 3. Fallback: Slow O(N) scan strategy (if rowid metadata missing)
     try {
       final rangeRes = await db.rawQuery(
-        'SELECT MIN(id) as min_id, MAX(id) as max_id FROM word_metadata WHERE dict_id = ?',
+        'SELECT MIN(rowid) as min_id, MAX(rowid) as max_id FROM word_metadata WHERE dict_id = ?',
         [dictId],
       );
       if (rangeRes.isNotEmpty && rangeRes.first['min_id'] != null) {
@@ -1519,7 +1585,8 @@ class DatabaseHelper {
     int? dictId,
     int limit = 50,
   }) async {
-    final String cacheKey = '$headwordQuery|$headwordMode|$definitionQuery|$definitionMode|$dictId|$limit';
+    final String cacheKey =
+        '$headwordQuery|$headwordMode|$definitionQuery|$definitionMode|$dictId|$limit';
     final cachedResults = _getFromQueryCache(cacheKey);
     if (cachedResults != null) {
       HPerf.record('searchWords_CacheHit', 0);
@@ -1782,7 +1849,8 @@ class DatabaseHelper {
       args.addAll([i, dicts[i]['id'], likePattern, limit]);
     }
 
-    final String finalSql = '''
+    final String finalSql =
+        '''
       SELECT word, dict_id, offset, length 
       FROM (
         ${subQueries.join(' UNION ALL ')}
