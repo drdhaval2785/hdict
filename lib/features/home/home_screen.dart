@@ -226,6 +226,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final TextEditingController _definitionController = TextEditingController();
   final DatabaseHelper _dbHelper = DatabaseHelper();
   final DictionaryManager _dictManager = DictionaryManager();
+  final AudioPlayer _pronunciationPlayer = AudioPlayer();
 
   List<Map<String, dynamic>> _currentDefinitions = [];
   bool _isLoading = false;
@@ -245,6 +246,35 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // Fix #5: Cache the dictionaries future so FutureBuilder doesn't fire a new
   // SQL query on every widget rebuild (keyboard, theme, settings changes, etc.).
   late Future<List<Map<String, dynamic>>> _dictionariesFuture;
+
+  void _playPronunciation(String url, int dictId) async {
+    if (!url.startsWith('mdd-audio:')) return;
+
+    final resourceKey = url.substring('mdd-audio:'.length);
+    final mdictReader = DictionaryManager.instance.getMdictReader(dictId);
+    if (mdictReader == null) return;
+
+    final data = await mdictReader.getMddResourceBytes(resourceKey);
+    if (data == null) return;
+
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final ext = resourceKey.split('.').last;
+      final tempFile = File(
+        '${tempDir.path}/pron_${DateTime.now().millisecondsSinceEpoch}.$ext',
+      );
+      await tempFile.writeAsBytes(data);
+
+      await _pronunciationPlayer.setFilePath(tempFile.path);
+      await _pronunciationPlayer.play();
+
+      tempFile.delete().catchError((_) => File(''));
+    } catch (e) {
+      if (showMultimediaProcessing) {
+        hDebugPrint('Error playing pronunciation: $e');
+      }
+    }
+  }
 
   void _showMediaPlayer(String url, int dictId) async {
     final parts = url.split(':');
@@ -1446,11 +1476,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                                 LaunchMode.externalApplication,
                                           );
                                         }
-                                      } else if (url.startsWith('mdd-audio:') ||
-                                          url.startsWith('mdd-video:')) {
+                                      } else if (url.startsWith('mdd-audio:')) {
                                         if (showMultimediaProcessing) {
                                           hDebugPrint(
-                                            'MDD media link tapped: $url',
+                                            'MDD audio link tapped: $url',
+                                          );
+                                        }
+                                        final defId = defMap['dict_id'] as int?;
+                                        if (defId != null) {
+                                          _playPronunciation(url, defId);
+                                        }
+                                      } else if (url.startsWith('mdd-video:')) {
+                                        if (showMultimediaProcessing) {
+                                          hDebugPrint(
+                                            'MDD video link tapped: $url',
                                           );
                                         }
                                         final defId = defMap['dict_id'] as int?;
@@ -2078,13 +2117,55 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
                                 ),
                               },
                               onLinkTap: (url, attributes, element) async {
-                                if (url != null && url.startsWith('mdd-')) {
+                                if (url != null &&
+                                    url.startsWith('mdd-audio:')) {
+                                  if (showMultimediaProcessing) {
+                                    hDebugPrint('MDD audio link tapped: $url');
+                                  }
                                   final defId = defMap['dict_id'] as int?;
                                   if (defId != null) {
-                                    final parts = url.split(':');
-                                    if (parts.length != 2) return;
-                                    final mediaType = parts[0];
-                                    final resourceKey = parts[1];
+                                    final resourceKey = url.substring(
+                                      'mdd-audio:'.length,
+                                    );
+                                    final mdictReader = DictionaryManager
+                                        .instance
+                                        .getMdictReader(defId);
+                                    if (mdictReader == null) return;
+                                    final data = await mdictReader
+                                        .getMddResourceBytes(resourceKey);
+                                    if (data == null) return;
+                                    try {
+                                      final tempDir =
+                                          await getTemporaryDirectory();
+                                      final ext = resourceKey.split('.').last;
+                                      final tempFile = File(
+                                        '${tempDir.path}/pron_${DateTime.now().millisecondsSinceEpoch}.$ext',
+                                      );
+                                      await tempFile.writeAsBytes(data);
+                                      final player = AudioPlayer();
+                                      await player.setFilePath(tempFile.path);
+                                      await player.play();
+                                      tempFile.delete().catchError(
+                                        (_) => File(''),
+                                      );
+                                    } catch (e) {
+                                      if (showMultimediaProcessing) {
+                                        hDebugPrint(
+                                          'Error playing pronunciation: $e',
+                                        );
+                                      }
+                                    }
+                                  }
+                                } else if (url != null &&
+                                    url.startsWith('mdd-video:')) {
+                                  if (showMultimediaProcessing) {
+                                    hDebugPrint('MDD video link tapped: $url');
+                                  }
+                                  final defId = defMap['dict_id'] as int?;
+                                  if (defId != null) {
+                                    final resourceKey = url.substring(
+                                      'mdd-video:'.length,
+                                    );
                                     final mdictReader = DictionaryManager
                                         .instance
                                         .getMdictReader(defId);
@@ -2097,9 +2178,7 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
                                       context: context,
                                       builder: (ctx) => _MediaPlayerDialog(
                                         data: data,
-                                        mediaType: mediaType == 'mdd-audio'
-                                            ? 'audio'
-                                            : 'video',
+                                        mediaType: 'video',
                                         filename: resourceKey,
                                       ),
                                     );
