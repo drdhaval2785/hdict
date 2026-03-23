@@ -40,6 +40,7 @@ class ManualScreen extends StatelessWidget {
             child: Markdown(
               data: data,
               selectable: true,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
                 h1: TextStyle(
                   fontWeight: FontWeight.bold,
@@ -52,13 +53,33 @@ class ManualScreen extends StatelessWidget {
                   color: theme.colorScheme.primary,
                   height: 2.0,
                 ),
-                h3: const TextStyle(
+                h3: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
+                  color: theme.colorScheme.onSurface,
                   height: 1.5,
+                ),
+                h4: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 17,
+                  color: theme.colorScheme.secondary,
+                  height: 1.4,
+                ),
+                h5: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                  color: theme.colorScheme.onSurface,
+                  height: 1.4,
+                ),
+                h6: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
+                  color: theme.colorScheme.onSurfaceVariant,
+                  height: 1.4,
                 ),
                 p: const TextStyle(fontSize: 16, height: 1.6),
                 listBullet: const TextStyle(fontSize: 16, height: 1.6),
+                listIndent: 24,
                 code: TextStyle(
                   color: theme.colorScheme.onSurfaceVariant,
                   backgroundColor: theme.colorScheme.onSurface.withValues(
@@ -66,10 +87,27 @@ class ManualScreen extends StatelessWidget {
                   ),
                   fontFamily: 'monospace',
                 ),
+                codeblockDecoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
                 horizontalRuleDecoration: BoxDecoration(
                   border: Border(
                     top: BorderSide(color: theme.dividerColor, width: 1),
                   ),
+                ),
+                blockquoteDecoration: BoxDecoration(
+                  border: Border(
+                    left: BorderSide(
+                      color: theme.colorScheme.primary,
+                      width: 4,
+                    ),
+                  ),
+                ),
+                blockquotePadding: const EdgeInsets.only(
+                  left: 16,
+                  top: 8,
+                  bottom: 8,
                 ),
               ),
             ),
