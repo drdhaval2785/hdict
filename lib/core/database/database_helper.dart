@@ -1023,6 +1023,8 @@ class DatabaseHelper {
 
     // 2. Generate random rowid candidates across requested dictionaries
     // Always compute MIN/MAX inline to guarantee fresh, correct values.
+    // Also track computed ranges to update the cache afterward.
+    final Map<int, Map<String, int>> computedRanges = {};
     for (final dictId in dictIds) {
       final dict = _dictionaryMapCache?[dictId];
       if (dict == null) continue;
@@ -1047,6 +1049,7 @@ class DatabaseHelper {
 
       final int start = (minMax.first['min'] as num).toInt();
       final int end = (minMax.first['max'] as num).toInt();
+      computedRanges[dictId] = {'start': start, 'end': end};
       final int range = end - start + 1;
       hDebugPrint(
         'DatabaseHelper: getBatchSampleWords: Dict $dictId: start=$start, end=$end, range=$range, count=$wordCount',
@@ -1061,6 +1064,33 @@ class DatabaseHelper {
         int randomId = start + random.nextInt(range);
         allRandomIds.add(randomId);
       }
+    }
+
+    // 3. Update dictionary cache with computed ranges (for other callers)
+    if (computedRanges.isNotEmpty) {
+      await db.transaction((txn) async {
+        for (final entry in computedRanges.entries) {
+          final dictId = entry.key;
+          final range = entry.value;
+          await txn.update(
+            'dictionaries',
+            {'start_rowid': range['start'], 'end_rowid': range['end']},
+            where: 'id = ?',
+            whereArgs: [dictId],
+          );
+          // Update in-memory cache
+          if (_dictionaryMapCache != null &&
+              _dictionaryMapCache!.containsKey(dictId)) {
+            final updated = Map<String, dynamic>.from(
+              _dictionaryMapCache![dictId]!,
+            );
+            updated['start_rowid'] = range['start'];
+            updated['end_rowid'] = range['end'];
+            _dictionaryMapCache![dictId] = updated;
+          }
+        }
+      });
+      _dictionaryCache = null; // Sync list cache
     }
 
     if (allRandomIds.isEmpty) {
