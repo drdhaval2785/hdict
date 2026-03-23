@@ -319,6 +319,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _headwordController.dispose();
     _definitionController.dispose();
     _tabController?.dispose();
+    _pronunciationPlayer.dispose();
     super.dispose();
   }
 
