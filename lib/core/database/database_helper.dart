@@ -980,7 +980,14 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [id],
     );
-    clearDictionaryCache();
+    // In-place update map cache to avoid full reload
+    if (_dictionaryMapCache != null && _dictionaryMapCache!.containsKey(id)) {
+      final updated = Map<String, dynamic>.from(_dictionaryMapCache![id]!);
+      updated['start_rowid'] = start;
+      updated['end_rowid'] = end;
+      _dictionaryMapCache![id] = updated;
+    }
+    _dictionaryCache = null; 
   }
 
   Future<int> getWordCountForDict(int dictId) async {
@@ -1003,9 +1010,53 @@ class DatabaseHelper {
     final List<int> allRandomIds = [];
     final random = Random();
 
-    // 1. Generate random rowid candidates across requested dictionaries
+    // 1. Ensure map cache is ready for O(1) lookups
+    await _ensureDictionaryMapCache();
+
+    // 2. Identify missing indices and batch-update in a single transaction
+    final List<int> missingIndexIds = [];
+    for (final id in dictIds) {
+      final d = _dictionaryMapCache?[id];
+      if (d != null && (d['start_rowid'] == null || d['end_rowid'] == null)) {
+        missingIndexIds.add(id);
+      }
+    }
+
+    if (missingIndexIds.isNotEmpty) {
+      hDebugPrint('DatabaseHelper: Batch indexing ${missingIndexIds.length} dictionaries');
+      await db.transaction((txn) async {
+        final String targetTable = (_fts5Available ?? true) ? 'word_metadata' : 'word_index';
+        for (final id in missingIndexIds) {
+          // Use txn object to avoid lock warnings
+          final minMax = await txn.rawQuery(
+            'SELECT MIN(rowid) as min, MAX(rowid) as max FROM $targetTable WHERE dict_id = ?',
+            [id],
+          );
+          if (minMax.isNotEmpty && minMax.first['min'] != null) {
+            final int start = (minMax.first['min'] as num).toInt();
+            final int end = (minMax.first['max'] as num).toInt();
+            await txn.update(
+              'dictionaries',
+              {'start_rowid': start, 'end_rowid': end},
+              where: 'id = ?',
+              whereArgs: [id],
+            );
+            // In-place update to prevent next loop iteration from triggering a full cache reload
+            if (_dictionaryMapCache != null && _dictionaryMapCache!.containsKey(id)) {
+              final updated = Map<String, dynamic>.from(_dictionaryMapCache![id]!);
+              updated['start_rowid'] = start;
+              updated['end_rowid'] = end;
+              _dictionaryMapCache![id] = updated;
+            }
+          }
+        }
+      });
+      _dictionaryCache = null; // Sync list cache
+    }
+
+    // 3. Generate random rowid candidates across requested dictionaries
     for (final dictId in dictIds) {
-      final dict = await getDictionaryById(dictId);
+      final dict = _dictionaryMapCache?[dictId];
       if (dict == null) continue;
 
       int wordCount = (dict['word_count'] as num).toInt();
@@ -1014,28 +1065,14 @@ class DatabaseHelper {
       int? start = dict['start_rowid'] as int?;
       int? end = dict['end_rowid'] as int?;
 
-      // Auto-index row ID range if missing (migration or new import)
-      if (start == null || end == null) {
-        final String targetTable = (_fts5Available ?? true) ? 'word_metadata' : 'word_index';
-        final minMax = await db.rawQuery(
-          'SELECT MIN(rowid) as min, MAX(rowid) as max FROM $targetTable WHERE dict_id = ?',
-          [dictId],
-        );
-        if (minMax.isNotEmpty && minMax.first['min'] != null) {
-          start = (minMax.first['min'] as num).toInt();
-          end = (minMax.first['max'] as num).toInt();
-          await updateDictionaryRowIdRange(dictId, start, end);
-        } else {
-          continue; // Empty or invalid dictionary
-        }
-      }
+      if (start == null || end == null) continue; // Should have been indexed above
 
       // Distribute totalCount. Fetch a small excess (20%) to handle holes/interleaving
       int toFetchThisDict = (totalCount * 1.2 / dictIds.length).ceil();
       if (toFetchThisDict < 1) toFetchThisDict = 1;
 
       for (int i = 0; i < toFetchThisDict; i++) {
-        int randomId = start! + random.nextInt(end! - start + 1);
+        int randomId = start + random.nextInt(end - start + 1);
         allRandomIds.add(randomId);
       }
     }
