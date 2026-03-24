@@ -273,14 +273,11 @@ Future<void> _indexEntry(_IndexArgs args) async {
   BackgroundIsolateBinaryMessenger.ensureInitialized(args.rootIsolateToken);
   await DatabaseHelper.initializeDatabaseFactory();
   final SendPort sendPort = args.sendPort;
-  final dbHelper = DatabaseHelper(); // Assumes singleton or initialized factory
+  final dbHelper = DatabaseHelper();
 
   try {
     final bool isLinked =
         args.sourceType == 'linked' && args.sourceBookmark != null;
-
-    // StarDict indexing needs to parse IFO (already parsed but let's be safe),
-    // IDX (for word offsets), and potentially SYN (for synonyms).
 
     // 1. IDX Parser
     final idxParser = IdxParser(args.ifoParser);
@@ -304,6 +301,9 @@ Future<void> _indexEntry(_IndexArgs args) async {
                 )
               : await DictReader.fromPath(args.dictPath));
     await dictReader.open();
+
+    // Start batch insert optimization
+    int startId = await dbHelper.startBatchInsert();
 
     List<({int offset, int length, String content})> wordOffsets = [];
 
@@ -366,7 +366,11 @@ Future<void> _indexEntry(_IndexArgs args) async {
         }
 
         if (dbBatch.length >= dbBatchSize) {
-          await dbHelper.batchInsertWords(args.dictId, dbBatch);
+          startId = await dbHelper.batchInsertWords(
+            args.dictId,
+            dbBatch,
+            startId: startId,
+          );
           dbBatch.clear();
           sendPort.send(
             ImportProgress(
@@ -384,7 +388,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
       }
     }
     if (dbBatch.isNotEmpty)
-      await dbHelper.batchInsertWords(args.dictId, dbBatch);
+      startId = await dbHelper.batchInsertWords(args.dictId, dbBatch, startId: startId);
 
     if (args.synPath != null) {
       final synParser = SynParser();
@@ -413,7 +417,11 @@ Future<void> _indexEntry(_IndexArgs args) async {
             headwordCount++;
           }
           if (synBatch.length >= 10000) {
-            await dbHelper.batchInsertWords(args.dictId, synBatch);
+            startId = await dbHelper.batchInsertWords(
+              args.dictId,
+              synBatch,
+              startId: startId,
+            );
             synBatch.clear();
             sendPort.send(
               ImportProgress(
@@ -434,7 +442,11 @@ Future<void> _indexEntry(_IndexArgs args) async {
         await synSource.close();
       }
       if (synBatch.isNotEmpty) {
-        await dbHelper.batchInsertWords(args.dictId, synBatch);
+        startId = await dbHelper.batchInsertWords(
+          args.dictId,
+          synBatch,
+          startId: startId,
+        );
       }
     }
 
@@ -444,6 +456,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
       headwordCount,
       defWordCount,
     );
+    await dbHelper.endBatchInsert();
 
     sendPort.send(
       ImportProgress(
@@ -458,6 +471,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
       ),
     );
   } catch (e, s) {
+    await dbHelper.endBatchInsert();
     hDebugPrint('Error in _indexEntry: $e\n$s');
     sendPort.send(
       ImportProgress(
@@ -498,6 +512,8 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
               : await MdictReader.fromPath(args.mdxPath, mddPath: mddPath));
     await reader.open();
 
+    int startId = await dbHelper.startBatchInsert();
+
     // Fetch all keys via prefix search with empty prefix
     final allKeys = await reader.prefixSearch('', limit: 500000);
     final totalKeys = allKeys.length;
@@ -530,7 +546,7 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
       }
 
       if (batch.length >= 10000) {
-        await dbHelper.batchInsertWords(args.dictId, batch);
+        startId = await dbHelper.batchInsertWords(args.dictId, batch, startId: startId);
         batch.clear();
         sendPort.send(
           ImportProgress(
@@ -546,13 +562,15 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
       }
     }
 
-    if (batch.isNotEmpty) await dbHelper.batchInsertWords(args.dictId, batch);
+    if (batch.isNotEmpty)
+      startId = await dbHelper.batchInsertWords(args.dictId, batch, startId: startId);
     await reader.close();
     await dbHelper.updateDictionaryWordCount(
       args.dictId,
       indexed,
       defWordCount,
     );
+    await dbHelper.endBatchInsert();
 
     sendPort.send(
       ImportProgress(
@@ -566,6 +584,7 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
       ),
     );
   } catch (e, s) {
+    await dbHelper.endBatchInsert();
     hDebugPrint('MDict indexing error: $e\n$s');
     sendPort.send(
       ImportProgress(
@@ -598,6 +617,8 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
                 )
               : await SlobReader.fromPath(args.slobPath));
     await reader.open();
+
+    int startId = await dbHelper.startBatchInsert();
 
     int headwordCount = 0;
     int defWordCount = 0;
@@ -639,7 +660,11 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
         }
 
         if (dbBatch.length >= dbBatchSize) {
-          await dbHelper.batchInsertWords(args.dictId, dbBatch);
+          startId = await dbHelper.batchInsertWords(
+            args.dictId,
+            dbBatch,
+            startId: startId,
+          );
           dbBatch.clear();
           sendPort.send(
             ImportProgress(
@@ -674,13 +699,14 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
     }
 
     if (dbBatch.isNotEmpty)
-      await dbHelper.batchInsertWords(args.dictId, dbBatch);
+      startId = await dbHelper.batchInsertWords(args.dictId, dbBatch, startId: startId);
     await reader.close();
     await dbHelper.updateDictionaryWordCount(
       args.dictId,
       headwordCount,
       defWordCount,
     );
+    await dbHelper.endBatchInsert();
 
     sendPort.send(
       ImportProgress(
@@ -695,6 +721,7 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
       ),
     );
   } catch (e, s) {
+    await dbHelper.endBatchInsert();
     hDebugPrint('Slob indexing error: $e\n$s');
     sendPort.send(
       ImportProgress(
@@ -742,6 +769,8 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
                 )
               : await DictdReader.fromPath(args.dictPath));
     await dictdReader.open();
+
+    int startId = await dbHelper.startBatchInsert();
 
     final List<Map<String, dynamic>> entriesList = [];
     try {
@@ -797,7 +826,11 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
         }
 
         if (dbBatch.length >= dbBatchSize) {
-          await dbHelper.batchInsertWords(args.dictId, dbBatch);
+          startId = await dbHelper.batchInsertWords(
+            args.dictId,
+            dbBatch,
+            startId: startId,
+          );
           dbBatch.clear();
           sendPort.send(
             ImportProgress(
@@ -818,13 +851,14 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
     }
 
     if (dbBatch.isNotEmpty)
-      await dbHelper.batchInsertWords(args.dictId, dbBatch);
+      startId = await dbHelper.batchInsertWords(args.dictId, dbBatch, startId: startId);
     await dictdReader.close();
     await dbHelper.updateDictionaryWordCount(
       args.dictId,
       headwordCount,
       defWordCount,
     );
+    await dbHelper.endBatchInsert();
 
     sendPort.send(
       ImportProgress(
@@ -839,6 +873,7 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
       ),
     );
   } catch (e, s) {
+    await dbHelper.endBatchInsert();
     hDebugPrint('DICTD indexing error: $e\n$s');
     sendPort.send(
       ImportProgress(
@@ -3548,6 +3583,8 @@ class DictionaryManager {
       );
       await dictReader.open();
 
+      int startId = await _dbHelper.startBatchInsert();
+
       List<Map<String, dynamic>> batch = [];
       List<({int offset, int length, String content})> wordOffsets = [];
       int headwordCount = 0;
@@ -3589,7 +3626,7 @@ class DictionaryManager {
         wordOffsets.add((offset: offset, length: length, content: content));
 
         if (batch.length >= 1000) {
-          await _dbHelper.batchInsertWords(dictId, batch);
+          startId = await _dbHelper.batchInsertWords(dictId, batch, startId: startId);
           batch.clear();
           yield ImportProgress(
             message: 'Indexing $headwordCount words...',
@@ -3603,7 +3640,8 @@ class DictionaryManager {
           );
         }
       }
-      if (batch.isNotEmpty) await _dbHelper.batchInsertWords(dictId, batch);
+      if (batch.isNotEmpty)
+        startId = await _dbHelper.batchInsertWords(dictId, batch, startId: startId);
 
       // SYN support for Web
       if (finalSynName != null && decompressedSynBytes != null) {
@@ -3625,16 +3663,21 @@ class DictionaryManager {
             headwordCount++;
           }
           if (synBatch.length >= 1000) {
-            await _dbHelper.batchInsertWords(dictId, synBatch);
+            startId = await _dbHelper.batchInsertWords(
+              dictId,
+              synBatch,
+              startId: startId,
+            );
             synBatch.clear();
           }
         }
         if (synBatch.isNotEmpty)
-          await _dbHelper.batchInsertWords(dictId, synBatch);
+          startId = await _dbHelper.batchInsertWords(dictId, synBatch, startId: startId);
       }
 
       await dictReader.close();
       await _dbHelper.updateDictionaryWordCount(dictId, headwordCount);
+      await _dbHelper.endBatchInsert();
 
       final sampleWords = await _dbHelper.getSampleWords(dictId);
 
@@ -3649,6 +3692,7 @@ class DictionaryManager {
         dictionaryName: bookName,
       );
     } catch (e, s) {
+      await _dbHelper.endBatchInsert();
       hDebugPrint('Web import error: $e\n$s');
       yield ImportProgress(
         message: 'Web import error: $e',

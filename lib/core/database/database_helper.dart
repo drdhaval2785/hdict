@@ -146,7 +146,10 @@ class DatabaseHelper {
           // Use rawQuery for PRAGMAs that return results to avoid "not an error" on Darwin
           await db.rawQuery('PRAGMA journal_mode = WAL;');
           await db.rawQuery('PRAGMA synchronous = NORMAL;');
-          hDebugPrint('DatabaseHelper: Performance PRAGMAs applied (WAL mode)');
+          await db.rawQuery('PRAGMA cache_size = -64000'); // 64MB cache
+          hDebugPrint(
+            'DatabaseHelper: Performance PRAGMAs applied (WAL mode, 64MB cache)',
+          );
         } catch (e) {
           hDebugPrint(
             'DatabaseHelper: Failed to apply performance PRAGMAs: $e',
@@ -1576,27 +1579,35 @@ class DatabaseHelper {
 
   // --- Indexing ---
 
-  Future<void> batchInsertWords(
-    int dictId,
-    List<Map<String, dynamic>> words,
-  ) async {
-    if (words.isEmpty) return;
+  Future<int> startBatchInsert() async {
+    final db = await database;
+    final result = await db.rawQuery(
+      "SELECT COALESCE(MAX(id), 0) as max_id FROM word_metadata",
+    );
+    return (result.first['max_id'] as int?) ?? 0;
+  }
+
+  Future<void> endBatchInsert() async {
     clearQueryCache();
     clearDictionaryCache();
+  }
+
+  Future<int> batchInsertWords(
+    int dictId,
+    List<Map<String, dynamic>> words, {
+    int? startId,
+  }) async {
+    if (words.isEmpty) return startId ?? 0;
     final db = await database;
-    await db.transaction((txn) async {
+    return await db.transaction<int>((txn) async {
       final bool useFts5 = _fts5Available ?? true;
+      int newStartId = startId ?? 0;
 
       if (useFts5) {
-        // Predict the IDs that SQLite AUTOINCREMENT will assign.
-        // sqlite_sequence stores the last used rowid for each AUTOINCREMENT table.
-        // If the table has never been written to, there is no row yet — default to 0.
-        final seqResult = await txn.rawQuery(
-          "SELECT seq FROM sqlite_sequence WHERE name='word_metadata'",
-        );
-        final int startId = seqResult.isNotEmpty
-            ? (seqResult.first['seq'] as int)
-            : 0;
+        // Pre-tokenize all content in batch
+        final List<String> tokenizedContents = words
+            .map((w) => _tokenizeContent(w['content'] as String?))
+            .toList();
 
         // --- Pass 1: insert all word_metadata rows in a single batch ---
         final metaBatch = txn.batch();
@@ -1608,22 +1619,22 @@ class DatabaseHelper {
             'length': word['length'],
           });
         }
-        await metaBatch.commit(noResult: true);
+        // Commit the batch and capture the actual auto-incremented IDs
+        final metaResults = await metaBatch.commit(noResult: false);
 
         // --- Pass 2: insert all word_index rows in a single batch ---
-        // SQLite AUTOINCREMENT guarantees IDs are startId+1, startId+2, …
         final idxBatch = txn.batch();
         for (int i = 0; i < words.length; i++) {
-          final int predictedId = startId + i + 1;
-          final String keywords = _tokenizeContent(
-            words[i]['content'] as String?,
-          );
+          final int actualInsertedId = metaResults[i] as int;
           idxBatch.rawInsert(
             'INSERT INTO word_index(rowid, word, content) VALUES (?, ?, ?)',
-            [predictedId, words[i]['word'], keywords],
+            [actualInsertedId, words[i]['word'], tokenizedContents[i]],
           );
         }
         await idxBatch.commit(noResult: true);
+        
+        // For backwards compatibility with DictionaryManager loop
+        newStartId = (metaResults.last as int);
       } else {
         final batch = txn.batch();
         for (final word in words) {
@@ -1637,7 +1648,7 @@ class DatabaseHelper {
         }
         await batch.commit(noResult: true);
       }
-      hDebugPrint('Batch inserted ${words.length} words for dict $dictId');
+      return newStartId;
     });
   }
 

@@ -4,6 +4,7 @@ import FlutterMacOS
 @main
 class AppDelegate: FlutterAppDelegate {
   private var activeURLs: [String: URL] = [:]
+  private var activePathURLs: [String: URL] = [:]
 
   override func applicationDidFinishLaunching(_ notification: Notification) {
     let controller = mainFlutterWindow?.contentViewController as! FlutterViewController
@@ -18,6 +19,10 @@ class AppDelegate: FlutterAppDelegate {
           self?.handleResolveBookmark(call: call, result: result)
       } else if call.method == "stopAccess" {
           self?.handleStopAccess(call: call, result: result)
+      } else if call.method == "startAccessingPath" {
+          self?.handleStartAccessingPath(call: call, result: result)
+      } else if call.method == "stopAccessingPath" {
+          self?.handleStopAccessingPath(call: call, result: result)
       } else {
         result(FlutterMethodNotImplemented)
       }
@@ -83,6 +88,41 @@ class AppDelegate: FlutterAppDelegate {
       if let url = activeURLs[bookmarkBase64] {
           url.stopAccessingSecurityScopedResource()
           activeURLs.removeValue(forKey: bookmarkBase64)
+      }
+      result(nil)
+  }
+
+  private func handleStartAccessingPath(call: FlutterMethodCall, result: FlutterResult) {
+      guard let args = call.arguments as? [String: Any],
+            let path = args["path"] as? String else {
+          result(FlutterError(code: "INVALID_ARGS", message: "Path is required", details: nil))
+          return
+      }
+      
+      let url = URL(fileURLWithPath: path)
+      if url.startAccessingSecurityScopedResource() {
+          activePathURLs[path] = url
+          result(true)
+      } else {
+          let fm = FileManager.default
+          if fm.isReadableFile(atPath: path) {
+              result(true)
+          } else {
+              result(false)
+          }
+      }
+  }
+
+  private func handleStopAccessingPath(call: FlutterMethodCall, result: FlutterResult) {
+      guard let args = call.arguments as? [String: Any],
+            let path = args["path"] as? String else {
+          result(FlutterError(code: "INVALID_ARGS", message: "Path is required", details: nil))
+          return
+      }
+      
+      if let url = activePathURLs[path] {
+          url.stopAccessingSecurityScopedResource()
+          activePathURLs.removeValue(forKey: path)
       }
       result(nil)
   }
