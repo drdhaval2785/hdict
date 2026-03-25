@@ -146,7 +146,6 @@ class MdictReader {
       if (info == null) return null;
       return _parser.readOneMdx(info);
     } catch (e) {
-      debugPrint('Error looking up $word: $e');
       return null;
     }
   }
