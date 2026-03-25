@@ -388,7 +388,11 @@ Future<void> _indexEntry(_IndexArgs args) async {
       }
     }
     if (dbBatch.isNotEmpty)
-      startId = await dbHelper.batchInsertWords(args.dictId, dbBatch, startId: startId);
+      startId = await dbHelper.batchInsertWords(
+        args.dictId,
+        dbBatch,
+        startId: startId,
+      );
 
     if (args.synPath != null) {
       final synParser = SynParser();
@@ -546,7 +550,11 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
       }
 
       if (batch.length >= 10000) {
-        startId = await dbHelper.batchInsertWords(args.dictId, batch, startId: startId);
+        startId = await dbHelper.batchInsertWords(
+          args.dictId,
+          batch,
+          startId: startId,
+        );
         batch.clear();
         sendPort.send(
           ImportProgress(
@@ -563,7 +571,11 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
     }
 
     if (batch.isNotEmpty)
-      startId = await dbHelper.batchInsertWords(args.dictId, batch, startId: startId);
+      startId = await dbHelper.batchInsertWords(
+        args.dictId,
+        batch,
+        startId: startId,
+      );
     await reader.close();
     await dbHelper.updateDictionaryWordCount(
       args.dictId,
@@ -699,7 +711,11 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
     }
 
     if (dbBatch.isNotEmpty)
-      startId = await dbHelper.batchInsertWords(args.dictId, dbBatch, startId: startId);
+      startId = await dbHelper.batchInsertWords(
+        args.dictId,
+        dbBatch,
+        startId: startId,
+      );
     await reader.close();
     await dbHelper.updateDictionaryWordCount(
       args.dictId,
@@ -851,7 +867,11 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
     }
 
     if (dbBatch.isNotEmpty)
-      startId = await dbHelper.batchInsertWords(args.dictId, dbBatch, startId: startId);
+      startId = await dbHelper.batchInsertWords(
+        args.dictId,
+        dbBatch,
+        startId: startId,
+      );
     await dictdReader.close();
     await dbHelper.updateDictionaryWordCount(
       args.dictId,
@@ -3626,7 +3646,11 @@ class DictionaryManager {
         wordOffsets.add((offset: offset, length: length, content: content));
 
         if (batch.length >= 1000) {
-          startId = await _dbHelper.batchInsertWords(dictId, batch, startId: startId);
+          startId = await _dbHelper.batchInsertWords(
+            dictId,
+            batch,
+            startId: startId,
+          );
           batch.clear();
           yield ImportProgress(
             message: 'Indexing $headwordCount words...',
@@ -3641,7 +3665,11 @@ class DictionaryManager {
         }
       }
       if (batch.isNotEmpty)
-        startId = await _dbHelper.batchInsertWords(dictId, batch, startId: startId);
+        startId = await _dbHelper.batchInsertWords(
+          dictId,
+          batch,
+          startId: startId,
+        );
 
       // SYN support for Web
       if (finalSynName != null && decompressedSynBytes != null) {
@@ -3672,7 +3700,11 @@ class DictionaryManager {
           }
         }
         if (synBatch.isNotEmpty)
-          startId = await _dbHelper.batchInsertWords(dictId, synBatch, startId: startId);
+          startId = await _dbHelper.batchInsertWords(
+            dictId,
+            synBatch,
+            startId: startId,
+          );
       }
 
       await dictReader.close();
@@ -4350,37 +4382,44 @@ class DictionaryManager {
           final ioWatch = HPerf.start('fetchBatch_IO_Batch[$format]');
           List<String?> fetched;
 
-          if (reader is DictReader) {
-            final entries = missingRequests
-                .map(
-                  (req) => (
-                    offset: req['offset'] as int,
-                    length: req['length'] as int,
-                  ),
-                )
-                .toList();
-            fetched = await reader.readBulk(entries);
-          } else if (reader is DictdReader) {
-            final entries = missingRequests
-                .map(
-                  (req) => (
-                    offset: req['offset'] as int,
-                    length: req['length'] as int,
-                  ),
-                )
-                .toList();
-            fetched = await reader.readEntries(entries);
-          } else if (reader is SlobReader) {
-            final ids = missingRequests
-                .map((req) => req['offset'] as int)
-                .toList();
-            fetched = await reader.getBlobsContentByIds(ids);
-          } else if (reader is MdictReader) {
-            fetched = [];
-            for (final req in missingRequests) {
-              fetched.add(await reader.lookup(req['word'] as String));
+          try {
+            if (reader is DictReader) {
+              final entries = missingRequests
+                  .map(
+                    (req) => (
+                      offset: req['offset'] as int,
+                      length: req['length'] as int,
+                    ),
+                  )
+                  .toList();
+              fetched = await reader.readBulk(entries);
+            } else if (reader is DictdReader) {
+              final entries = missingRequests
+                  .map(
+                    (req) => (
+                      offset: req['offset'] as int,
+                      length: req['length'] as int,
+                    ),
+                  )
+                  .toList();
+              fetched = await reader.readEntries(entries);
+            } else if (reader is SlobReader) {
+              final ids = missingRequests
+                  .map((req) => req['offset'] as int)
+                  .toList();
+              fetched = await reader.getBlobsContentByIds(ids);
+            } else if (reader is MdictReader) {
+              fetched = [];
+              for (final req in missingRequests) {
+                final word = req['word'] as String;
+                final result = await reader.lookup(word);
+                fetched.add(result);
+              }
+            } else {
+              fetched = List.filled(missingRequests.length, null);
             }
-          } else {
+          } catch (e) {
+            hDebugPrint('Error fetching $format definitions: $e');
             fetched = List.filled(missingRequests.length, null);
           }
 

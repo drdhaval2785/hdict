@@ -71,24 +71,41 @@ class HomeScreen extends StatefulWidget {
       final List<String> allHeadwords = [];
       final List<Map<String, dynamic>> definitionsList = [];
 
-      uniqueKeyMap.forEach((uniqueKey, entries) {
-        if (entries.isEmpty) return;
+      if (format == 'mdict') {
+        for (final entries in uniqueKeyMap.values) {
+          for (final entry in entries) {
+            final word = entry['word'] as String;
+            final rawContent = entry['raw_content'] as String;
+            allHeadwords.add(word);
+            definitionsList.add({
+              'word': word,
+              'headwordHtml':
+                  '<div class="headword" style="font-weight:bold;margin-bottom:8px;">$word</div>',
+              'rawContent': rawContent,
+              'processedHtml': null,
+            });
+          }
+        }
+      } else {
+        uniqueKeyMap.forEach((uniqueKey, entries) {
+          if (entries.isEmpty) return;
 
-        final headwords = entries
-            .map((e) => e['word'] as String)
-            .toSet()
-            .toList();
-        final headwordStr = headwords.join(' | ');
-        allHeadwords.add(headwordStr);
+          final headwords = entries
+              .map((e) => e['word'] as String)
+              .toSet()
+              .toList();
+          final headwordStr = headwords.join(' | ');
+          allHeadwords.add(headwordStr);
 
-        definitionsList.add({
-          'word': entries.first['word'] as String,
-          'headwordHtml':
-              '<div class="headword" style="font-weight:bold;margin-bottom:8px;">$headwordStr</div>',
-          'rawContent': entries.first['raw_content'] as String,
-          'processedHtml': null,
+          definitionsList.add({
+            'word': entries.first['word'] as String,
+            'headwordHtml':
+                '<div class="headword" style="font-weight:bold;margin-bottom:8px;">$headwordStr</div>',
+            'rawContent': entries.first['raw_content'] as String,
+            'processedHtml': null,
+          });
         });
-      });
+      }
 
       consolidated.add({
         'dict_id': dictId,
