@@ -1012,6 +1012,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (settings.isSearchInHeadwordsEnabled)
             TextField(
@@ -1061,6 +1062,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${snapshot.data!.where((d) => d['is_enabled'] == 1).length} active',
+              style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey),
             ),
             const SizedBox(height: 12),
             ...snapshot.data!.map((dict) {

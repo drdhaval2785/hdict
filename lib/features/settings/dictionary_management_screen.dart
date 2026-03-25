@@ -13,7 +13,10 @@ import 'package:hdict/features/settings/widgets/stardict_download_dialog.dart';
 /// A screen for managing installed dictionaries.
 class DictionaryManagementScreen extends StatefulWidget {
   final bool triggerSelectByLanguage;
-  const DictionaryManagementScreen({super.key, this.triggerSelectByLanguage = false});
+  const DictionaryManagementScreen({
+    super.key,
+    this.triggerSelectByLanguage = false,
+  });
 
   @override
   State<DictionaryManagementScreen> createState() =>
@@ -190,7 +193,8 @@ class _DictionaryManagementScreenState
           Navigator.pop(context); // Close progress dialog
           final lastProgress = _progressNotifier.value;
 
-          if (lastProgress.error != null && lastProgress.error != 'ALREADY_EXISTS') {
+          if (lastProgress.error != null &&
+              lastProgress.error != 'ALREADY_EXISTS') {
             throw Exception(lastProgress.error);
           }
 
@@ -198,8 +202,11 @@ class _DictionaryManagementScreenState
               lastProgress.alreadyExistsEntries!.isNotEmpty) {
             _showImportReport(lastProgress, title: 'Download Result');
           } else if (lastProgress.error == 'ALREADY_EXISTS') {
-            final name = lastProgress.dictionaryName ?? 
-                        (lastProgress.message.contains(':') ? lastProgress.message.split(':').last.trim() : lastProgress.message);
+            final name =
+                lastProgress.dictionaryName ??
+                (lastProgress.message.contains(':')
+                    ? lastProgress.message.split(':').last.trim()
+                    : lastProgress.message);
             _showImportReport(
               ImportProgress(
                 message: lastProgress.message,
@@ -210,10 +217,9 @@ class _DictionaryManagementScreenState
               title: 'Download Result',
             );
           } else {
-            final String sampleWordsText =
-                lastProgress.sampleWords != null
-                    ? '\n\nSample words: ${lastProgress.sampleWords!.join(', ')}'
-                    : '';
+            final String sampleWordsText = lastProgress.sampleWords != null
+                ? '\n\nSample words: ${lastProgress.sampleWords!.join(', ')}'
+                : '';
 
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -266,7 +272,11 @@ class _DictionaryManagementScreenState
           return PopScope(
             canPop: false,
             child: AlertDialog(
-              title: Text(urls.length == 1 ? 'Downloading Dictionary' : 'Downloading ${urls.length} Dictionaries'),
+              title: Text(
+                urls.length == 1
+                    ? 'Downloading Dictionary'
+                    : 'Downloading ${urls.length} Dictionaries',
+              ),
               content: ValueListenableBuilder<ImportProgress>(
                 valueListenable: _progressNotifier,
                 builder: (context, progress, child) {
@@ -302,10 +312,9 @@ class _DictionaryManagementScreenState
           await for (final progress in stream) {
             if (cancelled) break;
             _progressNotifier.value = ImportProgress(
-              message:
-                  urls.length > 1
-                      ? '(${i + 1}/${urls.length}) ${progress.message}'
-                      : progress.message,
+              message: urls.length > 1
+                  ? '(${i + 1}/${urls.length}) ${progress.message}'
+                  : progress.message,
               value: progress.value,
               isCompleted: progress.isCompleted,
               error: progress.error,
@@ -320,7 +329,8 @@ class _DictionaryManagementScreenState
               );
             }
             if (progress.isCompleted) {
-              if (progress.error != null && progress.error != 'ALREADY_EXISTS') {
+              if (progress.error != null &&
+                  progress.error != 'ALREADY_EXISTS') {
                 throw Exception(progress.error);
               }
               if (progress.alreadyExistsEntries != null) {
@@ -357,10 +367,9 @@ class _DictionaryManagementScreenState
         } else {
           String msg;
           if (urls.length == 1) {
-            msg =
-                successCount == 1
-                    ? 'Dictionary downloaded and imported successfully'
-                    : 'Failed to import dictionary';
+            msg = successCount == 1
+                ? 'Dictionary downloaded and imported successfully'
+                : 'Failed to import dictionary';
           } else {
             msg = '$successCount successfully imported.';
             if (failureCount > 0) {
@@ -369,10 +378,7 @@ class _DictionaryManagementScreenState
           }
 
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(msg),
-              duration: const Duration(seconds: 5),
-            ),
+            SnackBar(content: Text(msg), duration: const Duration(seconds: 5)),
           );
         }
         await _loadDictionaries();
@@ -574,10 +580,9 @@ class _DictionaryManagementScreenState
                   lastProgress.incompleteEntries!.isNotEmpty)) {
             _showImportReport(lastProgress, title: 'Import Result');
           } else {
-            final String sampleWordsText =
-                lastProgress.sampleWords != null
-                    ? '\n\nSample words: ${lastProgress.sampleWords!.join(', ')}'
-                    : '';
+            final String sampleWordsText = lastProgress.sampleWords != null
+                ? '\n\nSample words: ${lastProgress.sampleWords!.join(', ')}'
+                : '';
 
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -717,7 +722,7 @@ class _DictionaryManagementScreenState
       await for (final progress in stream) {
         if (cancelled) break;
         _progressNotifier.value = progress;
-        
+
         // Auto-assign to group if folder name was captured
         if (progress.dictId != null && progress.groupName != null) {
           await DictionaryGroupManager.addDictionaryToGroup(
@@ -764,49 +769,85 @@ class _DictionaryManagementScreenState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (progress.linkedEntries != null && progress.linkedEntries!.isNotEmpty) ...[
-                const Text('Linked Dictionaries (Not Copied):', 
-                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+              if (progress.linkedEntries != null &&
+                  progress.linkedEntries!.isNotEmpty) ...[
+                const Text(
+                  'Linked Dictionaries (Not Copied):',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                ...progress.linkedEntries!.map((e) => Padding(
-                  padding: const EdgeInsets.only(left: 8.0, bottom: 2.0),
-                  child: Text('• $e', style: const TextStyle(fontSize: 12)),
-                )),
+                ...progress.linkedEntries!.map(
+                  (e) => Padding(
+                    padding: const EdgeInsets.only(left: 8.0, bottom: 2.0),
+                    child: Text('• $e', style: const TextStyle(fontSize: 12)),
+                  ),
+                ),
                 const SizedBox(height: 12),
               ],
-              if (progress.importedEntries != null && progress.importedEntries!.isNotEmpty) ...[
-                const Text('Imported Dictionaries (Data Copied):', 
-                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+              if (progress.importedEntries != null &&
+                  progress.importedEntries!.isNotEmpty) ...[
+                const Text(
+                  'Imported Dictionaries (Data Copied):',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                ...progress.importedEntries!.map((e) => Padding(
-                  padding: const EdgeInsets.only(left: 8.0, bottom: 2.0),
-                  child: Text('• $e', style: const TextStyle(fontSize: 12)),
-                )),
+                ...progress.importedEntries!.map(
+                  (e) => Padding(
+                    padding: const EdgeInsets.only(left: 8.0, bottom: 2.0),
+                    child: Text('• $e', style: const TextStyle(fontSize: 12)),
+                  ),
+                ),
                 const SizedBox(height: 12),
               ],
-              if (progress.alreadyExistsEntries != null && progress.alreadyExistsEntries!.isNotEmpty) ...[
-                const Text('ALREADY EXISTS:',
-                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.purple)),
+              if (progress.alreadyExistsEntries != null &&
+                  progress.alreadyExistsEntries!.isNotEmpty) ...[
+                const Text(
+                  'ALREADY EXISTS:',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.purple,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                ...progress.alreadyExistsEntries!.map((e) => Padding(
-                  padding: const EdgeInsets.only(left: 8.0, bottom: 2.0),
-                  child: Text('• $e', style: const TextStyle(fontSize: 12)),
-                )),
+                ...progress.alreadyExistsEntries!.map(
+                  (e) => Padding(
+                    padding: const EdgeInsets.only(left: 8.0, bottom: 2.0),
+                    child: Text('• $e', style: const TextStyle(fontSize: 12)),
+                  ),
+                ),
                 const SizedBox(height: 12),
               ],
-              if (progress.incompleteEntries != null && progress.incompleteEntries!.isNotEmpty) ...[
-                const Text('ERRORS / Not Processed:', 
-                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
+              if (progress.incompleteEntries != null &&
+                  progress.incompleteEntries!.isNotEmpty) ...[
+                const Text(
+                  'ERRORS / Not Processed:',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                ...progress.incompleteEntries!.map((e) => Padding(
-                  padding: const EdgeInsets.only(left: 8.0, bottom: 2.0),
-                  child: Text('• $e', style: const TextStyle(fontSize: 12)),
-                )),
+                ...progress.incompleteEntries!.map(
+                  (e) => Padding(
+                    padding: const EdgeInsets.only(left: 8.0, bottom: 2.0),
+                    child: Text('• $e', style: const TextStyle(fontSize: 12)),
+                  ),
+                ),
               ],
-              if ((progress.linkedEntries == null || progress.linkedEntries!.isEmpty) &&
-                  (progress.importedEntries == null || progress.importedEntries!.isEmpty) &&
-                  (progress.alreadyExistsEntries == null || progress.alreadyExistsEntries!.isEmpty) &&
-                  (progress.incompleteEntries == null || progress.incompleteEntries!.isEmpty))
+              if ((progress.linkedEntries == null ||
+                      progress.linkedEntries!.isEmpty) &&
+                  (progress.importedEntries == null ||
+                      progress.importedEntries!.isEmpty) &&
+                  (progress.alreadyExistsEntries == null ||
+                      progress.alreadyExistsEntries!.isEmpty) &&
+                  (progress.incompleteEntries == null ||
+                      progress.incompleteEntries!.isEmpty))
                 const Text('No dictionaries found in the selected folder.'),
             ],
           ),
@@ -911,7 +952,7 @@ class _DictionaryManagementScreenState
     if (mounted) {
       final NavigatorState navigator = Navigator.of(context);
       final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-      
+
       navigator.pop(); // Close progress dialog
       messenger.showSnackBar(
         SnackBar(
@@ -923,7 +964,6 @@ class _DictionaryManagementScreenState
       await _loadDictionaries();
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -938,7 +978,8 @@ class _DictionaryManagementScreenState
       persistentFooterButtons: [
         () {
           final double screenWidth = MediaQuery.sizeOf(context).width;
-          final bool isWide = screenWidth > 680; // wider to comfortably fit 4 buttons
+          final bool isWide =
+              screenWidth > 680; // wider to comfortably fit 4 buttons
 
           if (isWide) {
             return Row(
@@ -1012,7 +1053,9 @@ class _DictionaryManagementScreenState
                     const SizedBox(width: 8),
                     Expanded(
                       child: _buildFooterButton(
-                        onPressed: _isLoading ? null : _downloadFreedictDictionary,
+                        onPressed: _isLoading
+                            ? null
+                            : _downloadFreedictDictionary,
                         icon: Icons.language,
                         label: 'Select by Language',
                         isPrimary: true,
@@ -1034,7 +1077,10 @@ class _DictionaryManagementScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0,
+                    vertical: 8.0,
+                  ),
                   child: TextField(
                     controller: _searchController,
                     decoration: InputDecoration(
@@ -1055,15 +1101,30 @@ class _DictionaryManagementScreenState
                 ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: OutlinedButton.icon(
-                    onPressed: _isLoading || _dictionaries.isEmpty ? null : _reindexAll,
-                    icon: const Icon(Icons.refresh, size: 18),
-                    label: const Text('Reindex All'),
-                    style: OutlinedButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _isLoading || _dictionaries.isEmpty
+                              ? null
+                              : _reindexAll,
+                          icon: const Icon(Icons.refresh, size: 18),
+                          label: const Text('Reindex All'),
+                          style: OutlinedButton.styleFrom(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${_dictionaries.where((d) => d['is_enabled'] == 1).length} / ${_dictionaries.length} active',
+                        style: Theme.of(
+                          context,
+                        ).textTheme.bodySmall?.copyWith(color: Colors.grey),
+                      ),
+                    ],
                   ),
                 ),
                 Padding(
@@ -1084,10 +1145,10 @@ class _DictionaryManagementScreenState
                     itemCount: _filteredDictionaries.length,
                     onReorder: (oldIndex, newIndex) async {
                       if (newIndex > oldIndex) newIndex -= 1;
-                      
+
                       final item = _filteredDictionaries[oldIndex];
                       final actualOldIndex = _dictionaries.indexOf(item);
-                      
+
                       final targetItem = _filteredDictionaries[newIndex];
                       final actualNewIndex = _dictionaries.indexOf(targetItem);
 
@@ -1185,7 +1246,10 @@ class _DictionaryManagementScreenState
                                   const PopupMenuItem(
                                     value: 'reindex',
                                     child: ListTile(
-                                      leading: Icon(Icons.refresh, color: Colors.blueAccent),
+                                      leading: Icon(
+                                        Icons.refresh,
+                                        color: Colors.blueAccent,
+                                      ),
                                       title: Text('Re-index'),
                                       contentPadding: EdgeInsets.zero,
                                     ),
@@ -1193,7 +1257,10 @@ class _DictionaryManagementScreenState
                                   const PopupMenuItem(
                                     value: 'delete',
                                     child: ListTile(
-                                      leading: Icon(Icons.delete_outline, color: Colors.redAccent),
+                                      leading: Icon(
+                                        Icons.delete_outline,
+                                        color: Colors.redAccent,
+                                      ),
                                       title: Text('Delete'),
                                       contentPadding: EdgeInsets.zero,
                                     ),
@@ -1271,7 +1338,11 @@ class _DictionaryManagementScreenState
                 color: theme.colorScheme.primary.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.language, color: theme.colorScheme.primary, size: 32),
+              child: Icon(
+                Icons.language,
+                color: theme.colorScheme.primary,
+                size: 32,
+              ),
             ),
             const SizedBox(height: 16),
             Text(
@@ -1294,8 +1365,13 @@ class _DictionaryManagementScreenState
               style: ElevatedButton.styleFrom(
                 backgroundColor: theme.colorScheme.primary,
                 foregroundColor: theme.colorScheme.onPrimary,
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 16,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 elevation: 2,
               ),
               child: const Text(
@@ -1306,19 +1382,32 @@ class _DictionaryManagementScreenState
             const SizedBox(height: 24),
             Row(
               children: [
-                Expanded(child: Divider(color: Colors.grey.withValues(alpha: 0.2))),
+                Expanded(
+                  child: Divider(color: Colors.grey.withValues(alpha: 0.2)),
+                ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text('OR', style: TextStyle(fontSize: 12, color: Colors.grey.withValues(alpha: 0.5))),
+                  child: Text(
+                    'OR',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.withValues(alpha: 0.5),
+                    ),
+                  ),
                 ),
-                Expanded(child: Divider(color: Colors.grey.withValues(alpha: 0.2))),
+                Expanded(
+                  child: Divider(color: Colors.grey.withValues(alpha: 0.2)),
+                ),
               ],
             ),
             const SizedBox(height: 16),
             Text(
               'You can also use "Import File" or "Download Web" below if you have a specific file or URL.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: Colors.grey.withValues(alpha: 0.6)),
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.withValues(alpha: 0.6),
+              ),
             ),
           ],
         ),
@@ -1528,7 +1617,10 @@ class _DictionaryManagementScreenState
     }
   }
 
-  Widget _buildProgressContent(ImportProgress progress, {VoidCallback? onCancel}) {
+  Widget _buildProgressContent(
+    ImportProgress progress, {
+    VoidCallback? onCancel,
+  }) {
     return SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,
