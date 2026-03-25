@@ -20,6 +20,8 @@ class MultimediaProcessor {
       );
     }
 
+    processed = _convertSoundLinks(processed);
+
     if (_mddReader != null) {
       processed = await _replaceImgSrcWithDataUris(processed);
       processed = _addMediaTapHandlers(processed);
@@ -33,6 +35,13 @@ class MultimediaProcessor {
 
     processed = injectCss(processed);
 
+    return processed;
+  }
+
+  String _convertSoundLinks(String html) {
+    String processed = html;
+    processed = processed.replaceAll('href="sound://', 'href="mdd-audio:');
+    processed = processed.replaceAll("href='sound://", "href='mdd-audio:");
     return processed;
   }
 
@@ -222,18 +231,8 @@ class MultimediaProcessor {
       return match.group(0) ?? '';
     });
 
-    final anchorSoundRegex = RegExp(
-      '<a[^>]*href\\s*=\\s*["\']+sound://([^"\']+)["\']+[^>]*>',
-      caseSensitive: false,
-    );
-
-    processed = processed.replaceAllMapped(anchorSoundRegex, (match) {
-      final resourceKey = match.group(1);
-      if (resourceKey != null) {
-        return '<a href="mdd-audio:$resourceKey">🔊</a>';
-      }
-      return match.group(0) ?? '';
-    });
+    processed = processed.replaceAll('href="sound://', 'href="mdd-audio:');
+    processed = processed.replaceAll("href='sound://", "href='mdd-audio:");
 
     return processed;
   }
@@ -244,6 +243,8 @@ class MultimediaProcessor {
     if (showMultimediaProcessing) {
       hDebugPrint('MultimediaProcessor: Processing HTML with inline video');
     }
+
+    processed = _convertSoundLinks(processed);
 
     if (_mddReader != null) {
       processed = await _replaceImgSrcWithDataUris(processed);

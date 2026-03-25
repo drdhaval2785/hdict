@@ -320,5 +320,16 @@ void main() {
         expect(result, contains('<video'));
       },
     );
+
+    test('preserves original speaker image in audio links', () async {
+      final processor = MultimediaProcessor(null, null);
+      final html =
+          '<a class="jp-play" href="sound://hwd/ame/a/prove.mp3"><img src="img/spkr_b.png"></a>';
+      final result = await processor.processHtmlWithMedia(html);
+      expect(result, contains('mdd-audio:hwd/ame/a/prove.mp3'));
+      expect(result, contains('<img src="img/spkr_b.png">'));
+      expect(result, contains('jp-play'));
+      expect(result, contains('prove.mp3'));
+    });
   });
 }
