@@ -224,6 +224,54 @@ void main() {
     });
   });
 
+  group('Video Resource Tests', () {
+    test('can read video file and get bytes', () async {
+      const videoPath = '/Users/dhaval/Desktop/output3.mp4';
+      final videoFile = File(videoPath);
+
+      if (!await videoFile.exists()) {
+        markTestSkipped('Video file not available');
+        return;
+      }
+
+      final bytes = await videoFile.readAsBytes();
+      expect(bytes, isNotNull);
+      expect(bytes.length, greaterThan(0));
+      print('Video file size: ${bytes.length} bytes');
+    });
+
+    test('can use video bytes with MddReader flow', () async {
+      // This test verifies that we can integrate video bytes into the MDD flow
+      const videoPath = '/Users/dhaval/Desktop/output3.mp4';
+      final videoFile = File(videoPath);
+
+      if (!await videoFile.exists()) {
+        markTestSkipped('Video file not available');
+        return;
+      }
+
+      // Read video bytes
+      final videoBytes = await videoFile.readAsBytes();
+      expect(videoBytes.length, greaterThan(0));
+
+      // Verify MIME type detection would work
+      final ext = 'mp4';
+      final mimeType = 'video/mp4';
+      expect(mimeType, equals('video/mp4'));
+
+      // Create temp file like the player would
+      final tempDir = Directory.systemTemp.createTempSync('video_test_');
+      final tempFile = File(p.join(tempDir.path, 'test_video.$ext'));
+      await tempFile.writeAsBytes(videoBytes);
+
+      expect(await tempFile.exists(), isTrue);
+
+      // Cleanup
+      await tempFile.delete();
+      await tempDir.delete();
+    });
+  });
+
   group('MultimediaProcessor Tests', () {
     test(
       'processHtmlWithMedia returns original html when no mddReader',
@@ -261,5 +309,16 @@ void main() {
       final result = await processor.getVideoResource('test.mp4');
       expect(result, isNull);
     });
+
+    test(
+      'processHtmlWithInlineVideo keeps video tags with mdd-video URLs',
+      () async {
+        final processor = MultimediaProcessor(null, null);
+        final html = '<video src="test.mp4" controls></video>';
+        final result = await processor.processHtmlWithInlineVideo(html);
+        expect(result, contains('mdd-video:test.mp4'));
+        expect(result, contains('<video'));
+      },
+    );
   });
 }

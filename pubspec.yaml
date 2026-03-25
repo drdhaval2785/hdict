@@ -65,6 +65,7 @@ dependencies:
   just_audio: ^0.9.43
   video_player: ^2.9.3
   audio_session: ^0.1.25
+  chewie: ^1.10.0
 
 
 dev_dependencies:

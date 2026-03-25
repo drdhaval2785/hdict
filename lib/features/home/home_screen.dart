@@ -20,6 +20,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_review/in_app_review.dart';
+import 'package:chewie/chewie.dart';
 
 /// Arguments for HTML processing in a separate isolate.
 
@@ -1459,6 +1460,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                       textDecoration: TextDecoration.none,
                                     ),
                                   },
+                                  extensions: [
+                                    MddVideoHtmlExtension(
+                                      dictId: defMap['dict_id'] as int? ?? 0,
+                                    ),
+                                  ],
                                   onLinkTap: (url, attributes, element) async {
                                     hDebugPrint(
                                       'onLinkTap triggered with url: $url',
@@ -1929,7 +1935,7 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
         underlineQuery: widget.highlightDefinition,
       );
 
-      processed = await mp.processHtmlWithMedia(processed);
+      processed = await mp.processHtmlWithInlineVideo(processed);
 
       final headwordHtml = defData['headwordHtml'] as String;
       defData['processedHtml'] = '$headwordHtml\n$processed';
@@ -2117,6 +2123,11 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
                                   fontWeight: FontWeight.bold,
                                 ),
                               },
+                              extensions: [
+                                MddVideoHtmlExtension(
+                                  dictId: defMap['dict_id'] as int? ?? 0,
+                                ),
+                              ],
                               onLinkTap: (url, attributes, element) async {
                                 if (url != null &&
                                     url.startsWith('mdd-audio:')) {
@@ -2560,6 +2571,403 @@ class _MediaPlayerDialogState extends State<_MediaPlayerDialog> {
           },
         ),
       ],
+    );
+  }
+
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+}
+
+class MddVideoHtmlExtension extends HtmlExtension {
+  final int dictId;
+
+  MddVideoHtmlExtension({required this.dictId});
+
+  @override
+  Set<String> get supportedTags => {'video'};
+
+  @override
+  InlineSpan build(ExtensionContext context) {
+    final attributes = context.attributes;
+    final src = attributes['src'];
+
+    if (src != null && src.startsWith('mdd-video:')) {
+      final resourceKey = src.substring('mdd-video:'.length);
+      return WidgetSpan(
+        child: _MddVideoWidget(
+          resourceKey: resourceKey,
+          dictId: dictId,
+          width: double.tryParse(attributes['width'] ?? ''),
+          height: double.tryParse(attributes['height'] ?? ''),
+          controls: attributes['controls'] != null,
+          autoplay: attributes['autoplay'] != null,
+          loop: attributes['loop'] != null,
+        ),
+      );
+    }
+
+    return WidgetSpan(child: Container());
+  }
+}
+
+class _MddVideoWidget extends StatefulWidget {
+  final String resourceKey;
+  final int dictId;
+  final double? width;
+  final double? height;
+  final bool controls;
+  final bool autoplay;
+  final bool loop;
+
+  const _MddVideoWidget({
+    required this.resourceKey,
+    required this.dictId,
+    this.width,
+    this.height,
+    this.controls = true,
+    this.autoplay = false,
+    this.loop = false,
+  });
+
+  @override
+  State<_MddVideoWidget> createState() => _MddVideoWidgetState();
+}
+
+class _MddVideoWidgetState extends State<_MddVideoWidget> {
+  VideoPlayerController? _videoController;
+  ChewieController? _chewieController;
+  bool _isLoading = true;
+  String? _error;
+  String? _tempFilePath;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVideo();
+  }
+
+  Future<void> _loadVideo() async {
+    try {
+      final mdictReader = DictionaryManager.instance.getMdictReader(
+        widget.dictId,
+      );
+      if (mdictReader == null) {
+        setState(() {
+          _error = 'Dictionary reader not found';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final bytes = await mdictReader.getMddResourceBytes(widget.resourceKey);
+      if (bytes == null) {
+        setState(() {
+          _error = 'Video not found: ${widget.resourceKey}';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      if (showMultimediaProcessing) {
+        hDebugPrint('MddVideoWidget: Got bytes: ${bytes.length}');
+      }
+
+      final tempDir = await getTemporaryDirectory();
+      final ext = widget.resourceKey.split('.').last;
+      final tempFile = File(
+        '${tempDir.path}/mdd_video_${DateTime.now().millisecondsSinceEpoch}.$ext',
+      );
+      await tempFile.writeAsBytes(bytes);
+      _tempFilePath = tempFile.path;
+
+      _videoController = VideoPlayerController.file(File(_tempFilePath!));
+      await _videoController!.initialize();
+
+      _chewieController = ChewieController(
+        videoPlayerController: _videoController!,
+        autoPlay: widget.autoplay,
+        looping: widget.loop,
+        showControls: widget.controls,
+        autoInitialize: true,
+        aspectRatio: _videoController!.value.aspectRatio,
+        errorBuilder: (context, errorMessage) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error, color: Colors.red),
+                const SizedBox(height: 8),
+                Text(errorMessage),
+              ],
+            ),
+          );
+        },
+      );
+
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      if (showMultimediaProcessing) {
+        hDebugPrint('MddVideoWidget error: $e');
+      }
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _chewieController?.dispose();
+    _videoController?.dispose();
+    if (_tempFilePath != null) {
+      File(_tempFilePath!).delete().catchError((_) => File(''));
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Container(
+        height: widget.height ?? 200,
+        alignment: Alignment.center,
+        child: const CircularProgressIndicator(),
+      );
+    }
+
+    if (_error != null) {
+      return Container(
+        height: widget.height ?? 200,
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const SizedBox(height: 8),
+            Text('Video error', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              _error!,
+              style: Theme.of(context).textTheme.bodySmall,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    final aspectRatio = _videoController!.value.aspectRatio;
+    return AspectRatio(
+      aspectRatio: aspectRatio > 0 ? aspectRatio : 16 / 9,
+      child: Chewie(controller: _chewieController!),
+    );
+  }
+}
+
+class _InlineVideoWidget extends StatefulWidget {
+  final String resourceKey;
+  final int dictId;
+
+  const _InlineVideoWidget({required this.resourceKey, required this.dictId});
+
+  @override
+  State<_InlineVideoWidget> createState() => _InlineVideoWidgetState();
+}
+
+class _InlineVideoWidgetState extends State<_InlineVideoWidget> {
+  VideoPlayerController? _controller;
+  bool _isLoading = true;
+  String? _error;
+  String? _tempFilePath;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVideo();
+  }
+
+  Future<void> _loadVideo() async {
+    try {
+      final mdictReader = DictionaryManager.instance.getMdictReader(
+        widget.dictId,
+      );
+      if (mdictReader == null) {
+        setState(() {
+          _error = 'Dictionary reader not found';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final bytes = await mdictReader.getMddResourceBytes(widget.resourceKey);
+      if (bytes == null) {
+        setState(() {
+          _error = 'Video not found: ${widget.resourceKey}';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      if (showMultimediaProcessing) {
+        hDebugPrint('InlineVideo: Got bytes: ${bytes.length}');
+      }
+
+      final tempDir = await getTemporaryDirectory();
+      final ext = widget.resourceKey.split('.').last;
+      final tempFile = File(
+        '${tempDir.path}/inline_video_${DateTime.now().millisecondsSinceEpoch}.$ext',
+      );
+      await tempFile.writeAsBytes(bytes);
+      _tempFilePath = tempFile.path;
+
+      _controller = VideoPlayerController.file(File(_tempFilePath!));
+      await _controller!.initialize();
+
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      if (showMultimediaProcessing) {
+        hDebugPrint('InlineVideo error: $e');
+      }
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    if (_tempFilePath != null) {
+      File(_tempFilePath!).delete().catchError((_) => File(''));
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Container(
+        height: 200,
+        alignment: Alignment.center,
+        child: const CircularProgressIndicator(),
+      );
+    }
+
+    if (_error != null) {
+      return Container(
+        height: 200,
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+            const SizedBox(height: 8),
+            Text('Video error', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              _error!,
+              style: Theme.of(context).textTheme.bodySmall,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    final aspectRatio = _controller!.value.aspectRatio;
+    return AspectRatio(
+      aspectRatio: aspectRatio > 0 ? aspectRatio : 16 / 9,
+      child: Stack(
+        alignment: Alignment.bottomCenter,
+        children: [
+          VideoPlayer(_controller!),
+          _VideoControls(controller: _controller!),
+        ],
+      ),
+    );
+  }
+}
+
+class _VideoControls extends StatelessWidget {
+  final VideoPlayerController controller;
+
+  const _VideoControls({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.black54,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Row(
+        children: [
+          ValueListenableBuilder<VideoPlayerValue>(
+            valueListenable: controller,
+            builder: (context, value, child) {
+              return IconButton(
+                icon: Icon(
+                  value.isPlaying ? Icons.pause : Icons.play_arrow,
+                  color: Colors.white,
+                ),
+                onPressed: () {
+                  if (value.isPlaying) {
+                    controller.pause();
+                  } else {
+                    controller.play();
+                  }
+                },
+              );
+            },
+          ),
+          Expanded(
+            child: ValueListenableBuilder<VideoPlayerValue>(
+              valueListenable: controller,
+              builder: (context, value, child) {
+                final position = value.position;
+                final duration = value.duration;
+                return Row(
+                  children: [
+                    Text(
+                      _formatDuration(position),
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                    Expanded(
+                      child: Slider(
+                        value: position.inMilliseconds.toDouble(),
+                        max: duration.inMilliseconds.toDouble().clamp(
+                          1,
+                          double.infinity,
+                        ),
+                        onChanged: (value) {
+                          controller.seekTo(
+                            Duration(milliseconds: value.toInt()),
+                          );
+                        },
+                      ),
+                    ),
+                    Text(
+                      _formatDuration(duration),
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 

@@ -162,7 +162,28 @@ class MultimediaProcessor {
     }
   }
 
-  String _addMediaTapHandlers(String html) {
+  String _getVideoMimeType(String filename) {
+    final ext = filename.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'mp4':
+        return 'video/mp4';
+      case 'webm':
+        return 'video/webm';
+      case 'avi':
+        return 'video/x-msvideo';
+      case 'mov':
+        return 'video/quicktime';
+      case 'mkv':
+        return 'video/x-matroska';
+      case 'mpg':
+      case 'mpeg':
+        return 'video/mpeg';
+      default:
+        return 'application/octet-stream';
+    }
+  }
+
+  String _addMediaTapHandlers(String html, {bool inlineVideo = false}) {
     final audioRegex = RegExp(
       '<audio\\s+[^>]*src\\s*=\\s*["\']+([^"\']+)["\']+[^>]*>',
       caseSensitive: false,
@@ -191,6 +212,10 @@ class MultimediaProcessor {
       if (!src.startsWith('data:') && !src.startsWith('http')) {
         final resourceKey = _extractResourceKey(src);
         if (resourceKey != null) {
+          if (inlineVideo) {
+            final originalTag = match.group(0) ?? '';
+            return originalTag.replaceFirst(src, 'mdd-video:$resourceKey');
+          }
           return '<a href="mdd-video:$resourceKey">🎬 Play Video</a>';
         }
       }
@@ -209,6 +234,23 @@ class MultimediaProcessor {
       }
       return match.group(0) ?? '';
     });
+
+    return processed;
+  }
+
+  Future<String> processHtmlWithInlineVideo(String html) async {
+    String processed = html;
+
+    if (showMultimediaProcessing) {
+      hDebugPrint('MultimediaProcessor: Processing HTML with inline video');
+    }
+
+    if (_mddReader != null) {
+      processed = await _replaceImgSrcWithDataUris(processed);
+    }
+    processed = _addMediaTapHandlers(processed, inlineVideo: true);
+
+    processed = injectCss(processed);
 
     return processed;
   }
