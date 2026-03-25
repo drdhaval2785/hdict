@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.6] - 2026-03-25
+
+### Added
+- **Mdict Audio and Image support**: Reads .mdd files and provides image / audio support. Video is also supported, but not yet tested due to absence of test file.
+
 ## [1.5.5] - 2026-03-23
 
 ### Fixed
