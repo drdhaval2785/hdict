@@ -13,7 +13,8 @@ bool showMultimediaProcessing = false;
 /// A wrapper around [debugPrint] that checks the [enableDebugLogs] flag.
 void hDebugPrint(String? message, {int? wrapWidth}) {
   if (enableDebugLogs) {
-    debugPrint(message, wrapWidth: wrapWidth);
+    final timestamp = DateTime.now().toIso8601String().substring(11, 23);
+    debugPrint('[$timestamp] $message', wrapWidth: wrapWidth);
   }
 }
 
