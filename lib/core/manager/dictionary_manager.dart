@@ -4258,7 +4258,13 @@ class DictionaryManager {
           if (reader is DictReader && !reader.isDz) {
             res = await reader.readAtIndex(offset, length);
           } else if (reader is MdictReader) {
+            hDebugPrint(
+              'DictionaryManager.fetchDefinition: Calling MdictReader.lookup for "$word" (offset=$offset, length=$length)',
+            );
             res = await reader.lookup(word);
+            hDebugPrint(
+              'DictionaryManager.fetchDefinition: MdictReader.lookup returned: ${res != null ? "${res.length} chars" : "null"}',
+            );
           } else if (reader is SlobReader) {
             res = await reader.getBlobContentById(offset);
           } else if (reader is DictdReader) {
@@ -4275,7 +4281,13 @@ class DictionaryManager {
           final ioWatch = HPerf.start('fetchDef_IO[$format]');
           String? res;
           if (cached is MdictReader) {
+            hDebugPrint(
+              'DictionaryManager.fetchDefinition (cached): Calling MdictReader.lookup for "$word"',
+            );
             res = await cached.lookup(word);
+            hDebugPrint(
+              'DictionaryManager.fetchDefinition (cached): MdictReader.lookup returned: ${res != null ? "${res.length} chars" : "null"}',
+            );
           } else if (cached is SlobReader) {
             res = await cached.getBlobContentById(offset);
           } else if (cached is DictdReader) {
@@ -4328,7 +4340,7 @@ class DictionaryManager {
     final List<int> missingIndices = [];
     final List<Map<String, dynamic>> missingRequests = [];
 
-    // 1. Check LRU Cache for each request
+    // 1. Check LRU Cache for each request (skip cache for mdict to avoid stale results)
     for (int i = 0; i < requests.length; i++) {
       final req = requests[i];
       final String word = (req['word'] as String?) ?? '';
@@ -4339,7 +4351,9 @@ class DictionaryManager {
           ? '$dictId:$word'
           : '$dictId:$offset:$length';
 
-      final cached = _getFromCache(cacheKey);
+      // Skip cache for mdict format - it causes issues with stale results
+      final bool useCache = format != 'mdict';
+      final cached = useCache ? _getFromCache(cacheKey) : null;
       if (cached != null) {
         results[i] = cached;
         HPerf.record('fetchBatch_CacheHit', 0);
@@ -4442,7 +4456,10 @@ class DictionaryManager {
           final String cacheKey = format == 'mdict'
               ? '$dictId:$word'
               : '$dictId:$offset:$length';
-          _addToCache(cacheKey, res);
+          // Skip cache for mdict format - it causes issues with stale results
+          if (format != 'mdict') {
+            _addToCache(cacheKey, res);
+          }
         }
       }
     } catch (e) {

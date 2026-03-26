@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:hdict/core/utils/logger.dart';
 import 'package:dict_reader/dict_reader.dart' as dr;
 import 'mdd_reader.dart';
 import 'package:hdict/core/parser/random_access_source.dart';
@@ -142,10 +143,23 @@ class MdictReader {
     if (kIsWeb) throw UnsupportedError('MDict is not supported on Web.');
     if (!_isInitialized) await open();
     try {
+      hDebugPrint('MdictReader.lookup: Looking up word: "$word" in $mdxPath');
       final info = await _parser.locate(word);
-      if (info == null) return null;
-      return _parser.readOneMdx(info);
-    } catch (e) {
+      hDebugPrint('MdictReader.lookup: locate("$word") returned: $info');
+      if (info == null) {
+        hDebugPrint(
+          'MdictReader.lookup: WARNING - locate returned null for "$word"',
+        );
+        return null;
+      }
+      final result = await _parser.readOneMdx(info);
+      hDebugPrint(
+        'MdictReader.lookup: readOneMdx for "$word" returned: ${result != null && result.length > 100 ? "${result.substring(0, 100)}..." : result}',
+      );
+      return result;
+    } catch (e, stack) {
+      hDebugPrint('MdictReader.lookup: EXCEPTION for "$word": $e');
+      hDebugPrint('MdictReader.lookup: Stack trace: $stack');
       return null;
     }
   }

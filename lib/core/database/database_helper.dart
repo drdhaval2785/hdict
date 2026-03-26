@@ -1632,7 +1632,7 @@ class DatabaseHelper {
           );
         }
         await idxBatch.commit(noResult: true);
-        
+
         // For backwards compatibility with DictionaryManager loop
         newStartId = (metaResults.last as int);
       } else {
@@ -1663,23 +1663,27 @@ class DatabaseHelper {
     // Include enabled dictionaries and their order in cache key to ensure
     // results respect user-configured dictionary priority.
     String dictOrderKey = '';
+    bool hasMdict = false;
     if (dictId == null) {
       // Multi-dictionary search: include all enabled dict IDs and their display_order
       final enabledDicts = await getEnabledDictionaries();
-      dictOrderKey = enabledDicts
-          .map((d) => '${d['id']}:${d['display_order']}')
-          .join(',');
+      for (final d in enabledDicts) {
+        dictOrderKey += '${d['id']}:${d['display_order']},';
+        if (d['format'] == 'mdict') hasMdict = true;
+      }
     } else {
       // Single dictionary search: include that dict's display_order
       final dict = await getDictionaryById(dictId);
       if (dict != null) {
         dictOrderKey = '${dict['id']}:${dict['display_order']}';
+        if (dict['format'] == 'mdict') hasMdict = true;
       }
     }
 
     final String cacheKey =
         '$headwordQuery|$headwordMode|$definitionQuery|$definitionMode|$dictId|$limit|$dictOrderKey';
-    final cachedResults = _getFromQueryCache(cacheKey);
+    // Skip cache for mdict to avoid stale results
+    final cachedResults = hasMdict ? null : _getFromQueryCache(cacheKey);
     if (cachedResults != null) {
       HPerf.record('searchWords_CacheHit', 0);
       hDebugPrint('DatabaseHelper: Query cache HIT for $cacheKey');
@@ -1701,7 +1705,10 @@ class DatabaseHelper {
           dictId: dictId,
           limit: limit,
         );
-        _addToQueryCache(cacheKey, res);
+        // Skip cache for mdict to avoid stale results
+        if (!hasMdict) {
+          _addToQueryCache(cacheKey, res);
+        }
         HPerf.end(dbWatch, 'searchWords_TotalExecution');
         return res;
       }
@@ -1873,9 +1880,18 @@ class DatabaseHelper {
           ? 'LIKE (Wildcard)'
           : (headwordMode == SearchMode.prefix ? 'LIKE (Prefix)' : '=');
 
+      hDebugPrint(
+        'DatabaseHelper.searchWords: Executing query for "$headwordQuery" (mode=$headwordMode, op=$opDescriptor)',
+      );
       final result = await db.rawQuery(sql, whereArgs);
+      hDebugPrint(
+        'DatabaseHelper.searchWords: Query returned ${result.length} results for "$headwordQuery"',
+      );
       _log('RAW_QUERY [$opDescriptor]', sql, whereArgs, result);
-      _addToQueryCache(cacheKey, result);
+      // Skip cache for mdict to avoid stale results
+      if (!hasMdict) {
+        _addToQueryCache(cacheKey, result);
+      }
       HPerf.end(dbWatch, 'searchWords_TotalExecution');
       return result;
     } catch (e) {

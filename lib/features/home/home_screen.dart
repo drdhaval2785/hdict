@@ -258,6 +258,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _searchTotalMs = 0;
   int _searchResultCount = 0;
 
+  // Search generation counter to prevent stale results from overwriting newer searches
+  int _searchGeneration = 0;
+
+  // Track if a popup is currently open to prevent duplicate popups
+  bool _isPopupOpen = false;
+
   bool _hasDictionaries = false;
   bool _checkingDicts = true;
 
@@ -346,6 +352,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final definition = _definitionController.text.trim();
 
     if (headword.isEmpty && definition.isEmpty) return;
+
+    // Increment search generation to invalidate any in-flight older searches
+    final searchGen = ++_searchGeneration;
+    hDebugPrint(
+      'HomeScreen._performSearch: START gen=$searchGen for "$headword"',
+    );
 
     if (headword.isNotEmpty) {
       await _dbHelper.addSearchHistory(headword, searchType: 'Headword Search');
@@ -543,6 +555,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         HPerf.end(totalWatch, 'Search_Total');
         HPerf.dump(prefix: '--- SEARCH RESULTS PERF ---');
 
+        // Check if this search is still the latest (not superseded by a newer search)
+        if (searchGen != _searchGeneration) {
+          hDebugPrint(
+            'HomeScreen._performSearch: gen=$searchGen is stale (current gen=$_searchGeneration), discarding results',
+          );
+          return;
+        }
+        hDebugPrint(
+          'HomeScreen._performSearch: gen=$searchGen updating UI with ${consolidatedDefs.length} results',
+        );
+
         setState(() {
           _currentDefinitions = consolidatedDefs;
           _searchResultCount = finalResultCount;
@@ -564,6 +587,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         HPerf.end(enrichmentWatch, 'Search_Enrichment');
         HPerf.end(totalWatch, 'Search_Total');
         HPerf.dump(prefix: '--- SEARCH RESULTS EMPTY ---');
+        // Check if this search is still the latest
+        if (searchGen != _searchGeneration) {
+          hDebugPrint(
+            'HomeScreen._performSearch: gen=$searchGen is stale (empty results), discarding',
+          );
+          return;
+        }
         setState(() {
           _currentDefinitions = [];
           _searchResultCount = 0;
@@ -575,6 +605,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       );
     } catch (e) {
       hDebugPrint('Error fetching definitions: $e');
+      // Check if this search is still the latest
+      if (searchGen != _searchGeneration) {
+        hDebugPrint(
+          'HomeScreen._performSearch: gen=$searchGen is stale (error), discarding',
+        );
+        return;
+      }
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1194,6 +1231,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     if (format == 'mdict') {
       return _MdictDefinitionContent(
+        key: ValueKey('mdict_${dictId}_${defMap['word'] ?? ''}'),
         defMap: defMap,
         dictId: dictId,
         theme: theme,
@@ -1229,8 +1267,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     int? searchResultCount,
   }) {
     final settings = context.watch<SettingsProvider>();
+    // Deep copy to prevent cached processedHtml from persisting across searches
     final List<Map<String, dynamic>> rawDefinitions =
-        List<Map<String, dynamic>>.from(defMap['definitions']);
+        (defMap['definitions'] as List)
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
 
     final highlightCol =
         ThemeData.estimateBrightnessForColor(settings.backgroundColor) ==
@@ -1615,13 +1656,32 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   void _showWordPopup(String word) async {
+    hDebugPrint('HomeScreen._showWordPopup: START for word="$word"');
     final settings = context.read<SettingsProvider>();
     await _dbHelper.addSearchHistory(word, searchType: 'Pop-up Search');
-    if (!mounted) return;
+    if (!mounted) {
+      hDebugPrint('HomeScreen._showWordPopup: NOT mounted, returning');
+      return;
+    }
     if (!settings.isOpenPopupOnTap) {
+      hDebugPrint(
+        'HomeScreen._showWordPopup: isOpenPopupOnTap=false, calling _onWordSelected',
+      );
       _onWordSelected(word);
       return;
     }
+    // Prevent opening multiple popups
+    if (_isPopupOpen) {
+      hDebugPrint(
+        'HomeScreen._showWordPopup: Popup already open, closing and reopening',
+      );
+      Navigator.of(context).pop();
+    }
+    _isPopupOpen = true;
+
+    hDebugPrint(
+      'HomeScreen._showWordPopup: Opening modal bottom sheet for "$word"',
+    );
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1730,6 +1790,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         if (dict == null || dict['is_enabled'] != 1)
                           return null;
 
+                        hDebugPrint(
+                          'HomeScreen: Fetching definition for "$wordValue" from dictId=$dictId (offset=${res['offset']}, length=${res['length']})',
+                        );
                         String content =
                             await _dictManager.fetchDefinition(
                               dict,
@@ -1738,6 +1801,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               res['length'] as int,
                             ) ??
                             '';
+                        hDebugPrint(
+                          'HomeScreen: fetchDefinition for "$wordValue" returned: ${content.isEmpty ? "EMPTY" : "${content.length} chars"}',
+                        );
 
                         return {
                           'id': dictId,
@@ -1881,7 +1947,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         );
       },
-    );
+    ).whenComplete(() {
+      hDebugPrint('HomeScreen._showWordPopup: Popup closed, resetting flag');
+      _isPopupOpen = false;
+    });
   }
 }
 
@@ -1897,6 +1966,7 @@ class _MdictDefinitionContent extends StatefulWidget {
   final int? searchResultCount;
 
   const _MdictDefinitionContent({
+    super.key,
     required this.defMap,
     required this.dictId,
     required this.theme,
@@ -1920,9 +1990,10 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
   @override
   void initState() {
     super.initState();
-    _rawDefinitions = List<Map<String, dynamic>>.from(
-      widget.defMap['definitions'],
-    );
+    // Deep copy to prevent cached processedHtml from persisting across searches
+    _rawDefinitions = (widget.defMap['definitions'] as List)
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
     _processMultimedia();
   }
 
