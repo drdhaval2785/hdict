@@ -1,12 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:hdict/core/utils/logger.dart';
-import 'package:dict_reader/dict_reader.dart' as dr;
-import 'mdd_reader.dart';
+import 'package:mdict_reader/mdict_reader.dart' as dr;
+import 'package:hdict/core/parser/mdd_reader.dart';
 import 'package:hdict/core/parser/random_access_source.dart';
 import 'package:hdict/core/parser/saf_random_access_source.dart';
 import 'package:hdict/core/parser/bookmark_random_access_source.dart';
 import 'package:path/path.dart';
 import 'dart:io';
+import 'dart:typed_data';
 
 enum MdictSourceType { local, saf, bookmark }
 
@@ -81,6 +82,27 @@ class MdictReader {
       mddSourceType: MdictSourceType.saf,
     );
   }
+
+  /// Factory to create an MdictReader from in-memory bytes.
+  /// Useful for small .mdx files loaded entirely into memory for fast I/O.
+  static Future<MdictReader> fromBytes(
+    Uint8List bytes, {
+    String? fileName,
+    String? mddPath,
+  }) async {
+    final path = fileName ?? 'memory.mdx';
+    final reader = dr.DictReader.fromBytes(bytes, fileName: path);
+    return MdictReader._fromParser(reader, path, mddPath: mddPath);
+  }
+
+  /// Internal constructor for creating from parser
+  MdictReader._fromParser(dr.DictReader parser, String path, {String? mddPath})
+    : mdxPath = path,
+      source = FileRandomAccessSource(path),
+      _mddPath = mddPath,
+      _mddSourceType = MdictSourceType.local,
+      _mddBookmark = null,
+      _parser = parser;
 
   Future<void> open() async {
     if (kIsWeb) throw UnsupportedError('MDict is not supported on Web.');

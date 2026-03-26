@@ -154,6 +154,50 @@ Future<Uint8List> _loadSlobFileIntoMemory(
   }
 }
 
+Future<int> _getMdxFileSize(
+  String mdxPath,
+  bool isLinked,
+  String? sourceBookmark,
+) async {
+  if (isLinked) {
+    final source = BookmarkRandomAccessSource(
+      sourceBookmark!,
+      targetPath: p.basename(mdxPath),
+    );
+    await source.open();
+    try {
+      return await source.length;
+    } finally {
+      await source.close();
+    }
+  } else {
+    final file = File(mdxPath);
+    return await file.length();
+  }
+}
+
+Future<Uint8List> _loadMdxFileIntoMemory(
+  String mdxPath,
+  bool isLinked,
+  String? sourceBookmark,
+) async {
+  if (isLinked) {
+    final source = BookmarkRandomAccessSource(
+      sourceBookmark!,
+      targetPath: p.basename(mdxPath),
+    );
+    await source.open();
+    try {
+      final length = await source.length;
+      return await source.read(0, length);
+    } finally {
+      await source.close();
+    }
+  } else {
+    return await File(mdxPath).readAsBytes();
+  }
+}
+
 // New classes for progress and isolate arguments
 class ImportProgress {
   final String message;
@@ -305,6 +349,7 @@ class _IndexArgs {
 class _IndexMdictArgs {
   final int dictId;
   final String mdxPath;
+  final Uint8List? mdxBytes;
   final bool indexDefinitions;
   final String bookName;
   final String? sourceType;
@@ -315,6 +360,7 @@ class _IndexMdictArgs {
   _IndexMdictArgs({
     required this.dictId,
     required this.mdxPath,
+    this.mdxBytes,
     required this.indexDefinitions,
     required this.bookName,
     this.sourceType,
@@ -661,24 +707,31 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
   final sendPort = args.sendPort;
 
   try {
-    final mddPath =
-        args.mddUri ??
-        (args.mdxPath.replaceAll(
-          RegExp(r'\.mdx$', caseSensitive: false),
-          '.mdd',
-        ));
-    final reader =
-        (args.sourceType == 'linked' &&
-            Platform.isAndroid &&
-            args.mdxUri != null)
-        ? await MdictReader.fromUri(args.mdxUri!, mddPath: mddPath)
-        : (args.sourceType == 'linked' && args.sourceBookmark != null
-              ? await MdictReader.fromLinkedSource(
-                  args.sourceBookmark!,
-                  actualPath: args.mdxPath,
-                  mddPath: mddPath,
-                )
-              : await MdictReader.fromPath(args.mdxPath, mddPath: mddPath));
+    final mddPath = args.mdxPath.replaceAll(
+      RegExp(r'\.mdx$', caseSensitive: false),
+      '.mdd',
+    );
+
+    MdictReader reader;
+    if (args.mdxBytes != null) {
+      reader = await MdictReader.fromBytes(
+        args.mdxBytes!,
+        fileName: args.mdxPath,
+        mddPath: mddPath,
+      );
+    } else if (args.sourceType == 'linked' &&
+        Platform.isAndroid &&
+        args.mdxUri != null) {
+      reader = await MdictReader.fromUri(args.mdxUri!, mddPath: mddPath);
+    } else if (args.sourceType == 'linked' && args.sourceBookmark != null) {
+      reader = await MdictReader.fromLinkedSource(
+        args.sourceBookmark!,
+        actualPath: args.mdxPath,
+        mddPath: mddPath,
+      );
+    } else {
+      reader = await MdictReader.fromPath(args.mdxPath, mddPath: mddPath);
+    }
     await reader.open();
 
     int startId = await dbHelper.startBatchInsert();
@@ -4019,6 +4072,8 @@ class DictionaryManager {
     String mdxPath, {
     String? mddPath,
     bool indexDefinitions = false,
+    bool isLinked = false,
+    String? sourceBookmark,
   }) async* {
     if (kIsWeb) {
       yield ImportProgress(
@@ -4036,7 +4091,31 @@ class DictionaryManager {
       final mdd =
           mddPath ??
           mdxPath.replaceAll(RegExp(r'\.mdx$', caseSensitive: false), '.mdd');
-      final reader = await MdictReader.fromPath(mdxPath, mddPath: mdd);
+
+      // Check file size for memory optimization
+      final mdxFileSize = await _getMdxFileSize(
+        mdxPath,
+        isLinked,
+        sourceBookmark,
+      );
+      final bool canLoadInMemory = mdxFileSize < 50 * 1024 * 1024; // 50MB
+
+      MdictReader reader;
+      Uint8List? mdxBytes;
+      if (canLoadInMemory) {
+        mdxBytes = await _loadMdxFileIntoMemory(
+          mdxPath,
+          isLinked,
+          sourceBookmark,
+        );
+        reader = await MdictReader.fromBytes(
+          mdxBytes,
+          fileName: mdxPath,
+          mddPath: mdd,
+        );
+      } else {
+        reader = await MdictReader.fromPath(mdxPath, mddPath: mdd);
+      }
       await reader.open();
 
       final checksum = await _calculateChecksum(mdxPath);
@@ -4105,6 +4184,7 @@ class DictionaryManager {
         _IndexMdictArgs(
           dictId: dictId,
           mdxPath: finalMdxPath,
+          mdxBytes: mdxBytes,
           indexDefinitions: indexDefinitions,
           bookName: bookName,
           sendPort: receivePort.sendPort,
