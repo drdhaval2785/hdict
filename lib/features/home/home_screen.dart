@@ -1239,20 +1239,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         Expanded(
           child: TabBarView(
             controller: _tabController,
-            children: _currentDefinitions
-                .map(
-                  (def) => _buildDefinitionContent(
-                    theme,
-                    def,
-                    highlightHeadword: _lastHeadwordQuery,
-                    highlightDefinition: _lastDefinitionQuery,
-                    searchSqliteMs: _searchSqliteMs,
-                    searchOtherMs: _searchOtherMs,
-                    searchTotalMs: _searchTotalMs,
-                    searchResultCount: _searchResultCount,
-                  ),
-                )
-                .toList(),
+            children: () {
+              int cumulativeIndex = 0;
+              return _currentDefinitions.map((def) {
+                final startIdx = cumulativeIndex;
+                cumulativeIndex += (def['definitions'] as List?)?.length ?? 0;
+                return _buildDefinitionContent(
+                  theme,
+                  def,
+                  highlightHeadword: _lastHeadwordQuery,
+                  highlightDefinition: _lastDefinitionQuery,
+                  searchSqliteMs: _searchSqliteMs,
+                  searchOtherMs: _searchOtherMs,
+                  searchTotalMs: _searchTotalMs,
+                  searchResultCount: _searchResultCount,
+                  startIndex: startIdx,
+                );
+              }).toList();
+            }(),
           ),
         ),
       ],
@@ -1268,6 +1272,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     int? searchOtherMs,
     int? searchTotalMs,
     int? searchResultCount,
+    int startIndex = 0,
   }) {
     final int dictId = defMap['dict_id'] as int;
     final String format = defMap['format'] as String? ?? 'stardict';
@@ -1288,6 +1293,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           _headwordController.text = word;
           _performSearch();
         },
+        startIndex: startIndex,
       );
     }
 
@@ -1300,6 +1306,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       searchOtherMs: searchOtherMs,
       searchTotalMs: searchTotalMs,
       searchResultCount: searchResultCount,
+      startIndex: startIndex,
     );
   }
 
@@ -1312,6 +1319,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     int? searchOtherMs,
     int? searchTotalMs,
     int? searchResultCount,
+    int startIndex = 0,
   }) {
     final settings = context.watch<SettingsProvider>();
     // Deep copy to prevent cached processedHtml from persisting across searches
@@ -1442,7 +1450,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       definitionHtml: definitionHtml,
                       highlightCol: highlightCol,
                       index: index,
-                      globalIndex: index + 1,
+                      globalIndex: startIndex + index + 1,
                     );
                   }
 
@@ -2024,19 +2032,25 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           ),
                           Expanded(
                             child: TabBarView(
-                              children: defs
-                                  .map(
-                                    (def) => _buildDefinitionContent(
-                                      theme,
-                                      def,
-                                      highlightHeadword: word,
-                                      searchSqliteMs: timing['sqliteMs'],
-                                      searchOtherMs: timing['otherMs'],
-                                      searchTotalMs: timing['totalMs'],
-                                      searchResultCount: timing['resultCount'],
-                                    ),
-                                  )
-                                  .toList(),
+                              children: () {
+                                int cumulativeIndex = 0;
+                                return defs.map((def) {
+                                  final startIdx = cumulativeIndex;
+                                  cumulativeIndex +=
+                                      (def['definitions'] as List?)?.length ??
+                                      0;
+                                  return _buildDefinitionContent(
+                                    theme,
+                                    def,
+                                    highlightHeadword: word,
+                                    searchSqliteMs: timing['sqliteMs'],
+                                    searchOtherMs: timing['otherMs'],
+                                    searchTotalMs: timing['totalMs'],
+                                    searchResultCount: timing['resultCount'],
+                                    startIndex: startIdx,
+                                  );
+                                }).toList();
+                              }(),
                             ),
                           ),
                         ],
@@ -2077,7 +2091,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return Theme(
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 2),
+        margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 1),
         decoration: BoxDecoration(
           border: Border.all(
             color: theme.colorScheme.outline.withValues(alpha: 0.3),
@@ -2087,9 +2101,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
         child: ExpansionTile(
           key: PageStorageKey('accordion_${defData['id'] ?? index}'),
-          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           childrenPadding: EdgeInsets.zero,
-          minTileHeight: 40,
+          minTileHeight: 28,
           dense: true,
           title: Row(
             children: [
@@ -2222,6 +2236,7 @@ class _MdictDefinitionContent extends StatefulWidget {
   final int? searchTotalMs;
   final int? searchResultCount;
   final void Function(String word)? onEntryTap;
+  final int startIndex;
 
   const _MdictDefinitionContent({
     super.key,
@@ -2235,6 +2250,7 @@ class _MdictDefinitionContent extends StatefulWidget {
     this.searchTotalMs,
     this.searchResultCount,
     this.onEntryTap,
+    this.startIndex = 0,
   });
 
   @override
@@ -2443,7 +2459,7 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
                       definitionHtml: definitionHtml,
                       highlightCol: highlightCol,
                       index: index,
-                      globalIndex: index + 1,
+                      globalIndex: widget.startIndex + index + 1,
                     );
                   }
 
@@ -2752,7 +2768,7 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
     return Theme(
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 2),
+        margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 1),
         decoration: BoxDecoration(
           border: Border.all(
             color: theme.colorScheme.outline.withValues(alpha: 0.3),
@@ -2762,9 +2778,9 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
         ),
         child: ExpansionTile(
           key: PageStorageKey('popup_accordion_${defData['id'] ?? index}'),
-          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           childrenPadding: EdgeInsets.zero,
-          minTileHeight: 40,
+          minTileHeight: 28,
           dense: true,
           title: Row(
             children: [
