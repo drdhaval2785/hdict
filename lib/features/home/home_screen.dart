@@ -1273,6 +1273,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     int? searchTotalMs,
     int? searchResultCount,
     int startIndex = 0,
+    void Function(String word)? onWordTapInListMode,
   }) {
     final int dictId = defMap['dict_id'] as int;
     final String format = defMap['format'] as String? ?? 'stardict';
@@ -1294,6 +1295,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           _performSearch();
         },
         startIndex: startIndex,
+        onWordTapInListMode: onWordTapInListMode,
       );
     }
 
@@ -1307,6 +1309,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       searchTotalMs: searchTotalMs,
       searchResultCount: searchResultCount,
       startIndex: startIndex,
+      onWordTapInListMode: onWordTapInListMode,
     );
   }
 
@@ -1320,6 +1323,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     int? searchTotalMs,
     int? searchResultCount,
     int startIndex = 0,
+    void Function(String word)? onWordTapInListMode,
   }) {
     final settings = context.watch<SettingsProvider>();
     // Deep copy to prevent cached processedHtml from persisting across searches
@@ -2048,6 +2052,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                     searchTotalMs: timing['totalMs'],
                                     searchResultCount: timing['resultCount'],
                                     startIndex: startIdx,
+                                    onWordTapInListMode: (newWord) {
+                                      Navigator.pop(context);
+                                      _showWordPopup(newWord);
+                                    },
                                   );
                                 }).toList();
                               }(),
@@ -2138,84 +2146,177 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-              child: Html(
-                data: definitionHtml,
-                style: {
-                  "body": Style(
-                    fontSize: FontSize(settings.fontSize),
-                    lineHeight: LineHeight.em(1.4),
-                    margin: Margins.zero,
-                    padding: HtmlPaddings.zero,
-                    color: settings.getEffectiveTextColor(context),
-                    fontFamily: settings.fontFamily,
-                  ),
-                  "a": Style(
-                    color: theme.colorScheme.primary,
-                    textDecoration: TextDecoration.underline,
-                  ),
-                  "mark": Style(
-                    backgroundColor: Color(
-                      int.parse(highlightCol.replaceFirst('#', '0xFF')),
-                    ),
-                    color: Colors.black,
-                  ),
-                  ".dict-word": Style(
-                    color: settings.textColor,
-                    textDecoration: TextDecoration.none,
-                  ),
-                  ".headword": Style(
-                    color: settings.getEffectiveHeadwordColor(context),
-                    fontWeight: FontWeight.bold,
-                  ),
-                  ".headword a": Style(
-                    color: settings.getEffectiveHeadwordColor(context),
-                    textDecoration: TextDecoration.none,
-                  ),
-                  ".headword .dict-word": Style(
-                    color: settings.headwordColor,
-                    textDecoration: TextDecoration.none,
-                  ),
-                  "hr": Style(
-                    margin: Margins.zero,
-                    padding: HtmlPaddings.zero,
-                    border: Border(
-                      bottom: BorderSide(
-                        color: theme.colorScheme.outline,
-                        width: 1,
-                      ),
-                    ),
-                  ),
-                },
-                extensions: [
-                  MddVideoHtmlExtension(dictId: defMap['dict_id'] as int? ?? 0),
-                  const AnchorIdExtension(),
-                ],
-                onLinkTap: (url, attributes, element) async {
-                  if (url != null && settings.isOpenPopupOnTap) {
-                    if (url.startsWith('http://') ||
-                        url.startsWith('https://')) {
-                      final uri = Uri.parse(url);
-                      if (await canLaunchUrl(uri)) {
-                        await launchUrl(
-                          uri,
-                          mode: LaunchMode.externalApplication,
-                        );
-                      }
-                    } else if (!url.startsWith('mdd-audio:') &&
-                        !url.startsWith('mdd-video:')) {
-                      String wordToLookup = url;
-                      if (url.startsWith('look_up:')) {
-                        wordToLookup = url.substring(8);
-                      } else if (url.startsWith('bword://')) {
-                        wordToLookup = url.substring(8);
-                      }
-                      try {
-                        wordToLookup = Uri.decodeComponent(wordToLookup);
-                      } catch (_) {}
-                      _showWordPopup(wordToLookup);
+              child: Builder(
+                builder: (ctx) => GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTapUp: (details) {
+                    if (!settings.isTapOnMeaningEnabled) {
+                      hDebugPrint(
+                        'ListMode accordion: Tap ignored - isTapOnMeaningEnabled is false',
+                      );
+                      return;
                     }
-                  }
-                },
+
+                    final RenderBox? renderBox =
+                        ctx.findRenderObject() as RenderBox?;
+                    if (renderBox == null) {
+                      hDebugPrint(
+                        'ListMode accordion: Tap ignored - renderBox is null',
+                      );
+                      return;
+                    }
+
+                    final BoxHitTestResult result = BoxHitTestResult();
+                    renderBox.hitTest(
+                      result,
+                      position: renderBox.globalToLocal(details.globalPosition),
+                    );
+
+                    for (final HitTestEntry entry in result.path) {
+                      final target = entry.target;
+                      if (target is RenderParagraph) {
+                        final String text = target.text.toPlainText();
+                        if (text.replaceAll('\uFFFC', '').trim().isEmpty) {
+                          continue;
+                        }
+
+                        final Offset localOffset = target.globalToLocal(
+                          details.globalPosition,
+                        );
+                        final TextPosition pos = target.getPositionForOffset(
+                          localOffset,
+                        );
+                        final String charAtOffset =
+                            (pos.offset >= 0 && pos.offset < text.length)
+                            ? text[pos.offset]
+                            : 'EOF';
+
+                        hDebugPrint(
+                          'ListMode accordion: HitTest detected on Paragraph text: "$text"',
+                        );
+                        hDebugPrint(
+                          'ListMode accordion: Calculated TextOffset: ${pos.offset}, Char: "$charAtOffset"',
+                        );
+
+                        final String? word = util.WordBoundary.wordAt(
+                          text,
+                          pos.offset,
+                        );
+                        hDebugPrint(
+                          'ListMode accordion: Word tapped for search: $word',
+                        );
+
+                        if (word != null && word.trim().isNotEmpty) {
+                          final String headwordText = _extractTextFromHtml(
+                            defData['headwordHtml'] as String? ?? '',
+                          );
+                          final String normalizedWord = word
+                              .trim()
+                              .toLowerCase();
+                          final String normalizedHeadword = headwordText
+                              .toLowerCase();
+
+                          if (normalizedWord == normalizedHeadword) {
+                            hDebugPrint(
+                              'ListMode accordion: Ignoring tap on headword: $word',
+                            );
+                            return;
+                          }
+
+                          hDebugPrint(
+                            'ListMode accordion: Opening popup for word: $word',
+                          );
+                          _showWordPopup(word);
+                          return;
+                        }
+                      }
+                    }
+                    hDebugPrint(
+                      'ListMode accordion: HitTest found no valid text paragraph.',
+                    );
+                  },
+                  child: Html(
+                    data: definitionHtml,
+                    style: {
+                      "body": Style(
+                        fontSize: FontSize(settings.fontSize),
+                        lineHeight: LineHeight.em(1.4),
+                        margin: Margins.zero,
+                        padding: HtmlPaddings.zero,
+                        color: settings.getEffectiveTextColor(context),
+                        fontFamily: settings.fontFamily,
+                      ),
+                      "a": Style(
+                        color: theme.colorScheme.primary,
+                        textDecoration: TextDecoration.underline,
+                      ),
+                      "mark": Style(
+                        backgroundColor: Color(
+                          int.parse(highlightCol.replaceFirst('#', '0xFF')),
+                        ),
+                        color: Colors.black,
+                      ),
+                      ".dict-word": Style(
+                        color: settings.textColor,
+                        textDecoration: TextDecoration.none,
+                      ),
+                      ".headword": Style(
+                        color: settings.getEffectiveHeadwordColor(context),
+                        fontWeight: FontWeight.bold,
+                      ),
+                      ".headword a": Style(
+                        color: settings.getEffectiveHeadwordColor(context),
+                        textDecoration: TextDecoration.none,
+                      ),
+                      ".headword .dict-word": Style(
+                        color: settings.headwordColor,
+                        textDecoration: TextDecoration.none,
+                      ),
+                      "hr": Style(
+                        margin: Margins.zero,
+                        padding: HtmlPaddings.zero,
+                        border: Border(
+                          bottom: BorderSide(
+                            color: theme.colorScheme.outline,
+                            width: 1,
+                          ),
+                        ),
+                      ),
+                    },
+                    extensions: [
+                      MddVideoHtmlExtension(
+                        dictId: defMap['dict_id'] as int? ?? 0,
+                      ),
+                      const AnchorIdExtension(),
+                    ],
+                    onLinkTap: (url, attributes, element) async {
+                      if (url != null && settings.isOpenPopupOnTap) {
+                        if (url.startsWith('http://') ||
+                            url.startsWith('https://')) {
+                          final uri = Uri.parse(url);
+                          if (await canLaunchUrl(uri)) {
+                            await launchUrl(
+                              uri,
+                              mode: LaunchMode.externalApplication,
+                            );
+                          }
+                        } else if (!url.startsWith('mdd-audio:') &&
+                            !url.startsWith('mdd-video:')) {
+                          String wordToLookup = url;
+                          if (url.startsWith('look_up:')) {
+                            wordToLookup = url.substring(8);
+                          } else if (url.startsWith('bword://')) {
+                            wordToLookup = url.substring(8);
+                          }
+                          try {
+                            wordToLookup = Uri.decodeComponent(wordToLookup);
+                          } catch (_) {}
+                          _showWordPopup(wordToLookup);
+                        }
+                      }
+                    },
+                  ),
+                ),
               ),
             ),
           ],
@@ -2237,6 +2338,7 @@ class _MdictDefinitionContent extends StatefulWidget {
   final int? searchResultCount;
   final void Function(String word)? onEntryTap;
   final int startIndex;
+  final void Function(String word)? onWordTapInListMode;
 
   const _MdictDefinitionContent({
     super.key,
@@ -2251,6 +2353,7 @@ class _MdictDefinitionContent extends StatefulWidget {
     this.searchResultCount,
     this.onEntryTap,
     this.startIndex = 0,
+    this.onWordTapInListMode,
   });
 
   @override
@@ -2815,74 +2918,183 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-              child: Html(
-                data: definitionHtml,
-                style: {
-                  "body": Style(
-                    fontSize: FontSize(settings.fontSize),
-                    lineHeight: LineHeight.em(1.4),
-                    margin: Margins.zero,
-                    padding: HtmlPaddings.zero,
-                    color: settings.getEffectiveTextColor(context),
-                    fontFamily: settings.fontFamily,
-                  ),
-                  "a": Style(
-                    color: theme.colorScheme.primary,
-                    textDecoration: TextDecoration.underline,
-                  ),
-                  "mark": Style(
-                    backgroundColor: Color(
-                      int.parse(highlightCol.replaceFirst('#', '0xFF')),
-                    ),
-                    color: Colors.black,
-                  ),
-                  ".dict-word": Style(
-                    color: settings.textColor,
-                    textDecoration: TextDecoration.none,
-                  ),
-                  ".headword": Style(
-                    color: settings.getEffectiveHeadwordColor(context),
-                    fontWeight: FontWeight.bold,
-                  ),
-                  ".headword a": Style(
-                    color: settings.getEffectiveHeadwordColor(context),
-                    textDecoration: TextDecoration.none,
-                  ),
-                  ".headword .dict-word": Style(
-                    color: settings.headwordColor,
-                    textDecoration: TextDecoration.none,
-                  ),
-                  "hr": Style(
-                    margin: Margins.zero,
-                    padding: HtmlPaddings.zero,
-                    border: Border(
-                      bottom: BorderSide(
-                        color: theme.colorScheme.outline,
-                        width: 1,
-                      ),
-                    ),
-                  ),
-                },
-                extensions: [
-                  MddVideoHtmlExtension(dictId: defMap['dict_id'] as int? ?? 0),
-                  const AnchorIdExtension(),
-                ],
-                onLinkTap: (url, attributes, element) async {
-                  if (url != null &&
-                      (url.startsWith('http://') ||
-                          url.startsWith('https://'))) {
-                    launchUrl(
-                      Uri.parse(url),
-                      mode: LaunchMode.externalApplication,
+              child: Builder(
+                builder: (ctx) => GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTapUp: (details) {
+                    if (!settings.isTapOnMeaningEnabled) {
+                      hDebugPrint(
+                        'ListMode popup accordion: Tap ignored - isTapOnMeaningEnabled is false',
+                      );
+                      return;
+                    }
+
+                    final RenderBox? renderBox =
+                        ctx.findRenderObject() as RenderBox?;
+                    if (renderBox == null) {
+                      hDebugPrint(
+                        'ListMode popup accordion: Tap ignored - renderBox is null',
+                      );
+                      return;
+                    }
+
+                    final BoxHitTestResult result = BoxHitTestResult();
+                    renderBox.hitTest(
+                      result,
+                      position: renderBox.globalToLocal(details.globalPosition),
                     );
-                  } else if (url != null && url.startsWith('entry://')) {
-                    String wordToLookup = url.substring(8);
-                    try {
-                      wordToLookup = Uri.decodeComponent(wordToLookup);
-                    } catch (_) {}
-                    widget.onEntryTap?.call(wordToLookup);
-                  }
-                },
+
+                    for (final HitTestEntry entry in result.path) {
+                      final target = entry.target;
+                      if (target is RenderParagraph) {
+                        final String text = target.text.toPlainText();
+                        if (text.replaceAll('\uFFFC', '').trim().isEmpty) {
+                          continue;
+                        }
+
+                        final Offset localOffset = target.globalToLocal(
+                          details.globalPosition,
+                        );
+                        final TextPosition pos = target.getPositionForOffset(
+                          localOffset,
+                        );
+                        final String charAtOffset =
+                            (pos.offset >= 0 && pos.offset < text.length)
+                            ? text[pos.offset]
+                            : 'EOF';
+
+                        hDebugPrint(
+                          'ListMode popup accordion: HitTest detected on Paragraph text: "$text"',
+                        );
+                        hDebugPrint(
+                          'ListMode popup accordion: Calculated TextOffset: ${pos.offset}, Char: "$charAtOffset"',
+                        );
+
+                        final String? word = util.WordBoundary.wordAt(
+                          text,
+                          pos.offset,
+                        );
+                        hDebugPrint(
+                          'ListMode popup accordion: Word tapped for search: $word',
+                        );
+
+                        if (word != null && word.trim().isNotEmpty) {
+                          final String headwordText = _extractTextFromHtml(
+                            defData['headwordHtml'] as String? ?? '',
+                          );
+                          final String normalizedWord = word
+                              .trim()
+                              .toLowerCase();
+                          final String normalizedHeadword = headwordText
+                              .toLowerCase();
+
+                          if (normalizedWord == normalizedHeadword) {
+                            hDebugPrint(
+                              'ListMode popup accordion: Ignoring tap on headword: $word',
+                            );
+                            return;
+                          }
+
+                          hDebugPrint(
+                            'ListMode popup accordion: Opening new popup for word: $word',
+                          );
+                          widget.onWordTapInListMode?.call(word);
+                          return;
+                        }
+                      }
+                    }
+                    hDebugPrint(
+                      'ListMode popup accordion: HitTest found no valid text paragraph.',
+                    );
+                  },
+                  child: Html(
+                    data: definitionHtml,
+                    style: {
+                      "body": Style(
+                        fontSize: FontSize(settings.fontSize),
+                        lineHeight: LineHeight.em(1.4),
+                        margin: Margins.zero,
+                        padding: HtmlPaddings.zero,
+                        color: settings.getEffectiveTextColor(context),
+                        fontFamily: settings.fontFamily,
+                      ),
+                      "a": Style(
+                        color: theme.colorScheme.primary,
+                        textDecoration: TextDecoration.underline,
+                      ),
+                      "mark": Style(
+                        backgroundColor: Color(
+                          int.parse(highlightCol.replaceFirst('#', '0xFF')),
+                        ),
+                        color: Colors.black,
+                      ),
+                      ".dict-word": Style(
+                        color: settings.textColor,
+                        textDecoration: TextDecoration.none,
+                      ),
+                      ".headword": Style(
+                        color: settings.getEffectiveHeadwordColor(context),
+                        fontWeight: FontWeight.bold,
+                      ),
+                      ".headword a": Style(
+                        color: settings.getEffectiveHeadwordColor(context),
+                        textDecoration: TextDecoration.none,
+                      ),
+                      ".headword .dict-word": Style(
+                        color: settings.headwordColor,
+                        textDecoration: TextDecoration.none,
+                      ),
+                      "hr": Style(
+                        margin: Margins.zero,
+                        padding: HtmlPaddings.zero,
+                        border: Border(
+                          bottom: BorderSide(
+                            color: theme.colorScheme.outline,
+                            width: 1,
+                          ),
+                        ),
+                      ),
+                    },
+                    extensions: [
+                      MddVideoHtmlExtension(
+                        dictId: defMap['dict_id'] as int? ?? 0,
+                      ),
+                      const AnchorIdExtension(),
+                    ],
+                    onLinkTap: (url, attributes, element) async {
+                      if (url == null) return;
+
+                      if (url.startsWith('http://') ||
+                          url.startsWith('https://')) {
+                        launchUrl(
+                          Uri.parse(url),
+                          mode: LaunchMode.externalApplication,
+                        );
+                      } else if (url.startsWith('entry://')) {
+                        String wordToLookup = url.substring(8);
+                        try {
+                          wordToLookup = Uri.decodeComponent(wordToLookup);
+                        } catch (_) {}
+                        widget.onEntryTap?.call(wordToLookup);
+                      } else if (widget.onWordTapInListMode != null &&
+                          !url.startsWith('mdd-audio:') &&
+                          !url.startsWith('mdd-video:')) {
+                        String wordToLookup = url;
+                        if (wordToLookup.startsWith('look_up:')) {
+                          wordToLookup = wordToLookup.substring(8);
+                        } else if (wordToLookup.startsWith('bword://')) {
+                          wordToLookup = wordToLookup.substring(8);
+                        }
+                        try {
+                          wordToLookup = Uri.decodeComponent(wordToLookup);
+                        } catch (_) {}
+                        if (wordToLookup.isNotEmpty) {
+                          widget.onWordTapInListMode!(wordToLookup);
+                        }
+                      }
+                    },
+                  ),
+                ),
               ),
             ),
           ],
