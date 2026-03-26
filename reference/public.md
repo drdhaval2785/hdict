@@ -245,6 +245,15 @@ Creates a DictReader from a linked source (SAF or Bookmark).
 
 Reads MDict dictionary files (.mdx, .mdd).
 
+##### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `mdxPath` | `String` | Path to MDX file |
+| `source` | `RandomAccessSource` | Random access source |
+| `cssContent` | `String?` | CSS content from style.css |
+| `hasMdd` | `bool` | Whether MDD resource file is attached |
+
 ##### Static Method: `fromPath`
 
 Creates an MdictReader from a file path.
@@ -308,6 +317,19 @@ Creates an MdictReader from a URI.
 
 Reads MDict multimedia files (.mdd).
 
+##### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `source` | `RandomAccessSource` | Random access source |
+| `isInitialized` | `bool` | Whether the reader is initialized |
+
+##### Constructor
+
+```dart
+MddReader(String path, {required RandomAccessSource source})
+```
+
 ##### Static Method: `fromPath`
 
 Creates an MddReader from a file path.
@@ -346,13 +368,22 @@ Creates an MddReader from a linked source.
 
 Reads SLOB (Sorted List of Blobs) dictionary files.
 
+##### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `path` | `String` | File path |
+| `source` | `RandomAccessSource` | Random access source |
+| `bookName` | `String` | Dictionary label from tags |
+| `blobCount` | `int` | Total number of blobs |
+
 ##### Property: `blobs`
 
 ```dart
-Map<String, dynamic> get blobs
+Stream<dynamic> get blobs async*
 ```
 
-Returns the blobs in the SLOB file.
+Stream of all blobs in the slob file (async generator).
 
 ##### Static Method: `fromPath`
 
@@ -394,6 +425,18 @@ Creates a SlobReader from a linked source.
 
 Reads Dictd dictionary files.
 
+##### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `dictPath` | `String` | Path to the Dictd dictionary file |
+
+##### Constructor
+
+```dart
+DictdReader(String dictPath)
+```
+
 ##### Static Method: `fromPath`
 
 Creates a DictdReader from a file path.
@@ -432,9 +475,26 @@ Creates a DictdReader from a linked source.
 
 #### Class: `IfoParser`
 
-Parses StarDict .ifo files.
+Parses StarDict .ifo files (metadata/information).
 
-##### Static Method: `parse`
+##### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `version` | `String?` | Dictionary version |
+| `bookName` | `String?` | Dictionary name |
+| `wordCount` | `int` | Number of words |
+| `idxFileSize` | `int` | Index file size |
+| `author` | `String?` | Author |
+| `email` | `String?` | Author email |
+| `website` | `String?` | Website URL |
+| `description` | `String?` | Description |
+| `date` | `String?` | Release date |
+| `sameTypeSequence` | `String?` | Same-type sequence |
+| `idxOffsetBits` | `int` | Index offset bits (32 or 64) |
+| `synWordCount` | `int` | Synonym word count |
+
+##### Method: `parse`
 
 Parses an IFO file.
 
@@ -442,7 +502,21 @@ Parses an IFO file.
 |-----------|------|-------------|
 | `path` | `String` | Path to the IFO file |
 
-**Returns:** `Map<String, dynamic>` - Parsed IFO data including dictionary name, word count, and file paths.
+##### Method: `parseSource`
+
+Parses from a RandomAccessSource.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `source` | `dynamic` | Data source |
+
+##### Method: `parseContent`
+
+Parses from content string.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `content` | `String` | IFO file content |
 
 ---
 
@@ -452,15 +526,31 @@ Parses an IFO file.
 
 Parses StarDict .idx files.
 
-##### Static Method: `parse`
+##### Fields
 
-Parses an IDX file.
+| Field | Type | Description |
+|-------|------|-------------|
+| `ifo` | `IfoParser` | Associated IFO parser |
+
+##### Method: `parse`
+
+Parses from a RandomAccessSource.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `content` | `String` | The IDX file content |
+| `source` | `RandomAccessSource` | Data source |
 
-**Returns:** `List<Map<String, dynamic>>` - List of word entries with word, offset, and length.
+**Returns:** `Stream<Map<String, dynamic>>` - Stream of word entries.
+
+##### Method: `parseFromBytes`
+
+Parses from raw bytes.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `bytes` | `Uint8List` | Raw IDX file bytes |
+
+**Returns:** `Stream<Map<String, dynamic>>` - Stream of word entries.
 
 ---
 
@@ -488,7 +578,22 @@ Parses a SYN file.
 
 #### Class: `StardictDictionary`
 
-Represents a StarDict dictionary.
+Represents a StarDict dictionary available for download.
+
+##### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `sourceLanguageCode` | `String` | ISO 639-2 source language code |
+| `targetLanguageCode` | `String` | ISO 639-2 target language code |
+| `sourceLanguageName` | `String` | Computed source language name |
+| `targetLanguageName` | `String` | Computed target language name |
+| `name` | `String` | Dictionary name |
+| `url` | `String` | Download URL |
+| `headwords` | `String` | Number of headwords |
+| `version` | `String` | Version string |
+| `date` | `String` | Release date |
+| `releases` | `List<StardictRelease>` | Available releases |
 
 ---
 
@@ -498,6 +603,16 @@ Represents a StarDict dictionary.
 
 Represents a StarDict dictionary release.
 
+##### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `url` | `String` | Download URL |
+| `format` | `String` | Dictionary format |
+| `size` | `String` | File size |
+| `version` | `String` | Version string |
+| `date` | `String` | Release date |
+
 ---
 
 ### 3. `lib/core/models/discovered_dict.dart`
@@ -505,6 +620,15 @@ Represents a StarDict dictionary release.
 #### Class: `DiscoveredDict`
 
 Represents a dictionary discovered during scanning.
+
+##### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `path` | `String` | Path to the primary anchor file |
+| `format` | `String` | Format identifier ('stardict', 'mdict', 'slob', 'dictd') |
+| `companionPath` | `String?` | For DICTD: path to companion .dict file |
+| `parentFolderName` | `String?` | Name of the immediate parent folder |
 
 ---
 
@@ -514,6 +638,15 @@ Represents a dictionary discovered during scanning.
 
 Represents an incomplete or corrupted dictionary.
 
+##### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `String` | Stem name without extension |
+| `format` | `String` | Format identifier |
+| `missingFiles` | `List<String>` | List of missing mandatory files |
+| `parentFolderName` | `String?` | Name of the immediate parent folder |
+
 ---
 
 ### 5. `lib/core/models/dictionary_group.dart`
@@ -521,6 +654,14 @@ Represents an incomplete or corrupted dictionary.
 #### Class: `DictionaryGroup`
 
 Represents a group of dictionaries.
+
+##### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `String` | Unique group identifier |
+| `name` | `String` | Display name |
+| `dictIds` | `List<int>` | List of dictionary IDs in this group |
 
 ---
 
@@ -530,6 +671,15 @@ Represents a group of dictionaries.
 
 Represents the progress of dictionary deletion.
 
+##### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `value` | `double` | Progress value (0.0 to 1.0) |
+| `message` | `String` | Progress message |
+| `isCompleted` | `bool` | Whether operation is completed |
+| `error` | `String?` | Error message if any |
+
 ---
 
 ### 7. `lib/core/models/import_progress.dart`
@@ -538,6 +688,26 @@ Represents the progress of dictionary deletion.
 
 Represents the progress of dictionary import.
 
+##### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `value` | `double` | Progress value (0.0 to 1.0) |
+| `message` | `String` | Progress message |
+| `isCompleted` | `bool` | Whether operation is completed |
+| `dictId` | `int?` | ID of imported dictionary |
+| `error` | `String?` | Error message if any |
+| `ifoPath` | `String?` | Path to IFO file |
+| `sampleWords` | `List<String>?` | Sample words from dictionary |
+| `headwordCount` | `int` | Number of headwords |
+| `definitionWordCount` | `int` | Number of words in definitions |
+| `dictionaryName` | `String?` | Dictionary display name |
+| `groupName` | `String?` | Group name for the dictionary |
+| `incompleteEntries` | `List<String>?` | Skipped due to missing files |
+| `linkedEntries` | `List<String>?` | Linked dictionaries |
+| `importedEntries` | `List<String>?` | Imported dictionaries |
+| `alreadyExistsEntries` | `List<String>?` | Already existing entries |
+
 ---
 
 ### 8. `lib/core/models/folder_scan_result.dart`
@@ -545,6 +715,14 @@ Represents the progress of dictionary import.
 #### Class: `FolderScanResult`
 
 Represents the result of scanning a folder for dictionaries.
+
+##### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `discovered` | `List<DiscoveredDict>` | Valid dictionaries found |
+| `incomplete` | `List<IncompleteDict>` | Incomplete dictionaries |
+| `foundArchives` | `List<String>` | Archive files found |
 
 ---
 
@@ -649,6 +827,11 @@ Theme configuration utility.
 ##### Static Method: `getTheme`
 
 Gets a theme based on brightness and font family.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `brightness` | `Brightness` | Theme brightness (light or dark) |
+| `fontFamily` | `String` | Font family name |
 
 **Returns:** `ThemeData` - The configured theme.
 
@@ -1112,10 +1295,405 @@ Dialog for downloading StarDict dictionaries.
 
 ## Dependency Graph
 
-```txt
-SettingsProvider --> DatabaseHelper
-DictionaryManager --> MdictReader, MddReader, SlobReader, DictdReader
-DictionaryGroupManager --> DatabaseHelper
-HomeScreen --> DictionaryManager, SettingsProvider
-MyApp --> SettingsProvider, HomeScreen
+Below is a dependency list showing which modules depend on others (similar to `flutter pub deps`):
+
 ```
+hdict
+├── lib/main.dart
+│   ├── flutter/material.dart
+│   ├── provider (package)
+│   ├── lib/core/theme/app_theme.dart
+│   ├── lib/core/database/database_helper.dart
+│   └── lib/features/home/home_screen.dart
+│
+├── lib/core/
+│   ├── constants/
+│   │   └── iso_639_2_languages.dart (standalone - no deps)
+│   │
+│   ├── database/
+│   │   └── database_helper.dart
+│   │       ├── dart:collection
+│   │       ├── dart:io
+│   │       ├── dart:math
+│   │       ├── flutter/foundation.dart
+│   │       ├── path (package)
+│   │       ├── path_provider (package)
+│   │       ├── sqflite (package)
+│   │       ├── sqflite_common_ffi (package)
+│   │       ├── sqflite_common_ffi_web (package)
+│   │       └── lib/core/utils/logger.dart
+│   │
+│   ├── manager/
+│   │   ├── dictionary_manager.dart
+│   │   │   ├── dart:collection
+│   │   │   ├── dart:convert
+│   │   │   ├── dart:io
+│   │   │   ├── dart:isolate
+│   │   │   ├── dart:async
+│   │   │   ├── flutter/foundation.dart
+│   │   │   ├── flutter/services.dart
+│   │   │   ├── archive (package)
+│   │   │   ├── archive_io (package)
+│   │   │   ├── path (package)
+│   │   │   ├── path_provider (package)
+│   │   │   ├── http (package)
+│   │   │   ├── crypto (package)
+│   │   │   ├── flutter_7zip (package)
+│   │   │   ├── docman (package)
+│   │   │   ├── lib/core/database/database_helper.dart
+│   │   │   ├── lib/core/parser/ifo_parser.dart
+│   │   │   ├── lib/core/parser/idx_parser.dart
+│   │   │   ├── lib/core/parser/syn_parser.dart
+│   │   │   ├── lib/core/parser/dict_reader.dart
+│   │   │   ├── lib/core/parser/mdict_reader.dart
+│   │   │   ├── lib/core/parser/slob_reader.dart
+│   │   │   ├── lib/core/parser/dictd_reader.dart
+│   │   │   ├── lib/core/parser/random_access_source.dart
+│   │   │   ├── lib/core/parser/bookmark_random_access_source.dart
+│   │   │   ├── lib/core/parser/saf_random_access_source.dart
+│   │   │   ├── lib/core/parser/bookmark_manager.dart
+│   │   │   ├── lib/core/utils/folder_scanner.dart
+│   │   │   ├── lib/core/utils/logger.dart
+│   │   │   └── lib/core/manager/dictionary_group_manager.dart
+│   │   │
+│   │   └── dictionary_group_manager.dart
+│   │       ├── dart:convert
+│   │       ├── shared_preferences (package)
+│   │       └── lib/core/manager/dictionary_manager.dart
+│   │
+│   ├── parser/
+│   │   ├── ifo_parser.dart
+│   │   │   ├── dart:convert
+│   │   │   ├── dart:io
+│   │   │   ├── flutter/foundation.dart
+│   │   │   └── lib/core/parser/random_access_source.dart
+│   │   │
+│   │   ├── idx_parser.dart
+│   │   │   ├── dart:typed_data
+│   │   │   ├── dart:convert
+│   │   │   ├── flutter/foundation.dart
+│   │   │   ├── lib/core/parser/random_access_source.dart
+│   │   │   └── lib/core/parser/ifo_parser.dart
+│   │   │
+│   │   ├── syn_parser.dart
+│   │   │   ├── dart:typed_data
+│   │   │   ├── dart:convert
+│   │   │   └── lib/core/parser/random_access_source.dart
+│   │   │
+│   │   ├── dict_reader.dart
+│   │   │   ├── flutter/foundation.dart
+│   │   │   ├── dart:io
+│   │   │   ├── dart:convert
+│   │   │   ├── dictzip_reader (package)
+│   │   │   ├── path (package)
+│   │   │   ├── lib/core/database/database_helper.dart
+│   │   │   ├── lib/core/parser/random_access_source.dart
+│   │   │   ├── lib/core/parser/saf_random_access_source.dart
+│   │   │   └── lib/core/parser/bookmark_random_access_source.dart
+│   │   │
+│   │   ├── mdict_reader.dart
+│   │   │   ├── flutter/foundation.dart
+│   │   │   ├── dart:io
+│   │   │   ├── dict_reader (package)
+│   │   │   ├── path (package)
+│   │   │   ├── lib/core/utils/logger.dart
+│   │   │   ├── lib/core/parser/random_access_source.dart
+│   │   │   ├── lib/core/parser/saf_random_access_source.dart
+│   │   │   ├── lib/core/parser/bookmark_random_access_source.dart
+│   │   │   └── lib/core/parser/mdd_reader.dart
+│   │   │
+│   │   ├── mdd_reader.dart
+│   │   │   ├── dart:typed_data
+│   │   │   └── dict_reader (package)
+│   │   │
+│   │   ├── slob_reader.dart
+│   │   │   ├── slob_reader (package)
+│   │   │   ├── flutter/foundation.dart
+│   │   │   ├── dart:io
+│   │   │   ├── dart:convert
+│   │   │   ├── path (package)
+│   │   │   ├── lib/core/parser/random_access_source.dart
+│   │   │   ├── lib/core/parser/saf_random_access_source.dart
+│   │   │   └── lib/core/parser/bookmark_random_access_source.dart
+│   │   │
+│   │   ├── dictd_reader.dart
+│   │   │   ├── dart:io
+│   │   │   ├── flutter/foundation.dart
+│   │   │   ├── path (package)
+│   │   │   ├── dictd_reader (package)
+│   │   │   ├── lib/core/parser/random_access_source.dart
+│   │   │   ├── lib/core/parser/saf_random_access_source.dart
+│   │   │   └── lib/core/parser/bookmark_random_access_source.dart
+│   │   │
+│   │   ├── random_access_source.dart (standalone - re-exports from dictzip_reader)
+│   │   │
+│   │   ├── bookmark_manager.dart
+│   │   │   ├── flutter/foundation.dart
+│   │   │   ├── flutter/services.dart
+│   │   │   └── dart:io
+│   │   │
+│   │   ├── bookmark_random_access_source.dart
+│   │   │   ├── dart:typed_data
+│   │   │   ├── dart:io
+│   │   │   ├── path (package)
+│   │   │   ├── lib/core/parser/random_access_source.dart
+│   │   │   └── lib/core/parser/bookmark_manager.dart
+│   │   │
+│   │   └── saf_random_access_source.dart
+│   │       ├── dart:async
+│   │       ├── dart:math
+│   │       ├── dart:typed_data
+│   │       ├── saf_stream (package)
+│   │       ├── docman (package)
+│   │       └── lib/core/parser/random_access_source.dart
+│   │
+│   ├── theme/
+│   │   └── app_theme.dart
+│   │       └── flutter/material.dart
+│   │
+│   └── utils/
+│       ├── anchor_id_extension.dart
+│       │   ├── flutter/widgets.dart
+│       │   └── flutter_html (package)
+│       │
+│       ├── benchmark_utils.dart
+│       │   ├── dart:async
+│       │   ├── lib/core/database/database_helper.dart
+│       │   ├── lib/core/manager/dictionary_manager.dart
+│       │   └── lib/core/utils/logger.dart
+│       │
+│       ├── folder_scanner.dart
+│       │   ├── dart:io
+│       │   ├── archive (package)
+│       │   ├── archive_io (package)
+│       │   ├── flutter_7zip (package)
+│       │   ├── path (package)
+│       │   └── lib/core/utils/logger.dart
+│       │
+│       ├── html_lookup_wrapper.dart
+│       │   └── lib/core/utils/logger.dart
+│       │
+│       ├── logger.dart
+│       │   └── flutter/foundation.dart
+│       │
+│       ├── multimedia_processor.dart
+│       │   ├── dart:convert
+│       │   ├── dart:typed_data
+│       │   ├── lib/core/parser/mdict_reader.dart
+│       │   └── lib/core/utils/logger.dart
+│       │
+│       └── word_boundary.dart (standalone - no deps)
+│
+└── lib/features/
+    ├── about/
+    │   └── about_screen.dart
+    │       ├── flutter/material.dart
+    │       ├── flutter/services.dart
+    │       ├── url_launcher (package)
+    │       └── lib/features/home/widgets/app_drawer.dart
+    │
+    ├── flash_cards/
+    │   ├── flash_cards_screen.dart
+    │   │   ├── flutter/material.dart
+    │   │   ├── flutter/rendering.dart
+    │   │   ├── dart:math
+    │   │   ├── flutter_html (package)
+    │   │   ├── provider (package)
+    │   │   ├── lib/core/database/database_helper.dart
+    │   │   ├── lib/core/manager/dictionary_manager.dart
+    │   │   ├── lib/core/utils/html_lookup_wrapper.dart
+    │   │   ├── lib/core/utils/word_boundary.dart
+    │   │   ├── lib/core/utils/logger.dart
+    │   │   ├── lib/features/home/widgets/app_drawer.dart
+    │   │   ├── lib/features/settings/settings_provider.dart
+    │   │   └── lib/features/flash_cards/result_screen.dart
+    │   │
+    │   ├── result_screen.dart (standalone)
+    │   │
+    │   └── score_history_screen.dart
+    │       ├── flutter/material.dart
+    │       ├── intl (package)
+    │       ├── lib/core/database/database_helper.dart
+    │       └── lib/features/home/widgets/app_drawer.dart
+    │
+    ├── help/
+    │   └── manual_screen.dart
+    │       ├── flutter/material.dart
+    │       ├── flutter/services.dart
+    │       ├── flutter_markdown_plus (package)
+    │       └── lib/features/home/widgets/app_drawer.dart
+    │
+    ├── home/
+    │   ├── home_screen.dart
+    │   │   ├── flutter/material.dart
+    │   │   ├── flutter/services.dart
+    │   │   ├── flutter/rendering.dart
+    │   │   ├── flutter/foundation.dart
+    │   │   ├── url_launcher (package)
+    │   │   ├── flutter_html (package)
+    │   │   ├── just_audio (package)
+    │   │   ├── video_player (package)
+    │   │   ├── chewie (package)
+    │   │   ├── in_app_review (package)
+    │   │   ├── provider (package)
+    │   │   ├── path_provider (package)
+    │   │   ├── lib/core/utils/logger.dart
+    │   │   ├── lib/core/database/database_helper.dart
+    │   │   ├── lib/core/manager/dictionary_manager.dart
+    │   │   ├── lib/core/utils/html_lookup_wrapper.dart
+    │   │   ├── lib/core/utils/multimedia_processor.dart
+    │   │   ├── lib/core/utils/anchor_id_extension.dart
+    │   │   ├── lib/core/utils/word_boundary.dart
+    │   │   ├── lib/features/settings/settings_provider.dart
+    │   │   ├── lib/features/home/widgets/app_drawer.dart
+    │   │   └── lib/features/settings/dictionary_management_screen.dart
+    │   │
+    │   └── widgets/
+    │       └── app_drawer.dart
+    │           ├── flutter/material.dart
+    │           ├── lib/features/about/about_screen.dart
+    │           ├── lib/features/flash_cards/flash_cards_screen.dart
+    │           ├── lib/features/flash_cards/score_history_screen.dart
+    │           ├── lib/features/help/manual_screen.dart
+    │           ├── lib/features/home/home_screen.dart
+    │           ├── lib/features/settings/dictionary_management_screen.dart
+    │           ├── lib/features/settings/search_history_screen.dart
+    │           ├── lib/features/settings/settings_screen.dart
+    │           ├── lib/features/support/support_screen.dart
+    │           └── lib/features/settings/dictionary_groups_screen.dart
+    │
+    ├── settings/
+    │   ├── settings_screen.dart
+    │   │   ├── flutter/material.dart
+    │   │   ├── flutter_colorpicker (package)
+    │   │   ├── provider (package)
+    │   │   ├── lib/features/settings/settings_provider.dart
+    │   │   ├── lib/features/home/widgets/app_drawer.dart
+    │   │   └── lib/core/database/database_helper.dart
+    │   │
+    │   ├── settings_provider.dart
+    │   │   ├── flutter/material.dart
+    │   │   └── shared_preferences (package)
+    │   │
+    │   ├── dictionary_management_screen.dart
+    │   │   ├── flutter/material.dart
+    │   │   ├── dart:io
+    │   │   ├── flutter/foundation.dart
+    │   │   ├── file_selector (package)
+    │   │   ├── file_picker (package)
+    │   │   ├── lib/core/manager/dictionary_manager.dart
+    │   │   ├── lib/core/manager/dictionary_group_manager.dart
+    │   │   ├── lib/core/parser/bookmark_manager.dart
+    │   │   ├── lib/features/home/widgets/app_drawer.dart
+    │   │   └── lib/features/settings/widgets/stardict_download_dialog.dart
+    │   │
+    │   ├── dictionary_groups_screen.dart
+    │   │   ├── flutter/material.dart
+    │   │   ├── lib/core/manager/dictionary_manager.dart
+    │   │   ├── lib/core/manager/dictionary_group_manager.dart
+    │   │   └── lib/features/home/widgets/app_drawer.dart
+    │   │
+    │   ├── search_history_screen.dart
+    │   │   ├── flutter/material.dart
+    │   │   ├── intl (package)
+    │   │   ├── lib/core/database/database_helper.dart
+    │   │   └── lib/features/home/widgets/app_drawer.dart
+    │   │
+    │   ├── services/
+    │   │   └── stardict_service.dart
+    │   │       ├── dart:convert
+    │   │       ├── http (package)
+    │   │       ├── lib/core/database/database_helper.dart
+    │   │       ├── lib/core/constants/iso_639_2_languages.dart
+    │   │       └── lib/core/utils/logger.dart
+    │   │
+    │   └── widgets/
+    │       └── stardict_download_dialog.dart
+    │           ├── flutter/material.dart
+    │           ├── lib/core/constants/iso_639_2_languages.dart
+    │           └── lib/features/settings/services/stardict_service.dart
+    │
+    └── support/
+        └── support_screen.dart
+            ├── flutter/material.dart
+            ├── flutter/services.dart
+            ├── url_launcher (package)
+            └── lib/features/home/widgets/app_drawer.dart
+```
+
+---
+
+## Function-Level Dependencies
+
+```
+HomeScreen._performSearch
+├── DatabaseHelper.searchWords
+│   ├── DatabaseHelper._ensureDictionaryMapCache
+│   └── sqflite FTS5 queries
+├── DictionaryManager.fetchDefinitionsBatch
+│   ├── DictionaryManager._getReader
+│   │   ├── MdictReader.fromPath / .fromLinkedSource / .fromUri
+│   │   ├── SlobReader.fromPath / .fromLinkedSource / .fromUri
+│   │   ├── DictReader.fromPath / .fromLinkedSource / .fromUri
+│   │   └── DictdReader.fromPath / .fromLinkedSource / .fromUri
+│   └── DictReader/MdictReader/SlobReader/DictdReader.readAtIndex/readBulk
+├── HomeScreen.consolidateDefinitions
+│   └── DatabaseHelper.getDictionaryById
+└── HtmlLookupWrapper.processRecord
+
+DictionaryManager.importDictionaryStream
+├── _extractToWorkspace
+│   └── _extractToWorkspaceSync
+│       └── GZipDecoder / BZip2Decoder / XZDecoder / SZArchive.extract
+├── scanFolderForDictionaries
+│   └── FolderScanner._extractArchiveToDir
+└── _processDictionaryFiles
+    ├── IfoParser
+    ├── IdxParser
+    ├── SynParser
+    └── DatabaseHelper.batchInsertWords
+        └── DatabaseHelper.startBatchInsert / .endBatchInsert
+
+DictionaryManager.fetchDefinition
+├── DictionaryManager._getReader
+│   ├── MdictReader (for .mdx)
+│   │   └── MddReader (for .mdd multimedia)
+│   ├── SlobReader (for .slob)
+│   ├── DictReader (for StarDict .dict)
+│   └── DictdReader (for DICTD)
+└── DictionaryManager._definitionCache (LRU)
+
+DatabaseHelper.searchWords
+├── DatabaseHelper._ensureDictionaryMapCache
+├── sqflite database queries (FTS5 or fallback)
+└── DatabaseHelper._queryCache (LRU)
+
+HtmlLookupWrapper.processRecord
+└── logger.hDebugPrint (showHtmlProcessing check)
+
+MultimediaProcessor.processHtmlWithMedia
+├── MddReader.getMddResourceBytes
+├── MultimediaProcessor._replaceImgSrcWithDataUris
+└── MultimediaProcessor._addMediaTapHandlers
+    └── MultimediaProcessor.injectCss
+
+FlashCardsScreen._startQuiz
+├── DatabaseHelper.getBatchSampleWords
+│   ├── DatabaseHelper._ensureDictionaryMapCache
+│   └── Random.sample
+└── DictionaryManager.instance.fetchDefinition
+
+StardictService.refreshDictionaries
+├── http.get (package)
+├── DatabaseHelper.insertFreedictDictionaries
+└── StardictDictionary.fromTsvRow
+
+DictionaryGroupManager.autoGenerateGroupsFromDownloaded
+├── StardictService.fetchDictionaries
+│   └── DatabaseHelper.getFreedictDictionaries
+└── StardictService.refreshDictionaries
+```
+
+---
+
+*Last updated: March 2026*

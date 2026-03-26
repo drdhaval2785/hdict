@@ -790,3 +790,236 @@ Arguments class for archive extraction in isolate.
 | `workspacePath` | `String` | Destination workspace path |
 
 ---
+
+## Private Constants
+
+### `lib/core/database/database_helper.dart`
+
+##### `_maxQueryCacheEntries`
+
+```dart
+static const int _maxQueryCacheEntries = 1000;
+```
+
+Maximum number of query cache entries.
+
+---
+
+### `lib/core/manager/dictionary_group_manager.dart`
+
+##### `_key`
+
+```dart
+static const String _key = 'dictionary_groups';
+```
+
+Key for storing dictionary groups in SharedPreferences.
+
+---
+
+### `lib/core/manager/dictionary_manager.dart`
+
+##### `_maxCacheEntries`
+
+```dart
+static const int _maxCacheEntries = 50;
+```
+
+Maximum number of reader cache entries.
+
+---
+
+### `lib/core/parser/mdd_reader.dart`
+
+##### `_maxCacheEntries`
+
+```dart
+static const int _maxCacheEntries = 100;
+```
+
+Maximum number of resource cache entries.
+
+---
+
+### `lib/features/settings/services/stardict_service.dart`
+
+##### `_tsvUrl`
+
+```dart
+static const String _tsvUrl = '...';
+```
+
+URL for the StarDict dictionary TSV file.
+
+---
+
+## Dependency Graph
+
+Below is a dependency list showing which private modules depend on others:
+
+```
+hdict (private)
+├── lib/core/
+│   ├── database/
+│   │   └── database_helper.dart
+│   │       ├── lib/features/settings/settings_provider.dart
+│   │       └── lib/core/utils/logger.dart
+│   │
+│   ├── manager/
+│   │   ├── dictionary_manager.dart
+│   │   │   ├── lib/core/database/database_helper.dart
+│   │   │   ├── lib/core/parser/ifo_parser.dart
+│   │   │   ├── lib/core/parser/idx_parser.dart
+│   │   │   ├── lib/core/parser/syn_parser.dart
+│   │   │   ├── lib/core/parser/dict_reader.dart
+│   │   │   ├── lib/core/parser/mdict_reader.dart
+│   │   │   ├── lib/core/parser/mdd_reader.dart
+│   │   │   ├── lib/core/parser/slob_reader.dart
+│   │   │   ├── lib/core/parser/dictd_reader.dart
+│   │   │   ├── lib/core/parser/random_access_source.dart
+│   │   │   ├── lib/core/parser/bookmark_random_access_source.dart
+│   │   │   ├── lib/core/parser/saf_random_access_source.dart
+│   │   │   ├── lib/core/parser/bookmark_manager.dart
+│   │   │   ├── lib/core/utils/folder_scanner.dart
+│   │   │   ├── lib/core/utils/logger.dart
+│   │   │   └── lib/core/manager/dictionary_group_manager.dart
+│   │   │
+│   │   └── dictionary_group_manager.dart
+│   │       ├── lib/core/manager/dictionary_manager.dart
+│   │       └── lib/features/settings/services/stardict_service.dart
+│   │
+│   ├── parser/
+│   │   ├── ifo_parser.dart
+│   │   │   ├── lib/core/parser/random_access_source.dart
+│   │   │   └── lib/core/parser/saf_random_access_source.dart
+│   │   │
+│   │   ├── idx_parser.dart
+│   │   │   ├── lib/core/parser/random_access_source.dart
+│   │   │   └── lib/core/parser/ifo_parser.dart
+│   │   │
+│   │   ├── syn_parser.dart
+│   │   │   └── lib/core/parser/random_access_source.dart
+│   │   │
+│   │   ├── dict_reader.dart
+│   │   │   ├── lib/core/database/database_helper.dart
+│   │   │   ├── lib/core/parser/random_access_source.dart
+│   │   │   ├── lib/core/parser/saf_random_access_source.dart
+│   │   │   └── lib/core/parser/bookmark_random_access_source.dart
+│   │   │
+│   │   ├── mdict_reader.dart
+│   │   │   ├── lib/core/utils/logger.dart
+│   │   │   ├── lib/core/parser/random_access_source.dart
+│   │   │   ├── lib/core/parser/saf_random_access_source.dart
+│   │   │   ├── lib/core/parser/bookmark_random_access_source.dart
+│   │   │   └── lib/core/parser/mdd_reader.dart
+│   │   │
+│   │   ├── mdd_reader.dart
+│   │   │   └── lib/core/parser/random_access_source.dart
+│   │   │
+│   │   ├── slob_reader.dart
+│   │   │   ├── lib/core/parser/random_access_source.dart
+│   │   │   ├── lib/core/parser/saf_random_access_source.dart
+│   │   │   └── lib/core/parser/bookmark_random_access_source.dart
+│   │   │
+│   │   ├── dictd_reader.dart
+│   │   │   ├── lib/core/parser/random_access_source.dart
+│   │   │   ├── lib/core/parser/saf_random_access_source.dart
+│   │   │   └── lib/core/parser/bookmark_random_access_source.dart
+│   │   │
+│   │   ├── bookmark_random_access_source.dart
+│   │   │   ├── lib/core/parser/random_access_source.dart
+│   │   │   └── lib/core/parser/bookmark_manager.dart
+│   │   │
+│   │   ├── saf_random_access_source.dart
+│   │   │   └── lib/core/parser/random_access_source.dart
+│   │   │
+│   │   └── bookmark_manager.dart (standalone - no internal deps)
+│   │
+│   └── utils/
+│       ├── benchmark_utils.dart
+│       │   ├── lib/core/database/database_helper.dart
+│       │   ├── lib/core/manager/dictionary_manager.dart
+│       │   └── lib/core/utils/logger.dart
+│       │
+│       ├── folder_scanner.dart
+│       │   └── lib/core/utils/logger.dart
+│       │
+│       ├── html_lookup_wrapper.dart
+│       │   └── lib/core/utils/logger.dart
+│       │
+│       └── multimedia_processor.dart
+│           ├── lib/core/parser/mdict_reader.dart
+│           └── lib/core/utils/logger.dart
+│
+└── lib/features/
+    ├── home/
+    │   └── home_screen.dart
+    │       ├── lib/core/utils/logger.dart
+    │       ├── lib/core/database/database_helper.dart
+    │       ├── lib/core/manager/dictionary_manager.dart
+    │       ├── lib/core/utils/html_lookup_wrapper.dart
+    │       ├── lib/core/utils/multimedia_processor.dart
+    │       └── lib/features/settings/settings_provider.dart
+    │
+    └── settings/
+        ├── services/
+        │   └── stardict_service.dart
+        │       ├── lib/core/database/database_helper.dart
+        │       ├── lib/core/constants/iso_639_2_languages.dart
+        │       └── lib/core/utils/logger.dart
+        │
+        └── widgets/
+            └── stardict_download_dialog.dart
+                └── lib/features/settings/services/stardict_service.dart
+```
+
+---
+
+## Private Function-Level Dependencies
+
+```
+DictionaryManager._getReader
+├── MdictReader._openMdict
+│   ├── IfoParser.parseContent / .parseSource
+│   └── MddReader._openMdd
+├── SlobReader._openSlob
+│   └── SlobReader.blobs
+├── DictReader._openDict
+│   ├── IfoParser.parseContent / .parseSource
+│   ├── IdxParser (for .idx)
+│   └── SynParser (for .syn)
+└── DictdReader._connect
+
+DictionaryManager._extractToWorkspace
+├── GZipDecoder (dart:io)
+├── BZip2Decoder (archive)
+├── XZDecoder (archive)
+├── SZArchive.extract (flutter_7zip)
+└── FolderScanner._extractArchiveToDir
+
+DatabaseHelper._ensureDictionaryMapCache
+├── DatabaseHelper.database
+└── sqflite queries
+
+HtmlLookupWrapper._tagRegExp (private regex)
+└── logger.hDebugPrint (showHtmlProcessing check)
+
+MultimediaProcessor._replaceImgSrcWithDataUris
+├── MddReader.getMddResourceBytes
+└── MultimediaProcessor._base64EncodeImage
+
+MultimediaProcessor._addMediaTapHandlers
+├── MddReader.getCssContent
+└── MultimediaProcessor._createMediaWidget
+
+StardictService._fetchDictionariesFromUrl
+├── http.get (package)
+└── StardictDictionary.fromTsvRow
+
+DictionaryGroupManager._saveGroups
+└── SharedPreferences
+```
+
+---
+
+*Last updated: March 2026*

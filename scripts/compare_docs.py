@@ -80,7 +80,14 @@ def get_code_classes():
     for f in LIB_DIR.rglob("*.dart"):
         content = f.read_text()
         rel_path = str(f.relative_to(PROJECT_ROOT))
-        for m in re.finditer(r'class\s+(\w+)', content):
+        
+        # Remove comments to avoid false positives
+        # Remove single-line comments
+        content_no_comments = re.sub(r'//.*$', '', content, flags=re.MULTILINE)
+        # Remove multi-line comments
+        content_no_comments = re.sub(r'/\*.*?\*/', '', content_no_comments, flags=re.DOTALL)
+        
+        for m in re.finditer(r'class\s+(\w+)', content_no_comments):
             cn = m.group(1)
             if not cn.startswith('_'):
                 classes[cn] = rel_path
@@ -101,7 +108,9 @@ def get_private_code_classes():
 def get_code_class_fields():
     """Get all public class fields (properties) from code.
     
-    Returns dict: class_name -> set of field names
+    Returns dict: class_name -> set of field names.
+    Only matches fields at class level (indentation 0-2 spaces), not method-local variables.
+    Also detects getters as properties.
     """
     class_fields = {}
     for f in LIB_DIR.rglob("*.dart"):
@@ -112,9 +121,9 @@ def get_code_class_fields():
             if class_name.startswith('_'):
                 continue
             
-            # Find class body
-            brace_start = content.find('{', class_match.end())
-            if brace_start == -1:
+            # The { is included in the match, so class_match.end() is after it
+            brace_start = class_match.end() - 1
+            if brace_start < 0 or content[brace_start] != '{':
                 continue
             
             # Find closing brace
@@ -131,10 +140,23 @@ def get_code_class_fields():
             
             fields = set()
             
-            # Pattern: final Type fieldName;
-            # Also: final Type? fieldName;
-            for m in re.finditer(r'final\s+(?:[\w<>?]+\??)\s+(\w+)\s*[;=]', class_body):
-                field_name = m.group(1)
+            # Pattern 1: final Type fieldName; (only at class level)
+            for m in re.finditer(r'^(\s{0,2}final\s+(?:[\w<>?]+\??)\s+(\w+)\s*[;=])', class_body, re.MULTILINE):
+                field_name = m.group(2)
+                # Skip private fields
+                if field_name.startswith('_'):
+                    continue
+                # Skip common non-field names
+                if field_name not in ['build', 'child', 'children', 'context', 'widget']:
+                    fields.add(field_name)
+            
+            # Pattern 2: Getters - "Type get fieldName =>" or "Type? get fieldName" with async/sync
+            # Only at class level (0-2 spaces indentation)
+            for m in re.finditer(r'^(\s{0,2}(?:[\w<>?]+\??)\s+get\s+(\w+)\s*(?:\(|=>|async|\{))', class_body, re.MULTILINE):
+                field_name = m.group(2)
+                # Skip private getters
+                if field_name.startswith('_'):
+                    continue
                 # Skip common non-field names
                 if field_name not in ['build', 'child', 'children', 'context', 'widget']:
                     fields.add(field_name)
@@ -191,9 +213,9 @@ def get_code_private_static_consts():
         for class_match in re.finditer(r'class\s+(\w+)\s*(?:<[^>]+>)?\s*\{', content):
             class_name = class_match.group(1)
             
-            # Find class body
-            brace_start = content.find('{', class_match.end())
-            if brace_start == -1:
+            # The { is included in the match
+            brace_start = class_match.end() - 1
+            if brace_start < 0 or content[brace_start] != '{':
                 continue
             
             # Find closing brace
@@ -241,6 +263,7 @@ def get_doc_class_fields(md_file):
     """Get documented class fields from documentation.
     
     Returns dict: class_name -> set of field names
+    Only extracts from property tables, not method parameter tables.
     """
     path = REFERENCE_DIR / md_file
     if not path.exists():
@@ -252,8 +275,9 @@ def get_doc_class_fields(md_file):
     
     class_fields = {}
     
-    # Find AppSettings class section and its property table
-    # Pattern: | `fieldName` | `type` | description |
+    # Pattern to match property blocks: starts with "##### Property: `name`" or similar
+    property_block_pattern = r'##### Property: `(\w+)`.*?(?=\n##### |\n#### |\n## |\Z)'
+    
     for class_match in re.finditer(r'#### Class: `(\w+)`', content):
         class_name = class_match.group(1)
         start = class_match.start()
@@ -264,15 +288,36 @@ def get_doc_class_fields(md_file):
         
         section = content[start:end]
         
-        # Look for property table
         fields = set()
-        for m in re.finditer(r'\|\s*`(\w+)`\s*\|', section):
-            field_name = m.group(1)
-            # Only include actual fields, not constructor params or methods
-            if field_name not in ['copyWith', 'customPrimary', 'customBackground', 
-                                  'customHeadword', 'customSanskritText', 'label', 
-                                  'value', 'toThemeMode', 'fromValue']:
-                fields.add(field_name)
+        
+        # Look for property blocks (##### Property:) and extract field names from their tables
+        for prop_match in re.finditer(property_block_pattern, section, re.DOTALL):
+            prop_content = prop_match.group(0)
+            prop_name = prop_match.group(1)
+            fields.add(prop_name)
+            
+            # Look for field tables within property blocks
+            field_table_pattern = r'##### (?:Fields|Private Instance Fields)\s*\n(.*?)(?=\n##### |\n#### |\Z)'
+            for ft_match in re.finditer(field_table_pattern, prop_content, re.DOTALL):
+                table_content = ft_match.group(1)
+                for m in re.finditer(r'\|\s*`(\w+)`\s*\|', table_content):
+                    field_name = m.group(1)
+                    if field_name not in ['copyWith', 'customPrimary', 'customBackground', 
+                                          'customHeadword', 'customSanskritText', 'label', 
+                                          'toThemeMode', 'fromValue']:
+                        fields.add(field_name)
+        
+        # Also look for direct Fields tables at the class level (not inside property blocks)
+        # These come right after the class description
+        field_table_pattern = r'##### (?:Fields|Properties)\s*\n(.*?)(?=\n##### |\n--- |\n## |\Z)'
+        for ft_match in re.finditer(field_table_pattern, section, re.DOTALL):
+            table_content = ft_match.group(1)
+            for m in re.finditer(r'\|\s*`(\w+)`\s*\|', table_content):
+                field_name = m.group(1)
+                if field_name not in ['copyWith', 'customPrimary', 'customBackground', 
+                                      'customHeadword', 'customSanskritText', 'label', 
+                                      'toThemeMode', 'fromValue']:
+                    fields.add(field_name)
         
         if fields:
             class_fields[class_name] = fields
@@ -381,9 +426,9 @@ def get_doc_methods_with_signatures(md_file):
         
         methods = {}
         
-        # Pattern for method heading: ##### Static Method: `methodName` or ##### Method: `methodName`
+        # Pattern for method heading: ##### Static Method: `methodName`, ##### Method: `methodName`, or ##### Property: `methodName`
         # Also handle private.md format: ##### `methodName`
-        method_pattern = r'##### (?:Static )?Method: `(\w+)`'
+        method_pattern = r'##### (?:Static )?(?:Method|Property): `(\w+)`'
         private_method_pattern = r'^##### `(\w+)`'
         
         for m in re.finditer(method_pattern, section):
@@ -636,14 +681,14 @@ def get_code_methods_with_signatures():
     for f in LIB_DIR.rglob("*.dart"):
         content = f.read_text()
         
-        for class_match in re.finditer(r'class\s+(\w+)', content):
+        for class_match in re.finditer(r'class\s+(\w+)\s*(?:<[^>]+>)?\s*\{', content):
             class_name = class_match.group(1)
             if class_name.startswith('_'):
                 continue
             
-            # Find class body
-            brace_start = content.find('{', class_match.end())
-            if brace_start == -1:
+            # The { is included in the match
+            brace_start = class_match.end() - 1
+            if brace_start < 0 or content[brace_start] != '{':
                 continue
             
             # Find closing brace
@@ -678,7 +723,9 @@ def get_code_methods_with_signatures():
             # Pattern 2: Static methods - "static Type methodName(Type1 param1, Type2 param2)" or with async
             # Handle both: static Type name( and static Future<Type> name( and async versions
             # Also handle named parameters: static Type name({
-            for m in re.finditer(r'static\s+(.+?)\s+(\w+)\s*(?:\([^)]*\))*\s*\(', class_body):
+            # Use a more restrictive pattern to avoid matching across multiple lines incorrectly
+            # Handle nested generics like List<Map<String, int>>
+            for m in re.finditer(r'static\s+([\w<>?]+)\s+(\w+)\s*\(', class_body):
                 full_ret = m.group(1).strip()
                 method_name = m.group(2)
                 
@@ -691,14 +738,16 @@ def get_code_methods_with_signatures():
                 if not method_name[0].islower():
                     continue
                 
-                # Check if async
-                sig_start = m.end() - 1
-                # Look ahead to see if there's async before the (
-                lookahead = class_body[m.start():m.start()+150]
-                is_async = 'async' in lookahead[:lookahead.find('(')]
+                # Check if async - look at the line after the method name
+                line_start = class_body.rfind('\n', 0, m.start()) + 1
+                line_end = class_body.find('\n', m.end())
+                if line_end == -1:
+                    line_end = len(class_body)
+                lookahead = class_body[m.start():line_end]
+                is_async = 'async' in lookahead
                 
                 # Extract parameters - get more context to handle async and named params
-                full_sig = class_body[m.start():sig_start+300]
+                full_sig = class_body[m.start():m.start()+300]
                 params = extract_params_from_signature(full_sig)
                 
                 ret_type = full_ret
@@ -710,9 +759,9 @@ def get_code_methods_with_signatures():
             # Pattern 3: Instance methods - check for known instance methods
             known_methods = [
                 'update', 'download', 'downloadAll', 'addActiveDict', 'removeActiveDict', 
-                'reorderDicts', 'build', 'process', 'parse', 'extractAbbreviations', 
-                'extractLsReferences', 'extractLsRefsWithDetails', 'processBodyHtml', 
-                'buildEntryWidget', 'init'
+                'reorderDicts', 'build', 'process', 'parse', 'parseContent', 'parseSource',
+                'extractAbbreviations', 'extractLsReferences', 'extractLsRefsWithDetails', 
+                'processBodyHtml', 'buildEntryWidget', 'init', 'blobs'
             ]
             
             for known in known_methods:
