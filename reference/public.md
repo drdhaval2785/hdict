@@ -1,0 +1,1121 @@
+# Public API Reference (version 0.1.0)
+
+This document lists all public classes, functions, and methods in the HDict codebase. Each entry includes the file location, description, parameters, return types, and usage examples where applicable.
+
+---
+
+## Table of Contents
+
+1. [Core Services](#core-services)
+2. [Dictionary Readers](#dictionary-readers)
+3. [Models](#models)
+4. [Providers](#providers)
+5. [Main App](#main-app)
+6. [Screens](#screens)
+7. [Utils](#utils)
+
+---
+
+## Core Services
+
+### 1. `lib/core/utils/word_boundary.dart`
+
+#### Class: `WordBoundary`
+
+A utility to find word boundaries in text based on Unicode character properties.
+
+##### Static Method: `wordAt`
+
+Extracts the word at a given offset from text.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `text` | `String` | The text to search |
+| `offset` | `int` | The character offset position |
+
+**Returns:** `String?` - The word at the offset, or null if not a word character or out of bounds.
+
+```dart
+final word = WordBoundary.wordAt("Hello world", 0); // Returns "Hello"
+final word = WordBoundary.wordAt("Hello world", 6); // Returns "world"
+```
+
+---
+
+### 2. `lib/core/utils/html_lookup_wrapper.dart`
+
+#### Class: `HtmlLookupWrapper`
+
+A utility to process dictionary record HTML. Combines whitespace normalization, highlighting, and underlining.
+
+##### Static Method: `processRecord`
+
+Processes a dictionary record in a single pass for maximum performance.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `html` | `String` | The HTML content to process |
+| `format` | `String` | Dictionary format (e.g., 'stardict', 'mdict') |
+| `typeSequence` | `String?` | Optional type sequence for format-specific processing |
+| `highlightQuery` | `String?` | Optional query to highlight in the text |
+| `underlineQuery` | `String?` | Optional query to underline in the text |
+
+**Returns:** `String` - Processed HTML with whitespace normalized and queries highlighted.
+
+```dart
+final processed = HtmlLookupWrapper.processRecord(
+  html: '<div>Hello world</div>',
+  format: 'stardict',
+  highlightQuery: 'hello',
+);
+```
+
+##### Static Method: `highlightText`
+
+Process record for basic highlighting.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `html` | `String` | The HTML content |
+| `query` | `String` | Query string to highlight |
+
+**Returns:** `String` - HTML with query wrapped in `<mark>` tags.
+
+```dart
+final highlighted = HtmlLookupWrapper.highlightText(html, 'search');
+```
+
+##### Static Method: `underlineText`
+
+Process record for underlining.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `html` | `String` | The HTML content |
+| `query` | `String` | Query string to underline |
+
+**Returns:** `String` - HTML with query wrapped in `<mark>` tags (for underline styling).
+
+---
+
+### 3. `lib/core/utils/multimedia_processor.dart`
+
+#### Class: `MultimediaProcessor`
+
+Processes HTML to embed multimedia content (audio, video, images) from MDD resources.
+
+##### Constructor
+
+```dart
+MultimediaProcessor(MdictReader? mddReader, String? cssContent)
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `mddReader` | `MdictReader?` | Optional MDD reader for embedded media |
+| `cssContent` | `String?` | Optional CSS content for styling |
+
+##### Property: `cssContent`
+
+```dart
+String? get cssContent
+```
+
+Returns the CSS content.
+
+##### Method: `processHtmlWithMedia`
+
+Processes HTML with embedded multimedia.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `html` | `String` | The HTML content to process |
+
+**Returns:** `Future<String>` - Processed HTML with media converted to data URIs or tap handlers.
+
+---
+
+### 4. `lib/core/utils/anchor_id_extension.dart`
+
+#### Class: `AnchorIdExtension`
+
+Custom HtmlExtension for flutter_html that registers AnchorKey for elements with id attributes. Enables bidirectional navigation between cross-references and footnotes.
+
+##### Constructor
+
+```dart
+const AnchorIdExtension()
+```
+
+This extension automatically wraps all HTML elements with an `id` attribute in a GestureDetector with an AnchorKey, enabling `flutter_html`'s built-in anchor scrolling to work bidirectionally.
+
+---
+
+## Dictionary Readers
+
+### 1. `lib/core/parser/dict_reader.dart`
+
+#### Class: `DictReader`
+
+Reads definitions from a StarDict .dict or .dict.dz file at specified offsets and lengths.
+
+##### Constructor
+
+```dart
+DictReader(String path, {required RandomAccessSource source, int? dictId})
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `path` | `String` | Path to the dictionary file |
+| `source` | `RandomAccessSource` | Random access source |
+| `dictId` | `int?` | Optional dictionary ID |
+
+##### Property: `source`
+
+```dart
+final RandomAccessSource source
+```
+
+The random access source for reading.
+
+##### Property: `path`
+
+```dart
+final String path
+```
+
+The file path.
+
+##### Property: `dictId`
+
+```dart
+final int? dictId
+```
+
+Optional dictionary ID.
+
+##### Property: `isDz`
+
+```dart
+bool get isDz
+```
+
+True for .dict.dz files; false for plain .dict.
+
+##### Static Method: `fromPath`
+
+Creates a DictReader from a local file path.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `path` | `String` | Path to the dictionary file |
+| `dictId` | `int?` | Optional dictionary ID |
+
+**Returns:** `Future<DictReader>` - A new DictReader instance.
+
+##### Static Method: `fromUri`
+
+Creates a DictReader from an Android SAF URI.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `uri` | `String` | SAF URI string |
+| `dictId` | `int?` | Optional dictionary ID |
+
+**Returns:** `Future<DictReader>` - A new DictReader instance.
+
+##### Static Method: `fromLinkedSource`
+
+Creates a DictReader from a linked source (SAF or Bookmark).
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `source` | `String` | Content URI (Android) or bookmark/path (iOS/macOS) |
+| `targetPath` | `String?` | Optional target path |
+| `actualPath` | `String?` | Optional actual path (iOS/macOS) |
+
+**Returns:** `Future<DictReader>` - A new DictReader instance.
+
+---
+
+### 2. `lib/core/parser/mdict_reader.dart`
+
+#### Class: `MdictReader`
+
+Reads MDict dictionary files (.mdx, .mdd).
+
+##### Static Method: `fromPath`
+
+Creates an MdictReader from a file path.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `path` | `String` | Path to the MDX file |
+
+**Returns:** `Future<MdictReader>` - A new MdictReader instance.
+
+##### Static Method: `fromUri`
+
+Creates an MdictReader from a URI.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `uri` | `Uri` | URI to the MDX file |
+
+**Returns:** `Future<MdictReader>` - A new MdictReader instance.
+
+##### Static Method: `fromLinkedSource`
+
+Creates an MdictReader from a linked source.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `source` | `String` | Source path or URI |
+| `targetPath` | `String?` | Optional target path |
+| `actualPath` | `String?` | Optional actual path |
+| `mddPath` | `String?` | Optional MDD path |
+
+**Returns:** `Future<MdictReader>` - A new MdictReader instance.
+
+##### Static Method: `fromPath`
+
+Creates an MdictReader from a file path.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `path` | `String` | Path to the MDX file |
+| `mddPath` | `String?` | Optional MDD file path |
+
+**Returns:** `Future<MdictReader>` - A new MdictReader instance.
+
+##### Static Method: `fromUri`
+
+Creates an MdictReader from a URI.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `uri` | `Uri` | URI to the MDX file |
+| `mddPath` | `String?` | Optional MDD file path |
+
+**Returns:** `Future<MdictReader>` - A new MdictReader instance.
+
+---
+
+### 2. `lib/core/parser/mdd_reader.dart`
+
+#### Class: `MddReader`
+
+Reads MDict multimedia files (.mdd).
+
+##### Static Method: `fromPath`
+
+Creates an MddReader from a file path.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `path` | `String` | Path to the MDD file |
+
+**Returns:** `Future<MddReader>` - A new MddReader instance.
+
+##### Static Method: `fromUri`
+
+Creates an MddReader from a URI.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `uri` | `Uri` | URI to the MDD file |
+
+**Returns:** `Future<MddReader>` - A new MddReader instance.
+
+##### Static Method: `fromLinkedSource`
+
+Creates an MddReader from a linked source.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `reader` | `RandomAccessSource` | Random access source |
+
+**Returns:** `Future<MddReader>` - A new MddReader instance.
+
+---
+
+### 3. `lib/core/parser/slob_reader.dart`
+
+#### Class: `SlobReader`
+
+Reads SLOB (Sorted List of Blobs) dictionary files.
+
+##### Property: `blobs`
+
+```dart
+Map<String, dynamic> get blobs
+```
+
+Returns the blobs in the SLOB file.
+
+##### Static Method: `fromPath`
+
+Creates a SlobReader from a file path.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `path` | `String` | Path to the SLOB file |
+
+**Returns:** `Future<SlobReader>` - A new SlobReader instance.
+
+##### Static Method: `fromUri`
+
+Creates a SlobReader from a URI.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `uri` | `Uri` | URI to the SLOB file |
+
+**Returns:** `Future<SlobReader>` - A new SlobReader instance.
+
+##### Static Method: `fromLinkedSource`
+
+Creates a SlobReader from a linked source.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `source` | `String` | Source path or URI |
+| `targetPath` | `String?` | Optional target path |
+| `actualPath` | `String?` | Optional actual path |
+
+**Returns:** `Future<SlobReader>` - A new SlobReader instance.
+
+---
+
+### 4. `lib/core/parser/dictd_reader.dart`
+
+#### Class: `DictdReader`
+
+Reads Dictd dictionary files.
+
+##### Static Method: `fromPath`
+
+Creates a DictdReader from a file path.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `path` | `String` | Path to the Dictd index file |
+
+**Returns:** `Future<DictdReader>` - A new DictdReader instance.
+
+##### Static Method: `fromUri`
+
+Creates a DictdReader from a URI.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `uri` | `Uri` | URI to the Dictd index file |
+
+**Returns:** `Future<DictdReader>` - A new DictdReader instance.
+
+##### Static Method: `fromLinkedSource`
+
+Creates a DictdReader from a linked source.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `source` | `String` | Source path or URI |
+| `targetPath` | `String?` | Optional target path |
+| `actualPath` | `String?` | Optional actual path |
+
+**Returns:** `Future<DictdReader>` - A new DictdReader instance.
+
+---
+
+### 5. `lib/core/parser/ifo_parser.dart`
+
+#### Class: `IfoParser`
+
+Parses StarDict .ifo files.
+
+##### Static Method: `parse`
+
+Parses an IFO file.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `path` | `String` | Path to the IFO file |
+
+**Returns:** `Map<String, dynamic>` - Parsed IFO data including dictionary name, word count, and file paths.
+
+---
+
+### 6. `lib/core/parser/idx_parser.dart`
+
+#### Class: `IdxParser`
+
+Parses StarDict .idx files.
+
+##### Static Method: `parse`
+
+Parses an IDX file.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `content` | `String` | The IDX file content |
+
+**Returns:** `List<Map<String, dynamic>>` - List of word entries with word, offset, and length.
+
+---
+
+### 7. `lib/core/parser/syn_parser.dart`
+
+#### Class: `SynParser`
+
+Parses StarDict .syn files.
+
+##### Static Method: `parse`
+
+Parses a SYN file.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `content` | `String` | The SYN file content |
+
+**Returns:** `List<Map<String, dynamic>>` - List of synonym entries.
+
+---
+
+## Models
+
+### 1. `lib/core/models/stardict_dictionary.dart`
+
+#### Class: `StardictDictionary`
+
+Represents a StarDict dictionary.
+
+---
+
+### 2. `lib/core/models/stardict_release.dart`
+
+#### Class: `StardictRelease`
+
+Represents a StarDict dictionary release.
+
+---
+
+### 3. `lib/core/models/discovered_dict.dart`
+
+#### Class: `DiscoveredDict`
+
+Represents a dictionary discovered during scanning.
+
+---
+
+### 4. `lib/core/models/incomplete_dict.dart`
+
+#### Class: `IncompleteDict`
+
+Represents an incomplete or corrupted dictionary.
+
+---
+
+### 5. `lib/core/models/dictionary_group.dart`
+
+#### Class: `DictionaryGroup`
+
+Represents a group of dictionaries.
+
+---
+
+### 6. `lib/core/models/deletion_progress.dart`
+
+#### Class: `DeletionProgress`
+
+Represents the progress of dictionary deletion.
+
+---
+
+### 7. `lib/core/models/import_progress.dart`
+
+#### Class: `ImportProgress`
+
+Represents the progress of dictionary import.
+
+---
+
+### 8. `lib/core/models/folder_scan_result.dart`
+
+#### Class: `FolderScanResult`
+
+Represents the result of scanning a folder for dictionaries.
+
+---
+
+## Providers
+
+### 1. `lib/features/settings/settings_provider.dart`
+
+#### Class: `SettingsProvider`
+
+Manages application settings using SharedPreferences.
+
+See [SettingsProvider API](private.md#1-libfeaturessettingssettings_providerdart) for public methods.
+
+---
+
+### 2. `lib/core/benchmark.dart`
+
+#### Class: `HBenchmark`
+
+Performance benchmarking utility.
+
+##### Static Method: `runLookupBenchmark`
+
+Runs a lookup benchmark.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `wordsPerDict` | `int` | Number of words to lookup per dictionary (default: 20) |
+
+**Returns:** `Future<String>` - Benchmark report string.
+
+---
+
+### 3. `lib/core/hperf.dart`
+
+#### Class: `HPerf`
+
+Performance measurement utility.
+
+##### Static Method: `start`
+
+Starts a performance timer.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | `String` | Timer name |
+
+**Returns:** `Stopwatch?` - A stopwatch for the timer.
+
+##### Static Method: `end`
+
+Ends a performance timer.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `sw` | `Stopwatch?` | The stopwatch from start() |
+| `name` | `String` | Timer name |
+
+**Returns:** `void`
+
+##### Static Method: `reset`
+
+Resets all performance data.
+
+##### Static Method: `dump`
+
+Prints all performance data to console.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `prefix` | `String` | Prefix for output |
+
+**Returns:** `void`
+
+##### Static Method: `record`
+
+Records a value.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | `String` | Metric name |
+| `ms` | `int` | Milliseconds value |
+
+---
+
+## Main App
+
+### 1. `lib/main.dart`
+
+#### Class: `MyApp`
+
+The main application widget.
+
+---
+
+### 2. `lib/core/utils/app_theme.dart`
+
+#### Class: `AppTheme`
+
+Theme configuration utility.
+
+##### Static Method: `getTheme`
+
+Gets a theme based on brightness and font family.
+
+**Returns:** `ThemeData` - The configured theme.
+
+##### Property: `lightTheme`
+
+Returns the light theme.
+
+##### Property: `darkTheme`
+
+Returns the dark theme.
+
+---
+
+## Screens
+
+### 1. `lib/features/home/home_screen.dart`
+
+#### Class: `HomeScreen`
+
+Main home screen with search functionality.
+
+##### Static Method: `normalizeWhitespace`
+
+Normalizes whitespace in HTML content.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `text` | `String` | Input text |
+| `format` | `String?` | Dictionary format (stardict, html, mdict) |
+| `typeSequence` | `String?` | Optional type sequence |
+
+**Returns:** `String` - Normalized string.
+
+##### Static Method: `consolidateDefinitions`
+
+Consolidates definitions from multiple dictionaries.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `groupedResults` | `List<MapEntry<int, Map<String, List<Map<String, dynamic>>>>>` | Grouped results |
+| `dictMap` | `Map<int, Map<String, dynamic>>?` | Optional dictionary metadata map |
+
+**Returns:** `Future<List<Map<String, dynamic>>>` - Consolidated definitions grouped by dictionary.
+
+---
+
+### 2. `lib/features/settings/settings_screen.dart`
+
+#### Class: `SettingsScreen`
+
+Settings screen for configuring the app.
+
+---
+
+### 3. `lib/features/bookmarks/bookmarks_screen.dart`
+
+#### Class: `BookmarkManager`
+
+Manages platform-specific persistent file access. Handles security-scoped bookmarks on iOS/macOS and SAF on Android.
+
+##### Static Method: `createBookmark`
+
+Creates a security-scoped bookmark for a file path.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `path` | `String` | File path to bookmark |
+
+**Returns:** `Future<String?>` - Bookmark string or original path.
+
+##### Static Method: `pickDirectory`
+
+Picks a directory using native SAF picker on Android.
+
+**Returns:** `Future<String?>` - Selected directory URI or null.
+
+##### Static Method: `pickFiles`
+
+Picks one or more files using native SAF picker on Android.
+
+**Returns:** `Future<List<String>?>` - List of selected URIs or null.
+
+##### Static Method: `resolveBookmark`
+
+Resolves a security-scoped bookmark to a physical path.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `bookmark` | `String` | Bookmark string to resolve |
+
+**Returns:** `Future<String?>` - Physical path or null.
+
+##### Static Method: `startAccessingPath`
+
+Starts security-scoped access for a physical path.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `path` | `String` | Physical path to access |
+
+**Returns:** `Future<bool>` - True if successful.
+
+##### Static Method: `stopAccess`
+
+Stops security-scoped access for a previously resolved bookmark.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `bookmark` | `String` | Bookmark string |
+
+**Returns:** `Future<void>`
+
+##### Static Method: `stopAccessingPath`
+
+Stops security-scoped access for a physical path.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `path` | `String` | Physical path |
+
+**Returns:** `Future<void>`
+
+---
+
+### 4. `lib/features/flash_cards/flash_cards_screen.dart`
+
+#### Class: `FlashCardsScreen`
+
+Flash cards screen for vocabulary learning.
+
+---
+
+### 5. `lib/features/dictionary_management/dictionary_management_screen.dart`
+
+#### Class: `DictionaryManagementScreen`
+
+Dictionary management screen.
+
+---
+
+### 6. `lib/features/dictionary_groups/dictionary_groups_screen.dart`
+
+#### Class: `DictionaryGroupsScreen`
+
+Dictionary groups management screen.
+
+---
+
+### 7. `lib/features/search_history/search_history_screen.dart`
+
+#### Class: `SearchHistoryScreen`
+
+Search history screen.
+
+---
+
+### 8. `lib/features/score_history/score_history_screen.dart`
+
+#### Class: `ScoreHistoryScreen`
+
+Score history screen.
+
+---
+
+### 9. `lib/features/drawer/about_screen.dart`
+
+#### Class: `AboutScreen`
+
+About app screen.
+
+---
+
+### 10. `lib/features/drawer/manual_screen.dart`
+
+#### Class: `ManualScreen`
+
+User manual screen.
+
+---
+
+### 11. `lib/features/drawer/support_screen.dart`
+
+#### Class: `SupportScreen`
+
+Support/help screen.
+
+---
+
+### 12. `lib/features/drawer/app_drawer.dart`
+
+#### Class: `AppDrawer`
+
+Navigation drawer widget.
+
+---
+
+### 13. `lib/features/home/home_screen.dart`
+
+#### Class: `MddVideoHtmlExtension`
+
+Custom HtmlExtension for flutter_html that renders MDD video resources. Handles `<video>` tags with `mdd-video:` source protocol.
+
+##### Constructor
+
+```dart
+MddVideoHtmlExtension({required int dictId})
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dictId` | `int` | Dictionary ID for resource lookup |
+
+##### Property: `supportedTags`
+
+```dart
+Set<String> get supportedTags => {'video'}
+```
+
+Returns the set of supported HTML tags.
+
+##### Method: `build`
+
+Builds an InlineSpan for video elements.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `context` | `ExtensionContext` | HTML extension context |
+
+**Returns:** `dynamic` - WidgetSpan containing video player or Container.
+
+---
+
+## Utils
+
+### 1. `lib/core/bookmark_manager.dart`
+
+#### Class: `BookmarkRandomAccessSource`
+
+Random access source for bookmarks.
+
+##### Property: `length`
+
+```dart
+int get length
+```
+
+Returns the length of the bookmark.
+
+##### Constructor
+
+```dart
+BookmarkRandomAccessSource(this._bookmark)
+```
+
+---
+
+### 2. `lib/core/saf_random_access_source.dart`
+
+#### Class: `SafRandomAccessSource`
+
+Random access source for Storage Access Framework.
+
+##### Property: `length`
+
+```dart
+int get length
+```
+
+Returns the length of the content.
+
+---
+
+### 3. `lib/core/dictionary_manager.dart`
+
+#### Class: `DictionaryManager`
+
+Manages dictionary readers.
+
+##### Static Method: `clearReaderCache`
+
+Clears all cached dictionary readers.
+
+##### Static Method: `closeReader`
+
+Closes a specific dictionary reader.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dictId` | `int` | Dictionary ID |
+
+---
+
+### 4. `lib/core/dictionary_group_manager.dart`
+
+#### Class: `DictionaryGroupManager`
+
+Manages dictionary groups stored in SharedPreferences.
+
+##### Static Method: `addDictionaryToGroup`
+
+Adds a dictionary to a group.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `groupName` | `String` | Group name |
+| `dictId` | `int` | Dictionary ID |
+
+**Returns:** `Future<void>`
+
+##### Static Method: `autoGenerateGroupsFromDownloaded`
+
+Auto-generates groups from downloaded dictionaries.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `installedDicts` | `List<Map<String, dynamic>>` | List of installed dictionaries |
+
+**Returns:** `Future<void>`
+
+##### Static Method: `createCustomGroup`
+
+Creates a custom group.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `groupName` | `String` | Group name |
+
+**Returns:** `Future<void>`
+
+##### Static Method: `deleteGroup`
+
+Deletes a group.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `groupId` | `String` | Group ID |
+
+**Returns:** `Future<void>`
+
+##### Static Method: `getGroups`
+
+Gets all groups.
+
+**Returns:** `Future<List<DictionaryGroup>>` - List of groups.
+
+##### Static Method: `isGroupActive`
+
+Checks if a group is active.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `groupId` | `String` | Group ID |
+
+**Returns:** `Future<bool>` - True if the group is active.
+
+##### Static Method: `removeDictionaryFromAllGroups`
+
+Removes a dictionary from all groups.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dictId` | `int` | Dictionary ID |
+
+**Returns:** `Future<void>`
+
+##### Static Method: `removeDictionaryFromGroup`
+
+Removes a dictionary from a group.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `groupId` | `String` | Group ID |
+| `dictId` | `int` | Dictionary ID |
+
+**Returns:** `Future<void>`
+
+##### Static Method: `saveGroups`
+
+Saves groups to storage.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `groups` | `List<DictionaryGroup>` | List of groups to save |
+
+**Returns:** `Future<void>`
+
+##### Static Method: `toggleGroup`
+
+Toggles a group's active state.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `groupId` | `String` | Group ID |
+| `enable` | `bool` | Enable or disable |
+
+**Returns:** `Future<void>`
+
+---
+
+### 5. `lib/core/stardict_service.dart`
+
+#### Class: `StardictService`
+
+Service for StarDict dictionary operations.
+
+---
+
+## Database
+
+### 1. `lib/core/database_helper.dart`
+
+#### Class: `DatabaseHelper`
+
+Database helper for SQLite operations.
+
+##### Property: `database`
+
+```dart
+Database get database
+```
+
+Returns the database instance.
+
+##### Property: `initializeDatabaseFactory`
+
+```dart
+static DatabaseFactory get initializeDatabaseFactory
+```
+
+Returns the database factory.
+
+##### Method: `setDatabase`
+
+Sets the database instance.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `db` | `Database` | Database instance |
+
+---
+
+## Screens
+
+### 1. `lib/features/result/result_screen.dart`
+
+#### Class: `ResultScreen`
+
+Screen for displaying search results.
+
+---
+
+## Dialogs
+
+### 1. `lib/features/dictionary_management/stardict_download_dialog.dart`
+
+#### Class: `StardictDownloadDialog`
+
+Dialog for downloading StarDict dictionaries.
+
+---
+
+## Dependency Graph
+
+```txt
+SettingsProvider --> DatabaseHelper
+DictionaryManager --> MdictReader, MddReader, SlobReader, DictdReader
+DictionaryGroupManager --> DatabaseHelper
+HomeScreen --> DictionaryManager, SettingsProvider
+MyApp --> SettingsProvider, HomeScreen
+```

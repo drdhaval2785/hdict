@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.7] - 2026-03-26
+
+### Added
+- **List Mode**: This optional mode gives the user just the headwords as per his query. He can click on them to get the full definition. Pop-Up queries are also supported inside List Mode. Pop-up queries give full definition though, as it is expected that the user would be looking for just the quick meaning of that word.
+- **Internal Reference**: Some stardict dictionaries provide internal references. Their support is started. It is not yet stable. May be improved if any glitches observed or bug report received.
+
 ## [1.5.6] - 2026-03-25
 
 ### Added
