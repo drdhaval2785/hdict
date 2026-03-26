@@ -515,8 +515,15 @@ Future<void> _indexEntry(_IndexArgs args) async {
     final int totalAll = totalHeadwords + totalSyns; // unified denominator
     int headwordCount = 0;
     int defWordCount = 0;
+
+    // Single insert mode when not indexing definitions (faster)
+    final bool useBatching = args.indexDefinitions;
     const int batchSize = 10000;
     List<Map<String, dynamic>> dbBatch = [];
+
+    hDebugPrint(
+      'StarDict: useBatching=$useBatching (indexDefinitions=${args.indexDefinitions})',
+    );
 
     // Optimization: Load entire .dict or .dict.dz file into memory for small files (<50MB)
     // For .dict.dz files, bytes are loaded before creating DictReader
@@ -591,7 +598,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
               .length;
         }
 
-        if (dbBatch.length >= batchSize) {
+        if (useBatching && dbBatch.length >= batchSize) {
           startId = await dbHelper.batchInsertWords(
             args.dictId,
             dbBatch,
@@ -613,12 +620,16 @@ Future<void> _indexEntry(_IndexArgs args) async {
         }
       }
     }
-    if (dbBatch.isNotEmpty)
+    if (dbBatch.isNotEmpty) {
+      hDebugPrint(
+        'StarDict: Inserting all ${dbBatch.length} headwords to DB in single transaction',
+      );
       startId = await dbHelper.batchInsertWords(
         args.dictId,
         dbBatch,
         startId: startId,
       );
+    }
 
     if (args.synPath != null) {
       final synParser = SynParser();
@@ -646,7 +657,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
             });
             headwordCount++;
           }
-          if (synBatch.length >= 10000) {
+          if (useBatching && synBatch.length >= 10000) {
             startId = await dbHelper.batchInsertWords(
               args.dictId,
               synBatch,
@@ -672,6 +683,9 @@ Future<void> _indexEntry(_IndexArgs args) async {
         await synSource.close();
       }
       if (synBatch.isNotEmpty) {
+        hDebugPrint(
+          'StarDict: Inserting all ${synBatch.length} synonyms to DB in single transaction',
+        );
         startId = await dbHelper.batchInsertWords(
           args.dictId,
           synBatch,
@@ -762,6 +776,12 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
     int indexed = 0;
     int defWordCount = 0;
 
+    // Single insert mode when not indexing definitions (faster)
+    final bool useBatching = args.indexDefinitions;
+    hDebugPrint(
+      'MDict: useBatching=$useBatching (indexDefinitions=${args.indexDefinitions})',
+    );
+
     for (final entry in allKeys) {
       final word = entry.$1;
       final offset = entry.$2;
@@ -785,7 +805,7 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
             .length;
       }
 
-      if (batch.length >= 10000) {
+      if (useBatching && batch.length >= 10000) {
         startId = await dbHelper.batchInsertWords(
           args.dictId,
           batch,
@@ -806,12 +826,16 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
       }
     }
 
-    if (batch.isNotEmpty)
+    if (batch.isNotEmpty) {
+      hDebugPrint(
+        'MDict: Inserting all ${batch.length} entries to DB in single transaction',
+      );
       startId = await dbHelper.batchInsertWords(
         args.dictId,
         batch,
         startId: startId,
       );
+    }
     await reader.close();
     await dbHelper.updateDictionaryWordCount(
       args.dictId,
@@ -884,7 +908,14 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
     // Use larger batches — getBlobs() decompresses each bin once, so bigger
     // batches hit fewer bins per call and yield best throughput.
     const int batchSize = 10000;
+
+    // Single insert mode when not indexing definitions (faster)
+    final bool useBatching = args.indexDefinitions;
     List<Map<String, dynamic>> dbBatch = [];
+
+    hDebugPrint(
+      'Slob: useBatching=$useBatching (indexDefinitions=${args.indexDefinitions})',
+    );
 
     for (int i = 0; i < totalBlobs; i += batchSize) {
       final blobCount = (i + batchSize < totalBlobs)
@@ -955,12 +986,16 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
       );
     }
 
-    if (dbBatch.isNotEmpty)
+    if (dbBatch.isNotEmpty) {
+      hDebugPrint(
+        'Slob: Inserting all ${dbBatch.length} entries to DB in single transaction',
+      );
       startId = await dbHelper.batchInsertWords(
         args.dictId,
         dbBatch,
         startId: startId,
       );
+    }
     await reader.close();
     await dbHelper.updateDictionaryWordCount(
       args.dictId,
@@ -1051,7 +1086,14 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
     int headwordCount = 0;
     int defWordCount = 0;
     const int batchSize = 10000;
+
+    // Single insert mode when not indexing definitions (faster)
+    final bool useBatching = args.indexDefinitions;
     List<Map<String, dynamic>> dbBatch = [];
+
+    hDebugPrint(
+      'Dictd: useBatching=$useBatching (indexDefinitions=${args.indexDefinitions})',
+    );
 
     // Optimization: Load entire dict file into memory for small files
     Uint8List? dictFileBytes;
@@ -1142,12 +1184,16 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
       }
     }
 
-    if (dbBatch.isNotEmpty)
+    if (dbBatch.isNotEmpty) {
+      hDebugPrint(
+        'Dictd: Inserting all ${dbBatch.length} entries to DB in single transaction',
+      );
       startId = await dbHelper.batchInsertWords(
         args.dictId,
         dbBatch,
         startId: startId,
       );
+    }
     await dictdReader.close();
     await dbHelper.updateDictionaryWordCount(
       args.dictId,
