@@ -283,20 +283,58 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     try {
       final tempDir = await getTemporaryDirectory();
-      final ext = resourceKey.split('.').last;
-      final tempFile = File(
-        '${tempDir.path}/pron_${DateTime.now().millisecondsSinceEpoch}.$ext',
+      final ext = resourceKey.split('.').last.toLowerCase();
+
+      // Formats that just_audio supports natively: mp3, wav, m4a, aac, ogg, flac, wma, aiff
+      // Convert unsupported formats (spx, amr, etc.) to m4a using ffmpeg
+      final supportedExts = [
+        'mp3',
+        'wav',
+        'm4a',
+        'aac',
+        'ogg',
+        'flac',
+        'wma',
+        'aiff',
+        '3gp',
+      ];
+      final needsConversion = !supportedExts.contains(ext);
+
+      final inputFile = File(
+        '${tempDir.path}/pron_${DateTime.now().millisecondsSinceEpoch}_input.$ext',
       );
-      await tempFile.writeAsBytes(data);
+      await inputFile.writeAsBytes(data);
 
-      await _pronunciationPlayer.setFilePath(tempFile.path);
-      await _pronunciationPlayer.play();
-
-      tempFile.delete().catchError((_) => File(''));
-    } catch (e) {
-      if (showMultimediaProcessing) {
-        hDebugPrint('Error playing pronunciation: $e');
+      String audioPath;
+      if (needsConversion) {
+        hDebugPrint(
+          '_playPronunciation: .$ext format not supported, skipping audio',
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Audio format .$ext is not supported on this device',
+              ),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+        await inputFile.delete().catchError((_) => File(''));
+        return;
+      } else {
+        audioPath = inputFile.path;
       }
+
+      await _pronunciationPlayer.setFilePath(audioPath);
+      hDebugPrint('_playPronunciation: Playing audio...');
+      await _pronunciationPlayer.play();
+      hDebugPrint('_playPronunciation: Play called');
+
+      File(audioPath).delete().catchError((_) => File(''));
+    } catch (e, stack) {
+      hDebugPrint('_playPronunciation: EXCEPTION: $e');
+      hDebugPrint('_playPronunciation: Stack: $stack');
     }
   }
 
@@ -1535,13 +1573,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                   ],
                                   onLinkTap: (url, attributes, element) async {
                                     hDebugPrint(
-                                      'onLinkTap triggered with url: $url',
+                                      'onLinkTap #1 triggered with url: "$url"',
                                     );
                                     if (url != null) {
+                                      hDebugPrint(
+                                        'onLinkTap #1: url is not null, checking prefixes...',
+                                      );
                                       if (url.startsWith('http://') ||
                                           url.startsWith('https://')) {
                                         hDebugPrint(
-                                          'Launching external URL: $url',
+                                          'onLinkTap #1: HTTP URL: $url',
                                         );
                                         final uri = Uri.parse(url);
                                         if (await canLaunchUrl(uri)) {
@@ -1552,13 +1593,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                           );
                                         }
                                       } else if (url.startsWith('mdd-audio:')) {
+                                        hDebugPrint(
+                                          'onLinkTap #1: MDD audio detected: $url',
+                                        );
                                         if (showMultimediaProcessing) {
                                           hDebugPrint(
                                             'MDD audio link tapped: $url',
                                           );
                                         }
                                         final defId = defMap['dict_id'] as int?;
+                                        hDebugPrint(
+                                          'onLinkTap #1: defId = $defId',
+                                        );
                                         if (defId != null) {
+                                          hDebugPrint(
+                                            'onLinkTap #1: Calling _playPronunciation',
+                                          );
                                           _playPronunciation(url, defId);
                                         }
                                       } else if (url.startsWith('mdd-video:')) {
@@ -1571,6 +1621,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                         if (defId != null) {
                                           _showMediaPlayer(url, defId);
                                         }
+                                      } else if (url.startsWith('entry://')) {
+                                        hDebugPrint(
+                                          'onLinkTap #1: ENTRY link detected: $url',
+                                        );
+                                        // Handle internal dictionary entry references like entry://↑Jumpers
+                                        String wordToLookup = url.substring(
+                                          7,
+                                        ); // Remove 'entry:' prefix
+                                        // Decode URL-encoded characters and handle special chars like ↑
+                                        wordToLookup = Uri.decodeComponent(
+                                          wordToLookup,
+                                        );
+                                        hDebugPrint(
+                                          'onLinkTap #1: Looking up entry: "$wordToLookup"',
+                                        );
+                                        _showWordPopup(wordToLookup);
                                       } else {
                                         String wordToLookup = url;
                                         if (wordToLookup.startsWith(
@@ -2227,38 +2293,132 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
                                 ),
                               ],
                               onLinkTap: (url, attributes, element) async {
+                                hDebugPrint(
+                                  'onLinkTap #2 triggered with url: "$url"',
+                                );
                                 if (url != null &&
                                     url.startsWith('mdd-audio:')) {
+                                  hDebugPrint(
+                                    'onLinkTap #2: MDD audio detected: $url',
+                                  );
                                   if (showMultimediaProcessing) {
                                     hDebugPrint('MDD audio link tapped: $url');
                                   }
                                   final defId = defMap['dict_id'] as int?;
+                                  hDebugPrint('onLinkTap #2: defId = $defId');
                                   if (defId != null) {
                                     final resourceKey = url.substring(
                                       'mdd-audio:'.length,
                                     );
+                                    hDebugPrint(
+                                      'onLinkTap #2: resourceKey = $resourceKey',
+                                    );
                                     final mdictReader = DictionaryManager
                                         .instance
                                         .getMdictReader(defId);
-                                    if (mdictReader == null) return;
+                                    hDebugPrint(
+                                      'onLinkTap #2: mdictReader = $mdictReader',
+                                    );
+                                    if (mdictReader == null) {
+                                      hDebugPrint(
+                                        'onLinkTap #2: mdictReader is NULL!',
+                                      );
+                                      return;
+                                    }
+                                    hDebugPrint(
+                                      'onLinkTap #2: Fetching resource bytes for $resourceKey...',
+                                    );
                                     final data = await mdictReader
                                         .getMddResourceBytes(resourceKey);
-                                    if (data == null) return;
+                                    hDebugPrint(
+                                      'onLinkTap #2: data = ${data != null ? "${data.length} bytes" : "NULL"}',
+                                    );
+                                    if (data == null) {
+                                      hDebugPrint(
+                                        'onLinkTap #2: Resource not found in MDD!',
+                                      );
+                                      return;
+                                    }
+                                    hDebugPrint(
+                                      'onLinkTap #2: Creating temp file for audio...',
+                                    );
                                     try {
                                       final tempDir =
                                           await getTemporaryDirectory();
-                                      final ext = resourceKey.split('.').last;
-                                      final tempFile = File(
-                                        '${tempDir.path}/pron_${DateTime.now().millisecondsSinceEpoch}.$ext',
+                                      final ext = resourceKey
+                                          .split('.')
+                                          .last
+                                          .toLowerCase();
+
+                                      // Formats that just_audio supports natively
+                                      final supportedExts = [
+                                        'mp3',
+                                        'wav',
+                                        'm4a',
+                                        'aac',
+                                        'ogg',
+                                        'flac',
+                                        'wma',
+                                        'aiff',
+                                        '3gp',
+                                      ];
+                                      final needsConversion = !supportedExts
+                                          .contains(ext);
+
+                                      final inputFile = File(
+                                        '${tempDir.path}/pron_${DateTime.now().millisecondsSinceEpoch}_input.$ext',
                                       );
-                                      await tempFile.writeAsBytes(data);
+                                      await inputFile.writeAsBytes(data);
+
+                                      String audioPath;
+                                      if (needsConversion) {
+                                        hDebugPrint(
+                                          'onLinkTap #2: .$ext format not supported, skipping audio',
+                                        );
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                'Audio format .$ext is not supported on this device',
+                                              ),
+                                              duration: const Duration(
+                                                seconds: 2,
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                        await inputFile.delete().catchError(
+                                          (_) => File(''),
+                                        );
+                                        return;
+                                      } else {
+                                        audioPath = inputFile.path;
+                                      }
+
                                       final player = AudioPlayer();
-                                      await player.setFilePath(tempFile.path);
-                                      await player.play();
-                                      tempFile.delete().catchError(
-                                        (_) => File(''),
+                                      hDebugPrint(
+                                        'onLinkTap #2: Setting audio source: $audioPath',
                                       );
-                                    } catch (e) {
+                                      await player.setFilePath(audioPath);
+                                      hDebugPrint(
+                                        'onLinkTap #2: Playing audio...',
+                                      );
+                                      await player.play();
+                                      hDebugPrint(
+                                        'onLinkTap #2: Audio play() called successfully',
+                                      );
+                                      File(
+                                        audioPath,
+                                      ).delete().catchError((_) => File(''));
+                                    } catch (e, stack) {
+                                      hDebugPrint(
+                                        'onLinkTap #2: EXCEPTION playing audio: $e',
+                                      );
+                                      hDebugPrint(
+                                        'onLinkTap #2: Stack: $stack',
+                                      );
                                       if (showMultimediaProcessing) {
                                         hDebugPrint(
                                           'Error playing pronunciation: $e',
@@ -2300,6 +2460,29 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
                                     Uri.parse(url),
                                     mode: LaunchMode.externalApplication,
                                   );
+                                } else if (url != null &&
+                                    url.startsWith('entry://')) {
+                                  hDebugPrint(
+                                    'onLinkTap #2: ENTRY link detected: $url',
+                                  );
+                                  // Handle internal dictionary entry references like entry://↑Jumpers
+                                  String wordToLookup = url.substring(
+                                    7,
+                                  ); // Remove 'entry:' prefix
+                                  wordToLookup = Uri.decodeComponent(
+                                    wordToLookup,
+                                  );
+                                  hDebugPrint(
+                                    'onLinkTap #2: Looking up entry: "$wordToLookup"',
+                                  );
+                                  // Show snackbar for now - full navigation would require callback
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Entry: $wordToLookup'),
+                                      ),
+                                    );
+                                  }
                                 } else if (url != null) {
                                   String wordToLookup = url;
                                   if (wordToLookup.startsWith('look_up:')) {
@@ -2312,11 +2495,13 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
                                   final decoded = wordToLookup.contains('%')
                                       ? Uri.decodeComponent(wordToLookup)
                                       : wordToLookup;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('Search for: $decoded'),
-                                    ),
-                                  );
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Search for: $decoded'),
+                                      ),
+                                    );
+                                  }
                                 }
                               },
                             ),
