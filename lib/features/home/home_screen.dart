@@ -7,6 +7,7 @@ import 'package:flutter_html/flutter_html.dart';
 import 'package:flutter/services.dart';
 import 'package:hdict/core/utils/html_lookup_wrapper.dart';
 import 'package:hdict/core/utils/multimedia_processor.dart';
+import 'package:hdict/core/utils/anchor_id_extension.dart';
 import 'package:provider/provider.dart';
 import 'package:hdict/features/settings/settings_provider.dart';
 import 'package:hdict/features/home/widgets/app_drawer.dart';
@@ -1574,6 +1575,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                     MddVideoHtmlExtension(
                                       dictId: defMap['dict_id'] as int? ?? 0,
                                     ),
+                                    const AnchorIdExtension(),
                                   ],
                                   onLinkTap: (url, attributes, element) async {
                                     hDebugPrint(
@@ -2299,6 +2301,7 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
                                 MddVideoHtmlExtension(
                                   dictId: defMap['dict_id'] as int? ?? 0,
                                 ),
+                                const AnchorIdExtension(),
                               ],
                               onLinkTap: (url, attributes, element) async {
                                 hDebugPrint(

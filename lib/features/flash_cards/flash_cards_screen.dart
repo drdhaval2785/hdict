@@ -569,6 +569,10 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                                                 textDecoration:
                                                     TextDecoration.none,
                                               ),
+                                              "hr": Style(
+                                                margin: Margins.zero,
+                                                padding: HtmlPaddings.zero,
+                                              ),
                                             },
                                           ),
                                         ),
@@ -767,8 +771,15 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                                         ),
                                         textDecoration: TextDecoration.none,
                                       ),
+                                      "hr": Style(
+                                        margin: Margins.zero,
+                                        padding: HtmlPaddings.zero,
+                                      ),
                                     },
                                     onLinkTap: (url, attributes, element) {
+                                      if (url != null && url.startsWith('#')) {
+                                        return;
+                                      }
                                       if (url != null &&
                                           url.startsWith('look_up:')) {
                                         final encodedWord = url.substring(8);
@@ -1065,6 +1076,10 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                       "a": Style(
                         color: settings.textColor,
                         textDecoration: TextDecoration.none,
+                      ),
+                      "hr": Style(
+                        margin: Margins.zero,
+                        padding: HtmlPaddings.zero,
                       ),
                     },
                   ),

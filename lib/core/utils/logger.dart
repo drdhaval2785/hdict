@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 bool enableDebugLogs = true;
 
 /// Flag to control verbose HTML processing logs.
-bool showHtmlProcessing = false;
+bool showHtmlProcessing = true;
 
 /// Flag to control multimedia processing debug logs (images, audio, video).
 bool showMultimediaProcessing = false;
