@@ -1274,6 +1274,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     int? searchResultCount,
     int startIndex = 0,
     void Function(String word)? onWordTapInListMode,
+    bool forceDefaultMode = false,
   }) {
     final int dictId = defMap['dict_id'] as int;
     final String format = defMap['format'] as String? ?? 'stardict';
@@ -1296,6 +1297,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         },
         startIndex: startIndex,
         onWordTapInListMode: onWordTapInListMode,
+        forceDefaultMode: forceDefaultMode,
       );
     }
 
@@ -1310,6 +1312,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       searchResultCount: searchResultCount,
       startIndex: startIndex,
       onWordTapInListMode: onWordTapInListMode,
+      forceDefaultMode: forceDefaultMode,
     );
   }
 
@@ -1324,6 +1327,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     int? searchResultCount,
     int startIndex = 0,
     void Function(String word)? onWordTapInListMode,
+    bool forceDefaultMode = false,
   }) {
     final settings = context.watch<SettingsProvider>();
     // Deep copy to prevent cached processedHtml from persisting across searches
@@ -1444,7 +1448,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   }
 
                   // List Mode: show accordion with headword as title
-                  if (settings.isListModeEnabled) {
+                  // forceDefaultMode=true overrides list mode (for popups)
+                  if (settings.isListModeEnabled && !forceDefaultMode) {
                     return _buildAccordionItem(
                       context: context,
                       settings: settings,
@@ -2056,6 +2061,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                       Navigator.pop(context);
                                       _showWordPopup(newWord);
                                     },
+                                    forceDefaultMode:
+                                        true, // Popups always show default mode
                                   );
                                 }).toList();
                               }(),
@@ -2339,6 +2346,7 @@ class _MdictDefinitionContent extends StatefulWidget {
   final void Function(String word)? onEntryTap;
   final int startIndex;
   final void Function(String word)? onWordTapInListMode;
+  final bool forceDefaultMode;
 
   const _MdictDefinitionContent({
     super.key,
@@ -2354,6 +2362,7 @@ class _MdictDefinitionContent extends StatefulWidget {
     this.onEntryTap,
     this.startIndex = 0,
     this.onWordTapInListMode,
+    this.forceDefaultMode = false,
   });
 
   @override
@@ -2552,7 +2561,8 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
                   }
 
                   // List Mode: show accordion with headword as title
-                  if (settings.isListModeEnabled) {
+                  // forceDefaultMode=true overrides list mode (for popups)
+                  if (settings.isListModeEnabled && !widget.forceDefaultMode) {
                     return _buildAccordionItem(
                       context: context,
                       settings: settings,
