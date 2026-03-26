@@ -629,9 +629,11 @@ Future<void> _indexEntry(_IndexArgs args) async {
         dbBatch,
         startId: startId,
       );
+      hDebugPrint('StarDict: Headwords DB insertion complete');
     }
 
     if (args.synPath != null) {
+      hDebugPrint('StarDict: Starting synonyms processing');
       final synParser = SynParser();
       final synSource = (isLinked && Platform.isAndroid && args.synUri != null)
           ? SafRandomAccessSource(args.synUri!)
@@ -658,6 +660,9 @@ Future<void> _indexEntry(_IndexArgs args) async {
             headwordCount++;
           }
           if (useBatching && synBatch.length >= 10000) {
+            hDebugPrint(
+              'StarDict: Inserting synonym batch ${synBatch.length} to DB',
+            );
             startId = await dbHelper.batchInsertWords(
               args.dictId,
               synBatch,
@@ -691,16 +696,19 @@ Future<void> _indexEntry(_IndexArgs args) async {
           synBatch,
           startId: startId,
         );
+        hDebugPrint('StarDict: Synonyms DB insertion complete');
       }
     }
 
     await dictReader.close();
+    hDebugPrint('StarDict: Updating dictionary word count');
     await dbHelper.updateDictionaryWordCount(
       args.dictId,
       headwordCount,
       defWordCount,
     );
     await dbHelper.endBatchInsert();
+    hDebugPrint('StarDict: Import complete');
 
     sendPort.send(
       ImportProgress(
@@ -835,8 +843,10 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
         batch,
         startId: startId,
       );
+      hDebugPrint('MDict: DB insertion complete');
     }
     await reader.close();
+    hDebugPrint('MDict: Updating dictionary word count');
     await dbHelper.updateDictionaryWordCount(
       args.dictId,
       indexed,
@@ -995,8 +1005,10 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
         dbBatch,
         startId: startId,
       );
+      hDebugPrint('Slob: DB insertion complete');
     }
     await reader.close();
+    hDebugPrint('Slob: Updating dictionary word count');
     await dbHelper.updateDictionaryWordCount(
       args.dictId,
       headwordCount,
@@ -1193,8 +1205,10 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
         dbBatch,
         startId: startId,
       );
+      hDebugPrint('Dictd: DB insertion complete');
     }
     await dictdReader.close();
+    hDebugPrint('Dictd: Updating dictionary word count');
     await dbHelper.updateDictionaryWordCount(
       args.dictId,
       headwordCount,
