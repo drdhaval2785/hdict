@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:convert';
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:archive/archive.dart';
@@ -40,6 +41,73 @@ List<int> _decompressBZip2(List<int> bytes) {
 
 List<int> _decompressXZ(List<int> bytes) {
   return XZDecoder().decodeBytes(bytes);
+}
+
+bool _dictPathIsDz(String dictPath) {
+  return dictPath.toLowerCase().endsWith('.dz');
+}
+
+Future<int> _getDictFileSize(
+  String dictPath,
+  String? dictUri,
+  bool isLinked,
+  String? sourceBookmark,
+) async {
+  if (isLinked && Platform.isAndroid && dictUri != null) {
+    final source = SafRandomAccessSource(dictUri);
+    await source.open();
+    try {
+      return await source.length;
+    } finally {
+      await source.close();
+    }
+  } else if (isLinked) {
+    final source = BookmarkRandomAccessSource(
+      sourceBookmark!,
+      targetPath: p.basename(dictPath),
+    );
+    await source.open();
+    try {
+      return await source.length;
+    } finally {
+      await source.close();
+    }
+  } else {
+    final file = File(dictPath);
+    return await file.length();
+  }
+}
+
+Future<Uint8List> _loadDictFileIntoMemory(
+  String dictPath,
+  String? dictUri,
+  bool isLinked,
+  String? sourceBookmark,
+) async {
+  if (isLinked && Platform.isAndroid && dictUri != null) {
+    final source = SafRandomAccessSource(dictUri);
+    await source.open();
+    try {
+      final length = await source.length;
+      return await source.read(0, length);
+    } finally {
+      await source.close();
+    }
+  } else if (isLinked) {
+    final source = BookmarkRandomAccessSource(
+      sourceBookmark!,
+      targetPath: p.basename(dictPath),
+    );
+    await source.open();
+    try {
+      final length = await source.length;
+      return await source.read(0, length);
+    } finally {
+      await source.close();
+    }
+  } else {
+    return await File(dictPath).readAsBytes();
+  }
 }
 
 // New classes for progress and isolate arguments
@@ -291,22 +359,41 @@ Future<void> _indexEntry(_IndexArgs args) async {
         : FileRandomAccessSource(args.idxPath);
 
     // 2. Dict Reader
-    final dictReader = (isLinked && Platform.isAndroid && args.dictUri != null)
-        ? await DictReader.fromUri(args.dictUri!)
-        : (isLinked
-              ? await DictReader.fromLinkedSource(
-                  args.sourceBookmark!,
-                  targetPath: p.basename(args.dictPath),
-                  actualPath: args.dictPath,
-                )
-              : await DictReader.fromPath(args.dictPath));
+    final dictFileSize = await _getDictFileSize(
+      args.dictPath,
+      args.dictUri,
+      isLinked,
+      args.sourceBookmark,
+    );
+    final bool canLoadInMemory = dictFileSize < 50 * 1024 * 1024; // 50MB
+
+    DictReader dictReader;
+    if (canLoadInMemory && _dictPathIsDz(args.dictPath)) {
+      final dictBytes = await _loadDictFileIntoMemory(
+        args.dictPath,
+        args.dictUri,
+        isLinked,
+        args.sourceBookmark,
+      );
+      dictReader = await DictReader.fromBytes(
+        dictBytes,
+        fileName: p.basename(args.dictPath),
+      );
+    } else {
+      dictReader = (isLinked && Platform.isAndroid && args.dictUri != null)
+          ? await DictReader.fromUri(args.dictUri!)
+          : (isLinked
+                ? await DictReader.fromLinkedSource(
+                    args.sourceBookmark!,
+                    targetPath: p.basename(args.dictPath),
+                    actualPath: args.dictPath,
+                  )
+                : await DictReader.fromPath(args.dictPath));
+    }
     await dictReader.open();
 
     // Check file size for optimization decision
-    // Note: Memory loading only works for plain .dict files, not .dict.dz (dictzip)
-    final dictFileSize = await dictReader.source.length;
-    final bool canLoadInMemory =
-        !dictReader.isDz && dictFileSize < 50 * 1024 * 1024; // 50MB
+    // Memory loading now works for both .dict and .dict.dz files when < 50MB
 
     // Start batch insert optimization
     int startId = await dbHelper.startBatchInsert();
@@ -331,8 +418,8 @@ Future<void> _indexEntry(_IndexArgs args) async {
     const int batchSize = 10000;
     List<Map<String, dynamic>> dbBatch = [];
 
-    // Optimization: Load entire .dict file into memory for small plain .dict files
-    // (not .dict.dz which requires dictzip decompression)
+    // Optimization: Load entire .dict or .dict.dz file into memory for small files (<50MB)
+    // For .dict.dz files, bytes are loaded before creating DictReader
     Uint8List? dictFileBytes;
     if (canLoadInMemory) {
       dictFileBytes = await dictReader.source.read(0, dictFileSize);

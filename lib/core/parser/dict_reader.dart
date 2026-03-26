@@ -1,12 +1,15 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:hdict/core/database/database_helper.dart';
-import 'package:dictzip_reader/dictzip_reader.dart' hide RandomAccessSource, FileRandomAccessSource;
+import 'package:dictzip_reader/dictzip_reader.dart'
+    hide RandomAccessSource, FileRandomAccessSource, MemoryRandomAccessSource;
 import 'package:path/path.dart' as p;
 import 'package:hdict/core/parser/random_access_source.dart';
 import 'package:hdict/core/parser/saf_random_access_source.dart';
 import 'package:hdict/core/parser/bookmark_random_access_source.dart';
+import 'random_access_source.dart' show MemoryRandomAccessSource;
 
 /// Reads definitions from a StarDict .dict or .dict.dz file at specified offsets and lengths.
 ///
@@ -26,13 +29,21 @@ class DictReader {
 
   /// Factory to create a DictReader from a local file path.
   static Future<DictReader> fromPath(String path, {int? dictId}) async {
-    return DictReader(path, source: FileRandomAccessSource(path), dictId: dictId);
+    return DictReader(
+      path,
+      source: FileRandomAccessSource(path),
+      dictId: dictId,
+    );
   }
 
   /// Factory to create an instance from a linked source (SAF or Bookmark).
   /// On Android [source] must be the content:// URI of the .dict/.dict.dz file
   /// so that [isDz] is correctly computed from the actual file extension.
-  static Future<DictReader> fromLinkedSource(String source, {String? targetPath, String? actualPath}) async {
+  static Future<DictReader> fromLinkedSource(
+    String source, {
+    String? targetPath,
+    String? actualPath,
+  }) async {
     if (Platform.isAndroid) {
       // On Android 'source' is the SAF content:// URI of the .dict or .dict.dz file.
       // Use 'source' (not 'actualPath' which may be the .ifo URI) as 'path' so that
@@ -40,10 +51,15 @@ class DictReader {
       return DictReader(source, source: SafRandomAccessSource(source));
     } else if (Platform.isIOS || Platform.isMacOS) {
       final String path = actualPath ?? targetPath ?? source;
-      return DictReader(path, source: BookmarkRandomAccessSource(source, targetPath: targetPath));
+      return DictReader(
+        path,
+        source: BookmarkRandomAccessSource(source, targetPath: targetPath),
+      );
     } else {
       // For Linux/Windows, linked source is just a direct path for now
-      final String fullPath = targetPath != null ? p.join(source, targetPath) : source;
+      final String fullPath = targetPath != null
+          ? p.join(source, targetPath)
+          : source;
       return DictReader(fullPath, source: FileRandomAccessSource(fullPath));
     }
   }
@@ -51,6 +67,18 @@ class DictReader {
   /// Factory to create a DictReader from an Android SAF URI.
   static Future<DictReader> fromUri(String uri, {int? dictId}) async {
     return DictReader(uri, source: SafRandomAccessSource(uri), dictId: dictId);
+  }
+
+  /// Factory to create a DictReader from in-memory bytes.
+  /// Useful for small .dict.dz files loaded entirely into memory for fast I/O.
+  static Future<DictReader> fromBytes(
+    Uint8List bytes, {
+    String? fileName,
+    int? dictId,
+  }) async {
+    final path = fileName ?? 'memory.dict';
+    final memorySource = MemoryRandomAccessSource(bytes);
+    return DictReader(path, source: memorySource, dictId: dictId);
   }
 
   DictzipReader? _dzReader;
@@ -80,13 +108,20 @@ class DictReader {
   Future<String> readAtIndex(int offset, int length) async {
     if (kIsWeb) {
       if (dictId == null) throw Exception('dictId required for Web reading');
-      final bytes = await DatabaseHelper().getFilePart(dictId!, p.basename(path), offset, length);
-      if (bytes == null) throw Exception('Failed to read from virtual FS: ${p.basename(path)}');
+      final bytes = await DatabaseHelper().getFilePart(
+        dictId!,
+        p.basename(path),
+        offset,
+        length,
+      );
+      if (bytes == null)
+        throw Exception('Failed to read from virtual FS: ${p.basename(path)}');
       return utf8.decode(bytes, allowMalformed: true);
     }
 
     if (isDz) {
-      if (_dzReader == null) throw Exception('DictReader not opened. Call open() first.');
+      if (_dzReader == null)
+        throw Exception('DictReader not opened. Call open() first.');
       return await _dzReader!.read(offset, length);
     }
 
@@ -95,7 +130,9 @@ class DictReader {
   }
 
   /// Reads multiple definitions at the given offsets and lengths.
-  Future<List<String>> readBulk(List<({int offset, int length})> entries) async {
+  Future<List<String>> readBulk(
+    List<({int offset, int length})> entries,
+  ) async {
     if (kIsWeb) {
       // For Web, we can still do it sequentially or optimize DatabaseHelper if needed,
       // but for now, let's keep it simple for the wrapper.
@@ -121,7 +158,10 @@ class DictReader {
 
     final List<String?> results = List.filled(entries.length, null);
     for (final item in entriesWithIndex) {
-      results[item.key] = await readAtIndex(item.value.offset, item.value.length);
+      results[item.key] = await readAtIndex(
+        item.value.offset,
+        item.value.length,
+      );
     }
     return results.cast<String>();
   }
