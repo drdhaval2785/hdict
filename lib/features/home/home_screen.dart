@@ -1207,6 +1207,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     def,
                     highlightHeadword: _lastHeadwordQuery,
                     highlightDefinition: _lastDefinitionQuery,
+                    searchSqliteMs: _searchSqliteMs,
+                    searchOtherMs: _searchOtherMs,
+                    searchTotalMs: _searchTotalMs,
+                    searchResultCount: _searchResultCount,
                   ),
                 )
                 .toList(),

@@ -4340,7 +4340,7 @@ class DictionaryManager {
     final List<int> missingIndices = [];
     final List<Map<String, dynamic>> missingRequests = [];
 
-    // 1. Check LRU Cache for each request (skip cache for mdict to avoid stale results)
+    // 1. Check LRU Cache for each request
     for (int i = 0; i < requests.length; i++) {
       final req = requests[i];
       final String word = (req['word'] as String?) ?? '';
@@ -4351,9 +4351,7 @@ class DictionaryManager {
           ? '$dictId:$word'
           : '$dictId:$offset:$length';
 
-      // Skip cache for mdict format - it causes issues with stale results
-      final bool useCache = format != 'mdict';
-      final cached = useCache ? _getFromCache(cacheKey) : null;
+      final cached = _getFromCache(cacheKey);
       if (cached != null) {
         results[i] = cached;
         HPerf.record('fetchBatch_CacheHit', 0);
@@ -4456,10 +4454,7 @@ class DictionaryManager {
           final String cacheKey = format == 'mdict'
               ? '$dictId:$word'
               : '$dictId:$offset:$length';
-          // Skip cache for mdict format - it causes issues with stale results
-          if (format != 'mdict') {
-            _addToCache(cacheKey, res);
-          }
+          _addToCache(cacheKey, res);
         }
       }
     } catch (e) {
