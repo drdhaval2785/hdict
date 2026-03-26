@@ -24,4 +24,34 @@ void main() {
     await Future.delayed(Duration(milliseconds: 100));
     expect(provider2.headwordColor.toARGB32(), equals(Colors.red.toARGB32()));
   });
+
+  test('listMode default is false', () async {
+    final provider = SettingsProvider();
+    await Future.delayed(Duration(milliseconds: 100));
+    expect(provider.isListModeEnabled, false);
+  });
+
+  test('listMode persists after toggle', () async {
+    final provider = SettingsProvider();
+    await Future.delayed(Duration(milliseconds: 100));
+
+    await provider.setListMode(true);
+    expect(provider.isListModeEnabled, true);
+
+    // Verify persistence
+    final provider2 = SettingsProvider();
+    await Future.delayed(Duration(milliseconds: 100));
+    expect(provider2.isListModeEnabled, true);
+  });
+
+  test('listMode can be toggled off', () async {
+    final provider = SettingsProvider();
+    await Future.delayed(Duration(milliseconds: 100));
+
+    await provider.setListMode(true);
+    expect(provider.isListModeEnabled, true);
+
+    await provider.setListMode(false);
+    expect(provider.isListModeEnabled, false);
+  });
 }
