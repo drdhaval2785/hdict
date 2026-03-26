@@ -1283,6 +1283,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         searchOtherMs: searchOtherMs,
         searchTotalMs: searchTotalMs,
         searchResultCount: searchResultCount,
+        onEntryTap: (word) {
+          _headwordController.text = word;
+          _performSearch();
+        },
       );
     }
 
@@ -1625,14 +1629,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                         hDebugPrint(
                                           'onLinkTap #1: ENTRY link detected: $url',
                                         );
-                                        // Handle internal dictionary entry references like entry://↑Jumpers
                                         String wordToLookup = url.substring(
-                                          7,
-                                        ); // Remove 'entry:' prefix
-                                        // Decode URL-encoded characters and handle special chars like ↑
-                                        wordToLookup = Uri.decodeComponent(
-                                          wordToLookup,
-                                        );
+                                          8,
+                                        ); // Remove 'entry://' prefix
+                                        try {
+                                          wordToLookup = Uri.decodeComponent(
+                                            wordToLookup,
+                                          );
+                                        } catch (_) {
+                                          // Keep original if decode fails
+                                        }
                                         hDebugPrint(
                                           'onLinkTap #1: Looking up entry: "$wordToLookup"',
                                         );
@@ -2034,6 +2040,7 @@ class _MdictDefinitionContent extends StatefulWidget {
   final int? searchOtherMs;
   final int? searchTotalMs;
   final int? searchResultCount;
+  final void Function(String word)? onEntryTap;
 
   const _MdictDefinitionContent({
     super.key,
@@ -2046,6 +2053,7 @@ class _MdictDefinitionContent extends StatefulWidget {
     this.searchOtherMs,
     this.searchTotalMs,
     this.searchResultCount,
+    this.onEntryTap,
   });
 
   @override
@@ -2465,24 +2473,21 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
                                   hDebugPrint(
                                     'onLinkTap #2: ENTRY link detected: $url',
                                   );
-                                  // Handle internal dictionary entry references like entry://↑Jumpers
                                   String wordToLookup = url.substring(
-                                    7,
-                                  ); // Remove 'entry:' prefix
-                                  wordToLookup = Uri.decodeComponent(
-                                    wordToLookup,
-                                  );
+                                    8,
+                                  ); // Remove 'entry://' prefix
+                                  try {
+                                    wordToLookup = Uri.decodeComponent(
+                                      wordToLookup,
+                                    );
+                                  } catch (_) {
+                                    // Keep original if decode fails
+                                  }
                                   hDebugPrint(
                                     'onLinkTap #2: Looking up entry: "$wordToLookup"',
                                   );
-                                  // Show snackbar for now - full navigation would require callback
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text('Entry: $wordToLookup'),
-                                      ),
-                                    );
-                                  }
+                                  // Perform actual search via callback
+                                  widget.onEntryTap?.call(wordToLookup);
                                 } else if (url != null) {
                                   String wordToLookup = url;
                                   if (wordToLookup.startsWith('look_up:')) {
