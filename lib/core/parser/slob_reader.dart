@@ -20,20 +20,34 @@ class SlobReader {
 
   SlobReader(this.path, {required this.source});
 
+  /// Returns the file size of the dictionary.
+  Future<int> get fileSize async {
+    return await source.length;
+  }
+
   /// Factory to create a SlobReader from a local file path.
   static Future<SlobReader> fromPath(String path) async {
     return SlobReader(path, source: FileRandomAccessSource(path));
   }
 
   /// Factory to create an instance from a linked source (SAF or Bookmark).
-  static Future<SlobReader> fromLinkedSource(String source, {String? targetPath, String? actualPath}) async {
+  static Future<SlobReader> fromLinkedSource(
+    String source, {
+    String? targetPath,
+    String? actualPath,
+  }) async {
     final String path = actualPath ?? targetPath ?? source;
     if (Platform.isAndroid) {
       return SlobReader(path, source: SafRandomAccessSource(source));
     } else if (Platform.isIOS || Platform.isMacOS) {
-      return SlobReader(path, source: BookmarkRandomAccessSource(source, targetPath: targetPath));
+      return SlobReader(
+        path,
+        source: BookmarkRandomAccessSource(source, targetPath: targetPath),
+      );
     } else {
-      final String fullPath = targetPath != null ? join(source, targetPath) : source;
+      final String fullPath = targetPath != null
+          ? join(source, targetPath)
+          : source;
       return SlobReader(fullPath, source: FileRandomAccessSource(fullPath));
     }
   }
@@ -90,10 +104,10 @@ class SlobReader {
     if (_reader == null) return null;
 
     for (int i = 0; i < blobCount; i++) {
-        final blob = await _reader!.getBlob(i);
-        if (blob.key == word) {
-            return utf8.decode(blob.content, allowMalformed: true);
-        }
+      final blob = await _reader!.getBlob(i);
+      if (blob.key == word) {
+        return utf8.decode(blob.content, allowMalformed: true);
+      }
     }
     return null;
   }
@@ -131,7 +145,9 @@ class SlobReader {
     final List<(int, int)> ranges = ids.map((id) => (id, 1)).toList();
 
     final blobs = await _reader!.getBlobs(ranges);
-    return blobs.map((b) => utf8.decode(b.content, allowMalformed: true)).toList();
+    return blobs
+        .map((b) => utf8.decode(b.content, allowMalformed: true))
+        .toList();
   }
 
   /// Fetches [count] blobs starting at global reference [start] in a single

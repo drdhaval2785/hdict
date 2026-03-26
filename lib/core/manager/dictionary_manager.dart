@@ -302,6 +302,12 @@ Future<void> _indexEntry(_IndexArgs args) async {
               : await DictReader.fromPath(args.dictPath));
     await dictReader.open();
 
+    // Check file size for optimization decision
+    // Note: Memory loading only works for plain .dict files, not .dict.dz (dictzip)
+    final dictFileSize = await dictReader.source.length;
+    final bool canLoadInMemory =
+        !dictReader.isDz && dictFileSize < 50 * 1024 * 1024; // 50MB
+
     // Start batch insert optimization
     int startId = await dbHelper.startBatchInsert();
 
@@ -322,23 +328,49 @@ Future<void> _indexEntry(_IndexArgs args) async {
     final int totalAll = totalHeadwords + totalSyns; // unified denominator
     int headwordCount = 0;
     int defWordCount = 0;
-    const int readBatchSize = 100;
-    const int dbBatchSize = 10000;
+    const int batchSize = 10000;
     List<Map<String, dynamic>> dbBatch = [];
 
-    for (int i = 0; i < totalHeadwords; i += readBatchSize) {
-      final end = (i + readBatchSize < totalHeadwords)
-          ? i + readBatchSize
+    // Optimization: Load entire .dict file into memory for small plain .dict files
+    // (not .dict.dz which requires dictzip decompression)
+    Uint8List? dictFileBytes;
+    if (canLoadInMemory) {
+      dictFileBytes = await dictReader.source.read(0, dictFileSize);
+    }
+
+    for (int i = 0; i < totalHeadwords; i += batchSize) {
+      final end = (i + batchSize < totalHeadwords)
+          ? i + batchSize
           : totalHeadwords;
       final currentBatch = entriesList.sublist(i, end);
 
-      final List<({int offset, int length})> readEntries = currentBatch
-          .map((e) => (offset: e['offset'] as int, length: e['length'] as int))
-          .toList();
-
-      final List<String> contents = args.indexDefinitions
-          ? await dictReader.readBulk(readEntries)
-          : List.filled(currentBatch.length, '');
+      final List<String> contents;
+      if (canLoadInMemory && dictFileBytes != null) {
+        // Fast path: extract from memory (plain .dict only)
+        final bytes = dictFileBytes; // capture for closure
+        contents = currentBatch.map((e) {
+          if (!args.indexDefinitions) return '';
+          final offset = e['offset'] as int;
+          final length = e['length'] as int;
+          if (offset + length > bytes.length) {
+            return '';
+          }
+          return utf8.decode(
+            bytes.sublist(offset, offset + length),
+            allowMalformed: true,
+          );
+        }).toList();
+      } else {
+        // Default path: disk reads in batches
+        final List<({int offset, int length})> readEntries = currentBatch
+            .map(
+              (e) => (offset: e['offset'] as int, length: e['length'] as int),
+            )
+            .toList();
+        contents = args.indexDefinitions
+            ? await dictReader.readBulk(readEntries)
+            : List.filled(currentBatch.length, '');
+      }
 
       for (int j = 0; j < currentBatch.length; j++) {
         final entry = currentBatch[j];
@@ -365,7 +397,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
               .length;
         }
 
-        if (dbBatch.length >= dbBatchSize) {
+        if (dbBatch.length >= batchSize) {
           startId = await dbHelper.batchInsertWords(
             args.dictId,
             dbBatch,
@@ -637,18 +669,17 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
     final totalBlobs = reader.blobCount;
     // Use larger batches — getBlobs() decompresses each bin once, so bigger
     // batches hit fewer bins per call and yield best throughput.
-    const int readBatchSize = 500;
-    const int dbBatchSize = 10000;
+    const int batchSize = 10000;
     List<Map<String, dynamic>> dbBatch = [];
 
-    for (int i = 0; i < totalBlobs; i += readBatchSize) {
-      final batchCount = (i + readBatchSize < totalBlobs)
-          ? readBatchSize
+    for (int i = 0; i < totalBlobs; i += batchSize) {
+      final blobCount = (i + batchSize < totalBlobs)
+          ? batchSize
           : totalBlobs - i;
 
       // getBlobs([(start, length)]) reads key + content in a single pass,
       // decompressing each compressed bin only once — no double-fetching.
-      final List<SlobBlob> blobs = await reader.getBlobsByRange(i, batchCount);
+      final List<SlobBlob> blobs = await reader.getBlobsByRange(i, blobCount);
 
       for (final blob in blobs) {
         final content = args.indexDefinitions
@@ -671,7 +702,7 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
               .length;
         }
 
-        if (dbBatch.length >= dbBatchSize) {
+        if (dbBatch.length >= batchSize) {
           startId = await dbHelper.batchInsertWords(
             args.dictId,
             dbBatch,
@@ -786,6 +817,10 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
               : await DictdReader.fromPath(args.dictPath));
     await dictdReader.open();
 
+    // Check file size for optimization decision
+    final dictFileSize = await dictdReader.fileSize;
+    final bool loadInMemory = dictFileSize < 50 * 1024 * 1024; // 50MB
+
     int startId = await dbHelper.startBatchInsert();
 
     final List<Map<String, dynamic>> entriesList = [];
@@ -801,23 +836,50 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
     final int totalHeadwords = entriesList.length;
     int headwordCount = 0;
     int defWordCount = 0;
-    const int readBatchSize = 100;
-    const int dbBatchSize = 10000;
+    const int batchSize = 10000;
     List<Map<String, dynamic>> dbBatch = [];
 
-    for (int i = 0; i < totalHeadwords; i += readBatchSize) {
-      final end = (i + readBatchSize < totalHeadwords)
-          ? i + readBatchSize
+    // Optimization: Load entire dict file into memory for small files
+    Uint8List? dictFileBytes;
+    if (loadInMemory && args.indexDefinitions) {
+      final source = dictdReader.source;
+      if (source != null) {
+        dictFileBytes = await source.read(0, dictFileSize);
+      }
+    }
+
+    for (int i = 0; i < totalHeadwords; i += batchSize) {
+      final end = (i + batchSize < totalHeadwords)
+          ? i + batchSize
           : totalHeadwords;
       final currentBatch = entriesList.sublist(i, end);
 
-      final List<({int offset, int length})> readEntries = currentBatch
-          .map((e) => (offset: e['offset'] as int, length: e['length'] as int))
-          .toList();
-
-      final List<String> contents = args.indexDefinitions
-          ? await dictdReader.readEntries(readEntries)
-          : List.filled(currentBatch.length, '');
+      final List<String> contents;
+      if (loadInMemory && args.indexDefinitions && dictFileBytes != null) {
+        // Fast path: extract from memory
+        final bytes = dictFileBytes; // capture for closure
+        contents = currentBatch.map((e) {
+          final offset = e['offset'] as int;
+          final length = e['length'] as int;
+          if (offset + length > bytes.length) {
+            return '';
+          }
+          return utf8.decode(
+            bytes.sublist(offset, offset + length),
+            allowMalformed: true,
+          );
+        }).toList();
+      } else {
+        // Default path: disk reads in batches
+        final List<({int offset, int length})> readEntries = currentBatch
+            .map(
+              (e) => (offset: e['offset'] as int, length: e['length'] as int),
+            )
+            .toList();
+        contents = args.indexDefinitions
+            ? await dictdReader.readEntries(readEntries)
+            : List.filled(currentBatch.length, '');
+      }
 
       for (int j = 0; j < currentBatch.length; j++) {
         final entry = currentBatch[j];
@@ -841,7 +903,7 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
               .length;
         }
 
-        if (dbBatch.length >= dbBatchSize) {
+        if (dbBatch.length >= batchSize) {
           startId = await dbHelper.batchInsertWords(
             args.dictId,
             dbBatch,
