@@ -1570,6 +1570,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                       color: settings.headwordColor,
                                       textDecoration: TextDecoration.none,
                                     ),
+                                    "hr": Style(
+                                      margin: Margins.zero,
+                                      padding: HtmlPaddings.zero,
+                                      border: Border(
+                                        bottom: BorderSide(
+                                          color: theme.colorScheme.outline,
+                                          width: 1,
+                                        ),
+                                      ),
+                                    ),
                                   },
                                   extensions: [
                                     MddVideoHtmlExtension(
@@ -2295,6 +2305,16 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
                                     context,
                                   ),
                                   fontWeight: FontWeight.bold,
+                                ),
+                                "hr": Style(
+                                  margin: Margins.zero,
+                                  padding: HtmlPaddings.zero,
+                                  border: Border(
+                                    bottom: BorderSide(
+                                      color: theme.colorScheme.outline,
+                                      width: 1,
+                                    ),
+                                  ),
                                 ),
                               },
                               extensions: [
