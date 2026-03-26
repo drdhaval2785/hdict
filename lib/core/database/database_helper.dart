@@ -1588,8 +1588,21 @@ class DatabaseHelper {
   }
 
   Future<void> endBatchInsert() async {
+    final db = await database;
+    // Restore synchronous to NORMAL after bulk insert
+    await db.execute('PRAGMA synchronous = NORMAL');
     clearQueryCache();
     clearDictionaryCache();
+  }
+
+  Future<void> enableBulkInsertMode() async {
+    final db = await database;
+    await db.execute('PRAGMA synchronous = OFF');
+    await db.execute('PRAGMA cache_size = 64000'); // 64MB cache
+    final result = await db.rawQuery('PRAGMA synchronous');
+    hDebugPrint(
+      'DatabaseHelper: PRAGMA synchronous = ${result.first.values.first}',
+    );
   }
 
   Future<int> batchInsertWords(
