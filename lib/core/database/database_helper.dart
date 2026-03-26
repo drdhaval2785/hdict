@@ -1609,11 +1609,12 @@ class DatabaseHelper {
     int dictId,
     List<Map<String, dynamic>> words, {
     int? startId,
+    bool populateFts5 = true,
   }) async {
     if (words.isEmpty) return startId ?? 0;
     final db = await database;
     return await db.transaction<int>((txn) async {
-      final bool useFts5 = _fts5Available ?? true;
+      final bool useFts5 = (_fts5Available ?? true) && populateFts5;
       int newStartId = startId ?? 0;
 
       if (useFts5) {
@@ -1649,11 +1650,11 @@ class DatabaseHelper {
         // For backwards compatibility with DictionaryManager loop
         newStartId = (metaResults.last as int);
       } else {
+        // Skip FTS5 - only insert into word_metadata
         final batch = txn.batch();
         for (final word in words) {
-          batch.insert('word_index', {
+          batch.insert('word_metadata', {
             'word': word['word'],
-            'content': word['content'],
             'dict_id': dictId,
             'offset': word['offset'],
             'length': word['length'],
@@ -1663,6 +1664,55 @@ class DatabaseHelper {
       }
       return newStartId;
     });
+  }
+
+  /// Rebuilds FTS5 index for a specific dictionary in the background.
+  /// This is called after import when populateFts5 was false.
+  Future<void> rebuildFts5IndexForDict(int dictId) async {
+    final db = await database;
+    if (_fts5Available != true) return;
+
+    hDebugPrint('DatabaseHelper: Rebuilding FTS5 index for dict_id=$dictId');
+
+    // Get all word_metadata for this dictionary
+    final words = await db.query(
+      'word_metadata',
+      where: 'dict_id = ?',
+      whereArgs: [dictId],
+    );
+
+    if (words.isEmpty) return;
+
+    // Delete existing FTS5 entries for this dict
+    await db.delete(
+      'word_index',
+      where: 'rowid IN (SELECT id FROM word_metadata WHERE dict_id = ?)',
+      whereArgs: [dictId],
+    );
+
+    // Tokenize and insert in batches
+    const batchSize = 50000;
+    for (int i = 0; i < words.length; i += batchSize) {
+      final end = (i + batchSize < words.length) ? words.length : i + batchSize;
+      final batch = words.sublist(i, end);
+
+      final idxBatch = db.batch();
+      for (int j = 0; j < batch.length; j++) {
+        final word = batch[j];
+        final content = word['content'] as String?;
+        final tokenized = _tokenizeContent(content);
+        idxBatch.rawInsert(
+          'INSERT INTO word_index(rowid, word, content) VALUES (?, ?, ?)',
+          [word['id'], word['word'], tokenized],
+        );
+      }
+      await idxBatch.commit(noResult: true);
+    }
+
+    // Optimize the FTS5 table
+    await db.execute("INSERT INTO word_index(word_index) VALUES('optimize')");
+
+    hDebugPrint('DatabaseHelper: FTS5 index rebuilt for dict_id=$dictId');
   }
 
   Future<List<Map<String, dynamic>>> searchWords({

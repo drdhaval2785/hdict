@@ -518,12 +518,14 @@ Future<void> _indexEntry(_IndexArgs args) async {
     int defWordCount = 0;
 
     // Single insert mode when not indexing definitions (faster)
+    // FTS5 indexing is deferred when not indexing definitions
     final bool useBatching = args.indexDefinitions;
+    final bool populateFts5 = args.indexDefinitions;
     const int batchSize = 50000;
     List<Map<String, dynamic>> dbBatch = [];
 
     hDebugPrint(
-      'StarDict: useBatching=$useBatching (indexDefinitions=${args.indexDefinitions})',
+      'StarDict: useBatching=$useBatching, populateFts5=$populateFts5 (indexDefinitions=${args.indexDefinitions})',
     );
 
     // Optimization: Load entire .dict or .dict.dz file into memory for small files (<50MB)
@@ -604,6 +606,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
             args.dictId,
             dbBatch,
             startId: startId,
+            populateFts5: populateFts5,
           );
           dbBatch.clear();
           sendPort.send(
@@ -629,6 +632,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
         args.dictId,
         dbBatch,
         startId: startId,
+        populateFts5: populateFts5,
       );
       hDebugPrint('StarDict: Headwords DB insertion complete');
     }
@@ -668,6 +672,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
               args.dictId,
               synBatch,
               startId: startId,
+              populateFts5: populateFts5,
             );
             synBatch.clear();
             sendPort.send(
@@ -696,6 +701,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
           args.dictId,
           synBatch,
           startId: startId,
+          populateFts5: populateFts5,
         );
         hDebugPrint('StarDict: Synonyms DB insertion complete');
       }
@@ -709,7 +715,13 @@ Future<void> _indexEntry(_IndexArgs args) async {
       defWordCount,
     );
     await dbHelper.endBatchInsert();
-    hDebugPrint('StarDict: Import complete');
+
+    // Rebuild FTS5 index in background if deferred
+    if (!populateFts5) {
+      hDebugPrint('StarDict: Starting background FTS5 indexing');
+      await dbHelper.rebuildFts5IndexForDict(args.dictId);
+      hDebugPrint('StarDict: Background FTS5 indexing complete');
+    }
 
     sendPort.send(
       ImportProgress(
@@ -787,10 +799,12 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
     int defWordCount = 0;
 
     // Single insert mode when not indexing definitions (faster)
+    // FTS5 indexing is deferred when not indexing definitions
     final bool useBatching = args.indexDefinitions;
+    final bool populateFts5 = args.indexDefinitions;
     const int batchSize = 50000;
     hDebugPrint(
-      'MDict: useBatching=$useBatching (indexDefinitions=${args.indexDefinitions})',
+      'MDict: useBatching=$useBatching, populateFts5=$populateFts5 (indexDefinitions=${args.indexDefinitions})',
     );
 
     for (final entry in allKeys) {
@@ -821,6 +835,7 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
           args.dictId,
           batch,
           startId: startId,
+          populateFts5: populateFts5,
         );
         batch.clear();
         sendPort.send(
@@ -845,6 +860,7 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
         args.dictId,
         batch,
         startId: startId,
+        populateFts5: populateFts5,
       );
       hDebugPrint('MDict: DB insertion complete');
     }
@@ -856,6 +872,13 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
       defWordCount,
     );
     await dbHelper.endBatchInsert();
+
+    // Rebuild FTS5 index in background if deferred
+    if (!populateFts5) {
+      hDebugPrint('MDict: Starting background FTS5 indexing');
+      await dbHelper.rebuildFts5IndexForDict(args.dictId);
+      hDebugPrint('MDict: Background FTS5 indexing complete');
+    }
 
     sendPort.send(
       ImportProgress(
@@ -924,11 +947,13 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
     const int batchSize = 50000;
 
     // Single insert mode when not indexing definitions (faster)
+    // FTS5 indexing is deferred when not indexing definitions
     final bool useBatching = args.indexDefinitions;
+    final bool populateFts5 = args.indexDefinitions;
     List<Map<String, dynamic>> dbBatch = [];
 
     hDebugPrint(
-      'Slob: useBatching=$useBatching (indexDefinitions=${args.indexDefinitions})',
+      'Slob: useBatching=$useBatching, populateFts5=$populateFts5 (indexDefinitions=${args.indexDefinitions})',
     );
 
     for (int i = 0; i < totalBlobs; i += batchSize) {
@@ -966,6 +991,7 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
             args.dictId,
             dbBatch,
             startId: startId,
+            populateFts5: populateFts5,
           );
           dbBatch.clear();
           sendPort.send(
@@ -1008,6 +1034,7 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
         args.dictId,
         dbBatch,
         startId: startId,
+        populateFts5: populateFts5,
       );
       hDebugPrint('Slob: DB insertion complete');
     }
@@ -1019,6 +1046,13 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
       defWordCount,
     );
     await dbHelper.endBatchInsert();
+
+    // Rebuild FTS5 index in background if deferred
+    if (!populateFts5) {
+      hDebugPrint('Slob: Starting background FTS5 indexing');
+      await dbHelper.rebuildFts5IndexForDict(args.dictId);
+      hDebugPrint('Slob: Background FTS5 indexing complete');
+    }
 
     sendPort.send(
       ImportProgress(
@@ -1105,11 +1139,13 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
     const int batchSize = 50000;
 
     // Single insert mode when not indexing definitions (faster)
+    // FTS5 indexing is deferred when not indexing definitions
     final bool useBatching = args.indexDefinitions;
+    final bool populateFts5 = args.indexDefinitions;
     List<Map<String, dynamic>> dbBatch = [];
 
     hDebugPrint(
-      'Dictd: useBatching=$useBatching (indexDefinitions=${args.indexDefinitions})',
+      'Dictd: useBatching=$useBatching, populateFts5=$populateFts5 (indexDefinitions=${args.indexDefinitions})',
     );
 
     // Optimization: Load entire dict file into memory for small files
@@ -1181,6 +1217,7 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
             args.dictId,
             dbBatch,
             startId: startId,
+            populateFts5: populateFts5,
           );
           dbBatch.clear();
           sendPort.send(
@@ -1209,6 +1246,7 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
         args.dictId,
         dbBatch,
         startId: startId,
+        populateFts5: populateFts5,
       );
       hDebugPrint('Dictd: DB insertion complete');
     }
@@ -1220,6 +1258,13 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
       defWordCount,
     );
     await dbHelper.endBatchInsert();
+
+    // Rebuild FTS5 index in background if deferred
+    if (!populateFts5) {
+      hDebugPrint('Dictd: Starting background FTS5 indexing');
+      await dbHelper.rebuildFts5IndexForDict(args.dictId);
+      hDebugPrint('Dictd: Background FTS5 indexing complete');
+    }
 
     sendPort.send(
       ImportProgress(
