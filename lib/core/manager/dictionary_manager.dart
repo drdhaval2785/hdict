@@ -110,6 +110,50 @@ Future<Uint8List> _loadDictFileIntoMemory(
   }
 }
 
+Future<int> _getSlobFileSize(
+  String slobPath,
+  bool isLinked,
+  String? sourceBookmark,
+) async {
+  if (isLinked) {
+    final source = BookmarkRandomAccessSource(
+      sourceBookmark!,
+      targetPath: p.basename(slobPath),
+    );
+    await source.open();
+    try {
+      return await source.length;
+    } finally {
+      await source.close();
+    }
+  } else {
+    final file = File(slobPath);
+    return await file.length();
+  }
+}
+
+Future<Uint8List> _loadSlobFileIntoMemory(
+  String slobPath,
+  bool isLinked,
+  String? sourceBookmark,
+) async {
+  if (isLinked) {
+    final source = BookmarkRandomAccessSource(
+      sourceBookmark!,
+      targetPath: p.basename(slobPath),
+    );
+    await source.open();
+    try {
+      final length = await source.length;
+      return await source.read(0, length);
+    } finally {
+      await source.close();
+    }
+  } else {
+    return await File(slobPath).readAsBytes();
+  }
+}
+
 // New classes for progress and isolate arguments
 class ImportProgress {
   final String message;
@@ -288,6 +332,7 @@ class _IndexMdictArgs {
 class _IndexSlobArgs {
   final int dictId;
   final String slobPath;
+  final Uint8List? slobBytes;
   final bool indexDefinitions;
   final String bookName;
   final String? sourceType;
@@ -298,6 +343,7 @@ class _IndexSlobArgs {
   _IndexSlobArgs({
     required this.dictId,
     required this.slobPath,
+    this.slobBytes,
     required this.indexDefinitions,
     required this.bookName,
     this.sourceType,
@@ -736,17 +782,24 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
   final sendPort = args.sendPort;
 
   try {
-    final reader =
-        (args.sourceType == 'linked' &&
-            Platform.isAndroid &&
-            args.slobPath.startsWith('content://'))
-        ? await SlobReader.fromUri(args.slobPath)
-        : (args.sourceType == 'linked' && args.sourceBookmark != null
-              ? await SlobReader.fromLinkedSource(
-                  args.sourceBookmark!,
-                  actualPath: args.slobPath,
-                )
-              : await SlobReader.fromPath(args.slobPath));
+    SlobReader reader;
+    if (args.slobBytes != null) {
+      reader = await SlobReader.fromBytes(
+        args.slobBytes!,
+        fileName: args.slobPath,
+      );
+    } else if (args.sourceType == 'linked' &&
+        Platform.isAndroid &&
+        args.slobPath.startsWith('content://')) {
+      reader = await SlobReader.fromUri(args.slobPath);
+    } else if (args.sourceType == 'linked' && args.sourceBookmark != null) {
+      reader = await SlobReader.fromLinkedSource(
+        args.sourceBookmark!,
+        actualPath: args.slobPath,
+      );
+    } else {
+      reader = await SlobReader.fromPath(args.slobPath);
+    }
     await reader.open();
 
     int startId = await dbHelper.startBatchInsert();
@@ -4232,6 +4285,8 @@ class DictionaryManager {
   Stream<ImportProgress> importSlobStream(
     String slobPath, {
     bool indexDefinitions = false,
+    bool isLinked = false,
+    String? sourceBookmark,
   }) async* {
     if (kIsWeb) {
       yield ImportProgress(
@@ -4246,7 +4301,25 @@ class DictionaryManager {
     yield ImportProgress(message: 'Opening Slob file...', value: 0.05);
 
     try {
-      final reader = await SlobReader.fromPath(slobPath);
+      final slobFileSize = await _getSlobFileSize(
+        slobPath,
+        isLinked,
+        sourceBookmark,
+      );
+      final bool canLoadInMemory = slobFileSize < 50 * 1024 * 1024; // 50MB
+
+      SlobReader reader;
+      Uint8List? slobBytes;
+      if (canLoadInMemory) {
+        slobBytes = await _loadSlobFileIntoMemory(
+          slobPath,
+          isLinked,
+          sourceBookmark,
+        );
+        reader = await SlobReader.fromBytes(slobBytes, fileName: slobPath);
+      } else {
+        reader = await SlobReader.fromPath(slobPath);
+      }
       await reader.open();
 
       final checksum = await _calculateChecksum(slobPath);
@@ -4305,6 +4378,7 @@ class DictionaryManager {
         _IndexSlobArgs(
           dictId: dictId,
           slobPath: finalSlobPath,
+          slobBytes: slobBytes,
           indexDefinitions: indexDefinitions,
           bookName: bookName,
           sendPort: receivePort.sendPort,

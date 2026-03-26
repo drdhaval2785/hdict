@@ -3,8 +3,11 @@ export 'package:slob_reader/slob_reader.dart' show SlobBlob;
 import 'package:hdict/core/parser/random_access_source.dart';
 import 'package:hdict/core/parser/saf_random_access_source.dart';
 import 'package:hdict/core/parser/bookmark_random_access_source.dart';
+import 'package:hdict/core/parser/random_access_source.dart'
+    show MemoryRandomAccessSource;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:path/path.dart';
 import 'dart:io';
 
@@ -55,6 +58,16 @@ class SlobReader {
   /// Factory to create a SlobReader from an Android SAF URI.
   static Future<SlobReader> fromUri(String uri) async {
     return SlobReader(uri, source: SafRandomAccessSource(uri));
+  }
+
+  /// Factory to create a SlobReader from in-memory bytes.
+  /// Useful for small .slob files loaded entirely into memory for fast I/O.
+  static Future<SlobReader> fromBytes(
+    Uint8List bytes, {
+    String? fileName,
+  }) async {
+    final path = fileName ?? 'memory.slob';
+    return SlobReader(path, source: MemoryRandomAccessSource(bytes));
   }
 
   /// Opens the Slob file.
