@@ -459,8 +459,13 @@ Future<void> _indexEntry(_IndexArgs args) async {
     );
     final bool canLoadInMemory = dictFileSize < 50 * 1024 * 1024; // 50MB
 
+    hDebugPrint(
+      'StarDict: dictFileSize=$dictFileSize, canLoadInMemory=$canLoadInMemory, isDz=${_dictPathIsDz(args.dictPath)}',
+    );
+
     DictReader dictReader;
     if (canLoadInMemory && _dictPathIsDz(args.dictPath)) {
+      hDebugPrint('StarDict: Using IN-MEMORY optimization for .dict.dz file');
       final dictBytes = await _loadDictFileIntoMemory(
         args.dictPath,
         args.dictUri,
@@ -486,6 +491,9 @@ Future<void> _indexEntry(_IndexArgs args) async {
 
     // Check file size for optimization decision
     // Memory loading now works for both .dict and .dict.dz files when < 50MB
+    hDebugPrint(
+      'StarDict: DictReader opened, canLoadInMemory=$canLoadInMemory',
+    );
 
     // Start batch insert optimization
     int startId = await dbHelper.startBatchInsert();
@@ -515,6 +523,9 @@ Future<void> _indexEntry(_IndexArgs args) async {
     Uint8List? dictFileBytes;
     if (canLoadInMemory) {
       dictFileBytes = await dictReader.source.read(0, dictFileSize);
+      hDebugPrint(
+        'StarDict: Loaded ${dictFileBytes.length} bytes into memory for reading',
+      );
     }
 
     for (int i = 0; i < totalHeadwords; i += batchSize) {
@@ -525,7 +536,8 @@ Future<void> _indexEntry(_IndexArgs args) async {
 
       final List<String> contents;
       if (canLoadInMemory && dictFileBytes != null) {
-        // Fast path: extract from memory (plain .dict only)
+        // Fast path: extract from memory
+        hDebugPrint('StarDict: Using IN-MEMORY read for batch $i');
         final bytes = dictFileBytes; // capture for closure
         contents = currentBatch.map((e) {
           if (!args.indexDefinitions) return '';
@@ -541,6 +553,9 @@ Future<void> _indexEntry(_IndexArgs args) async {
         }).toList();
       } else {
         // Default path: disk reads in batches
+        hDebugPrint(
+          'StarDict: Using DISK read for batch $i (file too large or no memory bytes)',
+        );
         final List<({int offset, int length})> readEntries = currentBatch
             .map(
               (e) => (offset: e['offset'] as int, length: e['length'] as int),
@@ -714,6 +729,9 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
 
     MdictReader reader;
     if (args.mdxBytes != null) {
+      hDebugPrint(
+        'MDict: Using IN-MEMORY optimization (${args.mdxBytes!.length} bytes)',
+      );
       reader = await MdictReader.fromBytes(
         args.mdxBytes!,
         fileName: args.mdxPath,
@@ -837,6 +855,9 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
   try {
     SlobReader reader;
     if (args.slobBytes != null) {
+      hDebugPrint(
+        'Slob: Using IN-MEMORY optimization (${args.slobBytes!.length} bytes)',
+      );
       reader = await SlobReader.fromBytes(
         args.slobBytes!,
         fileName: args.slobPath,
@@ -4099,10 +4120,14 @@ class DictionaryManager {
         sourceBookmark,
       );
       final bool canLoadInMemory = mdxFileSize < 50 * 1024 * 1024; // 50MB
+      hDebugPrint(
+        'MDict: mdxFileSize=$mdxFileSize, canLoadInMemory=$canLoadInMemory',
+      );
 
       MdictReader reader;
       Uint8List? mdxBytes;
       if (canLoadInMemory) {
+        hDebugPrint('MDict: Using IN-MEMORY optimization');
         mdxBytes = await _loadMdxFileIntoMemory(
           mdxPath,
           isLinked,
