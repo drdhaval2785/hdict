@@ -9,7 +9,6 @@ import 'package:path/path.dart' as p;
 import 'package:hdict/core/parser/random_access_source.dart';
 import 'package:hdict/core/parser/saf_random_access_source.dart';
 import 'package:hdict/core/parser/bookmark_random_access_source.dart';
-import 'random_access_source.dart' show MemoryRandomAccessSource;
 
 /// Reads definitions from a StarDict .dict or .dict.dz file at specified offsets and lengths.
 ///

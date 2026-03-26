@@ -237,7 +237,7 @@ void main() {
       final bytes = await videoFile.readAsBytes();
       expect(bytes, isNotNull);
       expect(bytes.length, greaterThan(0));
-      print('Video file size: ${bytes.length} bytes');
+      // print('Video file size: ${bytes.length} bytes');
     });
 
     test('can use video bytes with MddReader flow', () async {

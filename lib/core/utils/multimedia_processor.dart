@@ -171,6 +171,7 @@ class MultimediaProcessor {
     }
   }
 
+  // ignore: unused_element
   String _getVideoMimeType(String filename) {
     final ext = filename.split('.').last.toLowerCase();
     switch (ext) {

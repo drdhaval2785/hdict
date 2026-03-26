@@ -7,7 +7,6 @@ import 'package:hdict/core/parser/saf_random_access_source.dart';
 import 'package:hdict/core/parser/bookmark_random_access_source.dart';
 import 'package:path/path.dart';
 import 'dart:io';
-import 'dart:typed_data';
 
 enum MdictSourceType { local, saf, bookmark }
 
@@ -176,7 +175,7 @@ class MdictReader {
       }
       final result = await _parser.readOneMdx(info);
       hDebugPrint(
-        'MdictReader.lookup: readOneMdx for "$word" returned: ${result != null && result.length > 100 ? "${result.substring(0, 100)}..." : result}',
+        'MdictReader.lookup: readOneMdx for "$word" returned: ${result.length > 100 ? "${result.substring(0, 100)}..." : result}',
       );
       return result;
     } catch (e, stack) {
@@ -193,7 +192,7 @@ class MdictReader {
     if (kIsWeb) throw UnsupportedError('MDict is not supported on Web.');
     if (!_isInitialized) await open();
     try {
-      final results = await _parser.search(prefix, limit: limit);
+      final results = _parser.search(prefix, limit: limit);
       return results.map((k) => (k, 0)).toList();
     } catch (_) {
       return [];
