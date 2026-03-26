@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.8] - 2026-03-26
+
+### Fixed
+- **Import and Deletion optimization**: Improved Import and Deletion times for dictionaries by avoiding repeated I/O calls. Reading the dict in memory and sending to SQLITE instead of repeated disk reads. Removed unnecesary FTS5 indexing if only for headword.
+
 ## [1.5.7] - 2026-03-26
 
 ### Added
