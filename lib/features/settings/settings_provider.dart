@@ -56,6 +56,7 @@ class SettingsProvider with ChangeNotifier {
   static const String _keyNextReviewPromptDate = 'next_review_prompt_date';
   static const String _keyReviewPromptCount = 'review_prompt_count';
   static const String _keyHasGivenReview = 'has_given_review';
+  static const String _keyListMode = 'list_mode';
 
   AppThemeMode _appThemeMode = AppThemeMode.custom;
   String _fontFamily = 'Roboto';
@@ -79,6 +80,7 @@ class SettingsProvider with ChangeNotifier {
   int _reviewPromptCount = 0;
   bool _hasGivenReview = false;
   bool _reviewPromptedThisSession = false;
+  bool _isListModeEnabled = false;
 
   AppThemeMode get appThemeMode => _appThemeMode;
   String get fontFamily => _fontFamily;
@@ -102,12 +104,13 @@ class SettingsProvider with ChangeNotifier {
   int get reviewPromptCount => _reviewPromptCount;
   bool get hasGivenReview => _hasGivenReview;
   bool get reviewPromptedThisSession => _reviewPromptedThisSession;
+  bool get isListModeEnabled => _isListModeEnabled;
 
   /// Returns the background color, adapting to the theme if it's set to the default white.
   Color getEffectiveBackgroundColor(BuildContext context) {
     if (_appThemeMode == AppThemeMode.light) return Colors.white;
     if (_appThemeMode == AppThemeMode.dark) return const Color(0xFF212121);
-    
+
     final Brightness brightness = Theme.of(context).brightness;
     if (_backgroundColor.toARGB32() == Colors.white.toARGB32()) {
       return brightness == Brightness.light
@@ -150,11 +153,16 @@ class SettingsProvider with ChangeNotifier {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     _appThemeMode = AppThemeMode.fromString(
-        prefs.getString(_keyAppThemeMode) ?? 'custom');
+      prefs.getString(_keyAppThemeMode) ?? 'custom',
+    );
     _fontFamily = prefs.getString(_keyFontFamily) ?? 'Roboto';
     _fontSize = prefs.getDouble(_keyFontSize) ?? 16.0;
-    _backgroundColor = Color(prefs.getInt(_keyBgColor) ?? Colors.white.toARGB32());
-    _textColor = Color(prefs.getInt(_keyTextColor) ?? Colors.black87.toARGB32());
+    _backgroundColor = Color(
+      prefs.getInt(_keyBgColor) ?? Colors.white.toARGB32(),
+    );
+    _textColor = Color(
+      prefs.getInt(_keyTextColor) ?? Colors.black87.toARGB32(),
+    );
     _previewLines = prefs.getInt(_keyPreviewLines) ?? 3;
     _isFuzzySearchEnabled = prefs.getBool(_keyFuzzySearch) ?? false;
     _isTapOnMeaningEnabled = prefs.getBool(_keyTapMeaning) ?? true;
@@ -164,17 +172,21 @@ class SettingsProvider with ChangeNotifier {
     _isSearchInDefinitionsEnabled =
         prefs.getBool(_keySearchInDefinitions) ?? true;
     _headwordSearchMode = SearchMode.fromString(
-        prefs.getString(_keyHeadwordSearchMode) ?? 'prefix');
+      prefs.getString(_keyHeadwordSearchMode) ?? 'prefix',
+    );
     _definitionSearchMode = SearchMode.fromString(
-        prefs.getString(_keyDefinitionSearchMode) ?? 'prefix');
-    _headwordColor =
-        Color(prefs.getInt(_keyHeadwordColor) ?? Colors.brown.toARGB32());
+      prefs.getString(_keyDefinitionSearchMode) ?? 'prefix',
+    );
+    _headwordColor = Color(
+      prefs.getInt(_keyHeadwordColor) ?? Colors.brown.toARGB32(),
+    );
     _searchResultLimit = prefs.getInt(_keySearchResultLimit) ?? 50;
     _flashCardWordCount = prefs.getInt(_keyFlashCardWordCount) ?? 10;
     _appFirstLaunchDate = prefs.getInt(_keyAppFirstLaunchDate) ?? 0;
     _nextReviewPromptDate = prefs.getInt(_keyNextReviewPromptDate) ?? 0;
     _reviewPromptCount = prefs.getInt(_keyReviewPromptCount) ?? 0;
     _hasGivenReview = prefs.getBool(_keyHasGivenReview) ?? false;
+    _isListModeEnabled = prefs.getBool(_keyListMode) ?? false;
     notifyListeners();
   }
 
@@ -311,7 +323,8 @@ class SettingsProvider with ChangeNotifier {
 
   Future<void> incrementReviewPromptCountAndSetNextDate() async {
     _reviewPromptCount++;
-    _nextReviewPromptDate = DateTime.now().millisecondsSinceEpoch + (15 * 24 * 60 * 60 * 1000);
+    _nextReviewPromptDate =
+        DateTime.now().millisecondsSinceEpoch + (15 * 24 * 60 * 60 * 1000);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_keyReviewPromptCount, _reviewPromptCount);
     await prefs.setInt(_keyNextReviewPromptDate, _nextReviewPromptDate);
@@ -327,6 +340,13 @@ class SettingsProvider with ChangeNotifier {
 
   void setReviewPromptedThisSession(bool prompted) {
     _reviewPromptedThisSession = prompted;
+    notifyListeners();
+  }
+
+  Future<void> setListMode(bool enabled) async {
+    _isListModeEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyListMode, enabled);
     notifyListeners();
   }
 }

@@ -1432,6 +1432,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         definitionHtml; // Cache for subsequent scrolls
                   }
 
+                  // List Mode: show accordion with headword as title
+                  if (settings.isListModeEnabled) {
+                    return _buildAccordionItem(
+                      context: context,
+                      settings: settings,
+                      theme: theme,
+                      defData: defData,
+                      defMap: defMap,
+                      definitionHtml: definitionHtml,
+                      highlightCol: highlightCol,
+                      index: index,
+                      globalIndex: index + 1,
+                    );
+                  }
+
                   return Stack(
                     children: [
                       Column(
@@ -2040,6 +2055,161 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _isPopupOpen = false;
     });
   }
+
+  String _extractTextFromHtml(String html) {
+    return html.replaceAll(RegExp(r'<[^>]*>'), '').trim();
+  }
+
+  Widget _buildAccordionItem({
+    required BuildContext context,
+    required SettingsProvider settings,
+    required ThemeData theme,
+    required Map<String, dynamic> defData,
+    required Map<String, dynamic> defMap,
+    required String definitionHtml,
+    required String highlightCol,
+    required int index,
+    required int globalIndex,
+  }) {
+    final headwordText = _extractTextFromHtml(
+      defData['headwordHtml'] as String? ?? '',
+    );
+
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 2),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: theme.colorScheme.outline.withValues(alpha: 0.3),
+            width: 0.5,
+          ),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: ExpansionTile(
+          key: PageStorageKey('accordion_${defData['id'] ?? index}'),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          childrenPadding: EdgeInsets.zero,
+          minTileHeight: 40,
+          dense: true,
+          title: Row(
+            children: [
+              SizedBox(
+                width: 36,
+                child: Text(
+                  '$globalIndex.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  headwordText.isNotEmpty ? headwordText : 'Entry $globalIndex',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: settings.getEffectiveHeadwordColor(context),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          trailing: Icon(
+            Icons.expand_more,
+            size: 20,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+              child: Html(
+                data: definitionHtml,
+                style: {
+                  "body": Style(
+                    fontSize: FontSize(settings.fontSize),
+                    lineHeight: LineHeight.em(1.4),
+                    margin: Margins.zero,
+                    padding: HtmlPaddings.zero,
+                    color: settings.getEffectiveTextColor(context),
+                    fontFamily: settings.fontFamily,
+                  ),
+                  "a": Style(
+                    color: theme.colorScheme.primary,
+                    textDecoration: TextDecoration.underline,
+                  ),
+                  "mark": Style(
+                    backgroundColor: Color(
+                      int.parse(highlightCol.replaceFirst('#', '0xFF')),
+                    ),
+                    color: Colors.black,
+                  ),
+                  ".dict-word": Style(
+                    color: settings.textColor,
+                    textDecoration: TextDecoration.none,
+                  ),
+                  ".headword": Style(
+                    color: settings.getEffectiveHeadwordColor(context),
+                    fontWeight: FontWeight.bold,
+                  ),
+                  ".headword a": Style(
+                    color: settings.getEffectiveHeadwordColor(context),
+                    textDecoration: TextDecoration.none,
+                  ),
+                  ".headword .dict-word": Style(
+                    color: settings.headwordColor,
+                    textDecoration: TextDecoration.none,
+                  ),
+                  "hr": Style(
+                    margin: Margins.zero,
+                    padding: HtmlPaddings.zero,
+                    border: Border(
+                      bottom: BorderSide(
+                        color: theme.colorScheme.outline,
+                        width: 1,
+                      ),
+                    ),
+                  ),
+                },
+                extensions: [
+                  MddVideoHtmlExtension(dictId: defMap['dict_id'] as int? ?? 0),
+                  const AnchorIdExtension(),
+                ],
+                onLinkTap: (url, attributes, element) async {
+                  if (url != null && settings.isOpenPopupOnTap) {
+                    if (url.startsWith('http://') ||
+                        url.startsWith('https://')) {
+                      final uri = Uri.parse(url);
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(
+                          uri,
+                          mode: LaunchMode.externalApplication,
+                        );
+                      }
+                    } else if (!url.startsWith('mdd-audio:') &&
+                        !url.startsWith('mdd-video:')) {
+                      String wordToLookup = url;
+                      if (url.startsWith('look_up:')) {
+                        wordToLookup = url.substring(8);
+                      } else if (url.startsWith('bword://')) {
+                        wordToLookup = url.substring(8);
+                      }
+                      try {
+                        wordToLookup = Uri.decodeComponent(wordToLookup);
+                      } catch (_) {}
+                      _showWordPopup(wordToLookup);
+                    }
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _MdictDefinitionContent extends StatefulWidget {
@@ -2262,6 +2432,21 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
 
                     definitionHtml = '${defData['headwordHtml']}\n$processed';
                     defData['processedHtml'] = definitionHtml;
+                  }
+
+                  // List Mode: show accordion with headword as title
+                  if (settings.isListModeEnabled) {
+                    return _buildAccordionItem(
+                      context: context,
+                      settings: settings,
+                      theme: theme,
+                      defData: defData,
+                      defMap: defMap,
+                      definitionHtml: definitionHtml,
+                      highlightCol: highlightCol,
+                      index: index,
+                      globalIndex: index + 1,
+                    );
                   }
 
                   return Stack(
@@ -2543,6 +2728,151 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  String _extractTextFromHtml(String html) {
+    return html.replaceAll(RegExp(r'<[^>]*>'), '').trim();
+  }
+
+  Widget _buildAccordionItem({
+    required BuildContext context,
+    required SettingsProvider settings,
+    required ThemeData theme,
+    required Map<String, dynamic> defData,
+    required Map<String, dynamic> defMap,
+    required String definitionHtml,
+    required String highlightCol,
+    required int index,
+    required int globalIndex,
+  }) {
+    final headwordText = _extractTextFromHtml(
+      defData['headwordHtml'] as String? ?? '',
+    );
+
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 2),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: theme.colorScheme.outline.withValues(alpha: 0.3),
+            width: 0.5,
+          ),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: ExpansionTile(
+          key: PageStorageKey('popup_accordion_${defData['id'] ?? index}'),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          childrenPadding: EdgeInsets.zero,
+          minTileHeight: 40,
+          dense: true,
+          title: Row(
+            children: [
+              SizedBox(
+                width: 36,
+                child: Text(
+                  '$globalIndex.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  headwordText.isNotEmpty ? headwordText : 'Entry $globalIndex',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: settings.getEffectiveHeadwordColor(context),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          trailing: Icon(
+            Icons.expand_more,
+            size: 20,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+              child: Html(
+                data: definitionHtml,
+                style: {
+                  "body": Style(
+                    fontSize: FontSize(settings.fontSize),
+                    lineHeight: LineHeight.em(1.4),
+                    margin: Margins.zero,
+                    padding: HtmlPaddings.zero,
+                    color: settings.getEffectiveTextColor(context),
+                    fontFamily: settings.fontFamily,
+                  ),
+                  "a": Style(
+                    color: theme.colorScheme.primary,
+                    textDecoration: TextDecoration.underline,
+                  ),
+                  "mark": Style(
+                    backgroundColor: Color(
+                      int.parse(highlightCol.replaceFirst('#', '0xFF')),
+                    ),
+                    color: Colors.black,
+                  ),
+                  ".dict-word": Style(
+                    color: settings.textColor,
+                    textDecoration: TextDecoration.none,
+                  ),
+                  ".headword": Style(
+                    color: settings.getEffectiveHeadwordColor(context),
+                    fontWeight: FontWeight.bold,
+                  ),
+                  ".headword a": Style(
+                    color: settings.getEffectiveHeadwordColor(context),
+                    textDecoration: TextDecoration.none,
+                  ),
+                  ".headword .dict-word": Style(
+                    color: settings.headwordColor,
+                    textDecoration: TextDecoration.none,
+                  ),
+                  "hr": Style(
+                    margin: Margins.zero,
+                    padding: HtmlPaddings.zero,
+                    border: Border(
+                      bottom: BorderSide(
+                        color: theme.colorScheme.outline,
+                        width: 1,
+                      ),
+                    ),
+                  ),
+                },
+                extensions: [
+                  MddVideoHtmlExtension(dictId: defMap['dict_id'] as int? ?? 0),
+                  const AnchorIdExtension(),
+                ],
+                onLinkTap: (url, attributes, element) async {
+                  if (url != null &&
+                      (url.startsWith('http://') ||
+                          url.startsWith('https://'))) {
+                    launchUrl(
+                      Uri.parse(url),
+                      mode: LaunchMode.externalApplication,
+                    );
+                  } else if (url != null && url.startsWith('entry://')) {
+                    String wordToLookup = url.substring(8);
+                    try {
+                      wordToLookup = Uri.decodeComponent(wordToLookup);
+                    } catch (_) {}
+                    widget.onEntryTap?.call(wordToLookup);
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

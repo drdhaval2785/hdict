@@ -171,13 +171,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const Divider(),
             _buildSectionHeader(theme, 'Appearance'),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 8.0,
+              ),
               child: SegmentedButton<AppThemeMode>(
                 segments: AppThemeMode.values
                     .map((m) => ButtonSegment(value: m, label: Text(m.label)))
                     .toList(),
                 selected: {settings.appThemeMode},
-                onSelectionChanged: (set) => settings.setAppThemeMode(set.first),
+                onSelectionChanged: (set) =>
+                    settings.setAppThemeMode(set.first),
               ),
             ),
             ListTile(
@@ -194,11 +198,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.remove),
-                    onPressed: () => settings.setFontSize(settings.fontSize - 1),
+                    onPressed: () =>
+                        settings.setFontSize(settings.fontSize - 1),
                   ),
                   IconButton(
                     icon: const Icon(Icons.add),
-                    onPressed: () => settings.setFontSize(settings.fontSize + 1),
+                    onPressed: () =>
+                        settings.setFontSize(settings.fontSize + 1),
                   ),
                 ],
               ),
@@ -238,6 +244,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               value: settings.isOpenPopupOnTap,
               onChanged: (value) => settings.setOpenPopup(value),
+            ),
+            SwitchListTile(
+              title: const Text('List Mode'),
+              subtitle: const Text(
+                'Show results as accordion (click to expand)',
+              ),
+              value: settings.isListModeEnabled,
+              onChanged: (value) => settings.setListMode(value),
             ),
             const Divider(),
             _buildSectionHeader(theme, 'Flash Cards'),
