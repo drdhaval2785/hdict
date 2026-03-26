@@ -1369,11 +1369,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 itemCount: rawDefinitions.length + 1,
                 separatorBuilder: (context, index) {
                   if (index == rawDefinitions.length - 1) {
-                    return const Divider(
-                      height: 48,
-                      thickness: 1,
-                      color: Colors.transparent,
-                    );
+                    return const SizedBox(height: 8);
+                  }
+                  if (settings.isListModeEnabled) {
+                    return const SizedBox(height: 2);
                   }
                   return const Divider(height: 32, thickness: 2);
                 },
@@ -2379,11 +2378,10 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
                 itemCount: _rawDefinitions.length + 1,
                 separatorBuilder: (context, index) {
                   if (index == _rawDefinitions.length - 1) {
-                    return const Divider(
-                      height: 48,
-                      thickness: 1,
-                      color: Colors.transparent,
-                    );
+                    return const SizedBox(height: 8);
+                  }
+                  if (settings.isListModeEnabled) {
+                    return const SizedBox(height: 2);
                   }
                   return const Divider(height: 32, thickness: 2);
                 },
