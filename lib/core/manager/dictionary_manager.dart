@@ -4137,6 +4137,7 @@ class DictionaryManager {
   }
 
   Stream<DeletionProgress> deleteDictionaryStream(int id) async* {
+    hDebugPrint('DictionaryManager: Starting dictionary deletion for id=$id');
     yield DeletionProgress(message: 'Starting deletion...', value: 0.1);
 
     String? dictName;
@@ -4149,6 +4150,9 @@ class DictionaryManager {
           yield DeletionProgress(
             message: 'Deleting dictionary files...',
             value: 0.3,
+          );
+          hDebugPrint(
+            'DictionaryManager: Deleting physical files for dict_id=$id',
           );
           try {
             final String resolvedPath = await _dbHelper.resolvePath(rawPath);
@@ -4163,22 +4167,31 @@ class DictionaryManager {
                   dirName.startsWith('slob_')) {
                 await dir.delete(recursive: true);
                 hDebugPrint(
-                  'Deleted physical dictionary directory: ${dir.path}',
+                  'DictionaryManager: Deleted physical dictionary directory: ${dir.path}',
                 );
               }
             }
           } catch (e) {
-            hDebugPrint('Failed to delete physical dictionary directory: $e');
+            hDebugPrint(
+              'DictionaryManager: Failed to delete physical dictionary directory: $e',
+            );
           }
         }
       }
     }
 
+    hDebugPrint(
+      'DictionaryManager: Removing dictionary from database for id=$id',
+    );
     yield DeletionProgress(message: 'Removing from database...', value: 0.6);
     await _dbHelper.deleteDictionary(id);
     // Remove from all dictionary groups
     await DictionaryGroupManager.removeDictionaryFromAllGroups(id);
+    hDebugPrint('DictionaryManager: Dictionary groups cleaned up for id=$id');
 
+    hDebugPrint(
+      'DictionaryManager: Deletion complete for id=$id, name=${dictName ?? "unknown"}',
+    );
     yield DeletionProgress(message: 'Optimizing database...', value: 0.9);
 
     yield DeletionProgress(
