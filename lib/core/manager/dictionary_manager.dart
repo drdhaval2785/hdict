@@ -456,16 +456,26 @@ Future<void> _indexEntry(_IndexArgs args) async {
       isLinked,
       args.sourceBookmark,
     );
-    // Don't use in-memory optimization for .dict.dz files - decompression requires file-based reading
-    final bool canLoadInMemory =
-        !_dictPathIsDz(args.dictPath) && dictFileSize < 50 * 1024 * 1024;
+    final bool canLoadInMemory = dictFileSize < 50 * 1024 * 1024;
 
     hDebugPrint(
       'StarDict: dictFileSize=$dictFileSize, canLoadInMemory=$canLoadInMemory, isDz=${_dictPathIsDz(args.dictPath)}',
     );
 
     DictReader dictReader;
-    if (canLoadInMemory) {
+    if (canLoadInMemory && _dictPathIsDz(args.dictPath)) {
+      hDebugPrint('StarDict: Using IN-MEMORY optimization for .dict.dz file');
+      final dictBytes = await _loadDictFileIntoMemory(
+        args.dictPath,
+        args.dictUri,
+        isLinked,
+        args.sourceBookmark,
+      );
+      dictReader = await DictReader.fromBytes(
+        dictBytes,
+        fileName: p.basename(args.dictPath),
+      );
+    } else if (canLoadInMemory) {
       hDebugPrint('StarDict: Using IN-MEMORY optimization for .dict file');
       final dictBytes = await _loadDictFileIntoMemory(
         args.dictPath,
@@ -547,9 +557,26 @@ Future<void> _indexEntry(_IndexArgs args) async {
       final currentBatch = entriesList.sublist(i, end);
 
       final List<String> contents;
-      if (canLoadInMemory && dictFileBytes != null) {
-        // Fast path: extract from memory - ONLY for uncompressed .dict files!
-        hDebugPrint('StarDict: Using IN-MEMORY read for batch $i');
+      if (canLoadInMemory &&
+          dictFileBytes != null &&
+          _dictPathIsDz(args.dictPath)) {
+        // For .dict.dz files in memory: use DictReader which handles decompression via DictzipReader
+        hDebugPrint(
+          'StarDict: Using IN-MEMORY read for batch $i (.dict.dz - using DictzipReader)',
+        );
+        final List<({int offset, int length})> readEntries = currentBatch
+            .map(
+              (e) => (offset: e['offset'] as int, length: e['length'] as int),
+            )
+            .toList();
+        contents = args.indexDefinitions
+            ? await dictReader.readBulk(readEntries)
+            : List.filled(currentBatch.length, '');
+      } else if (canLoadInMemory && dictFileBytes != null) {
+        // For uncompressed .dict files in memory: read directly from bytes
+        hDebugPrint(
+          'StarDict: Using IN-MEMORY read for batch $i (.dict - direct)',
+        );
         final bytes = dictFileBytes; // capture for closure
         contents = currentBatch.map((e) {
           if (!args.indexDefinitions) return '';
