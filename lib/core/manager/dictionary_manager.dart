@@ -4943,7 +4943,17 @@ class DictionaryManager {
       final dict = await _dbHelper.getDictionaryById(dictId);
       if (dict == null) throw Exception('Dictionary not found');
 
-      final String dictPath = await _dbHelper.resolvePath(dict['path']);
+      final String sourceType = dict['source_type'] as String? ?? 'managed';
+      final String? sourceBookmark = dict['source_bookmark'] as String?;
+      final String rawPath = dict['path'] as String? ?? '';
+
+      final String dictPath;
+      if (sourceType == 'linked' && sourceBookmark != null) {
+        dictPath = sourceBookmark;
+      } else {
+        dictPath = await _dbHelper.resolvePath(rawPath);
+      }
+
       final String format = dict['format'] as String? ?? 'stardict';
       final String bookName = dict['name'] as String? ?? 'Unknown Dictionary';
 
@@ -5078,8 +5088,8 @@ class DictionaryManager {
               synPath,
               indexDefinitions,
               ifoParser,
-              'managed',
-              null,
+              isSaf ? sourceType : 'managed',
+              isSaf ? sourceBookmark : null,
               receivePort.sendPort,
               rootIsolateToken,
               idxUri: isSaf ? idxPath : null,
