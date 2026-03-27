@@ -1953,20 +1953,34 @@ class DatabaseHelper {
             'FROM word_metadata m JOIN dictionaries d ON m.dict_id = d.id';
       }
 
+      // For combined searches with definition query, simplify ORDER BY to avoid slow sorting
+      // The definition query already filters heavily, so exact ordering is less critical
+      final bool isCombinedSearch =
+          definitionQuery != null && headwordQuery != null;
+      String orderBy;
+      if (isCombinedSearch) {
+        // Simplified: just order by dict priority, then word
+        orderBy = 'd.display_order ASC, m.word ASC';
+      } else {
+        orderBy =
+            '''
+          d.display_order ASC,
+          ${headwordQuery != null ? "(m.word = ?) DESC," : ""}
+          m.word ASC,
+          d.id ASC
+        ''';
+      }
+
       final String sql =
           '''
         SELECT m.word, m.dict_id, m.offset, m.length 
         $fromClause
         WHERE ${whereClauses.join(' AND ')}
-        ORDER BY 
-          d.display_order ASC,
-          ${headwordQuery != null ? "(m.word = ?) DESC," : ""}
-          m.word ASC,
-          d.id ASC
+        ORDER BY $orderBy
         LIMIT ?
       ''';
 
-      if (headwordQuery != null) {
+      if (headwordQuery != null && !isCombinedSearch) {
         whereArgs.add(headwordQuery.trim());
       }
       whereArgs.add(limit);
@@ -1977,6 +1991,10 @@ class DatabaseHelper {
       final String opDescriptor = hasWildcards
           ? 'LIKE (Wildcard)'
           : (headwordMode == SearchMode.prefix ? 'LIKE (Prefix)' : '=');
+
+      if (definitionQuery != null) {
+        hDebugPrint('DEBUG: Combined search SQL: $sql with args: $whereArgs');
+      }
 
       hDebugPrint(
         'DatabaseHelper.searchWords: Executing query for "$headwordQuery" (mode=$headwordMode, op=$opDescriptor)',

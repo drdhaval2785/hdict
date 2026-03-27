@@ -5050,6 +5050,7 @@ class DictionaryManager {
       final String sourceType = dict['source_type'] as String? ?? 'managed';
       final String? sourceBookmark = dict['source_bookmark'] as String?;
       final String rawPath = dict['path'] as String? ?? '';
+      final String format = dict['format'] as String? ?? 'stardict';
 
       final String dictPath;
       final bool isLinked = sourceType == 'linked';
@@ -5061,10 +5062,47 @@ class DictionaryManager {
         } else if (rawPath.startsWith('content://')) {
           dictPath = rawPath;
         } else {
-          dictPath = await _dbHelper.resolvePath(rawPath);
+          final resolvedPath = await _dbHelper.resolvePath(rawPath);
+          // For StarDict format, derive .dict path from .ifo path
+          if (format == 'stardict') {
+            if (resolvedPath.endsWith('.ifo')) {
+              // Try .dict.dz first (compressed), then .dict
+              String dictPathCandidate = resolvedPath.replaceAll(
+                '.ifo',
+                '.dict.dz',
+              );
+              if (await File(dictPathCandidate).exists()) {
+                dictPath = dictPathCandidate;
+              } else {
+                dictPath = resolvedPath.replaceAll('.ifo', '.dict');
+              }
+            } else {
+              dictPath = resolvedPath;
+            }
+          } else {
+            dictPath = resolvedPath;
+          }
         }
       } else {
-        dictPath = await _dbHelper.resolvePath(rawPath);
+        final resolvedPath = await _dbHelper.resolvePath(rawPath);
+        // For StarDict format, derive .dict path from .ifo path
+        if (format == 'stardict') {
+          if (resolvedPath.endsWith('.ifo')) {
+            String dictPathCandidate = resolvedPath.replaceAll(
+              '.ifo',
+              '.dict.dz',
+            );
+            if (await File(dictPathCandidate).exists()) {
+              dictPath = dictPathCandidate;
+            } else {
+              dictPath = resolvedPath.replaceAll('.ifo', '.dict');
+            }
+          } else {
+            dictPath = resolvedPath;
+          }
+        } else {
+          dictPath = resolvedPath;
+        }
       }
 
       hDebugPrint(
@@ -5074,7 +5112,6 @@ class DictionaryManager {
       final bool isSaf =
           Platform.isAndroid && dictPath.startsWith('content://');
 
-      final String format = dict['format'] as String? ?? 'stardict';
       final String bookName = dict['name'] as String? ?? 'Unknown Dictionary';
 
       // Wipe existing index
