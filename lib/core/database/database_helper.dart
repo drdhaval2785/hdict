@@ -1402,6 +1402,9 @@ class DatabaseHelper {
     try {
       await db.execute("INSERT INTO word_index(word_index) VALUES('optimize')");
       await db.execute('VACUUM');
+
+      await db.execute('PRAGMA wal_checkpoint(TRUNCATE)');
+
       hDebugPrint('Database optimized and vacuumed successfully');
     } catch (e) {
       hDebugPrint('Error vacuuming database: $e');
@@ -1423,10 +1426,17 @@ class DatabaseHelper {
     }
 
     try {
-      final file = File(path);
-      if (await file.exists()) {
-        return await file.length();
+      final dir = Directory(dirname(path));
+      int totalSize = 0;
+
+      await for (final entity in dir.list()) {
+        final fileName = basename(entity.path);
+        if (fileName.startsWith('novalex.db') || fileName.startsWith('hdict')) {
+          totalSize += await File(entity.path).length();
+        }
       }
+
+      return totalSize;
     } catch (e) {
       hDebugPrint('Error getting database size: $e');
     }
