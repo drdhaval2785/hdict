@@ -719,8 +719,8 @@ Future<void> _indexEntry(_IndexArgs args) async {
     );
     await dbHelper.endBatchInsert();
 
-    // Rebuild FTS5 index in background if deferred
-    if (!populateFts5) {
+    // Rebuild FTS5 index in background if definitions were indexed but FTS5 was deferred
+    if (args.indexDefinitions && !populateFts5) {
       hDebugPrint('StarDict: Starting background FTS5 indexing');
       await dbHelper.rebuildFts5IndexForDict(args.dictId);
       hDebugPrint('StarDict: Background FTS5 indexing complete');
@@ -878,8 +878,8 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
     );
     await dbHelper.endBatchInsert();
 
-    // Rebuild FTS5 index in background if deferred
-    if (!populateFts5) {
+    // Rebuild FTS5 index in background if definitions were indexed but FTS5 was deferred
+    if (args.indexDefinitions && !populateFts5) {
       hDebugPrint('MDict: Starting background FTS5 indexing');
       await dbHelper.rebuildFts5IndexForDict(args.dictId);
       hDebugPrint('MDict: Background FTS5 indexing complete');
@@ -1054,8 +1054,8 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
     );
     await dbHelper.endBatchInsert();
 
-    // Rebuild FTS5 index in background if deferred
-    if (!populateFts5) {
+    // Rebuild FTS5 index in background if definitions were indexed but FTS5 was deferred
+    if (args.indexDefinitions && !populateFts5) {
       hDebugPrint('Slob: Starting background FTS5 indexing');
       await dbHelper.rebuildFts5IndexForDict(args.dictId);
       hDebugPrint('Slob: Background FTS5 indexing complete');
@@ -1268,8 +1268,8 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
     );
     await dbHelper.endBatchInsert();
 
-    // Rebuild FTS5 index in background if deferred
-    if (!populateFts5) {
+    // Rebuild FTS5 index in background if definitions were indexed but FTS5 was deferred
+    if (args.indexDefinitions && !populateFts5) {
       hDebugPrint('Dictd: Starting background FTS5 indexing');
       await dbHelper.rebuildFts5IndexForDict(args.dictId);
       hDebugPrint('Dictd: Background FTS5 indexing complete');
