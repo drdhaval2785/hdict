@@ -1637,27 +1637,6 @@ class DatabaseHelper {
             .map((w) => _tokenizeContent(w['content'] as String?))
             .toList();
 
-        // DEBUG: Log content stats
-        int emptyContentCount = 0;
-        int nonEmptyContentCount = 0;
-        for (int i = 0; i < words.length && i < 3; i++) {
-          final content = words[i]['content'] as String?;
-          final tokenized = tokenizedContents[i];
-          hDebugPrint(
-            'DEBUG batchInsert: word="${words[i]['word']}", originalContentLength=${content?.length ?? 0}, tokenizedLength=${tokenized.length}',
-          );
-        }
-        for (final w in words) {
-          if ((w['content'] as String?)?.isNotEmpty ?? false) {
-            nonEmptyContentCount++;
-          } else {
-            emptyContentCount++;
-          }
-        }
-        hDebugPrint(
-          'DEBUG batchInsert: dictId=$dictId, total=${words.length}, nonEmptyContent=$nonEmptyContentCount, emptyContent=$emptyContentCount, dictName=$dictName',
-        );
-
         final metaBatch = txn.batch();
         for (final word in words) {
           metaBatch.insert('word_metadata', {
@@ -1991,10 +1970,6 @@ class DatabaseHelper {
       final String opDescriptor = hasWildcards
           ? 'LIKE (Wildcard)'
           : (headwordMode == SearchMode.prefix ? 'LIKE (Prefix)' : '=');
-
-      if (definitionQuery != null) {
-        hDebugPrint('DEBUG: Combined search SQL: $sql with args: $whereArgs');
-      }
 
       hDebugPrint(
         'DatabaseHelper.searchWords: Executing query for "$headwordQuery" (mode=$headwordMode, op=$opDescriptor)',

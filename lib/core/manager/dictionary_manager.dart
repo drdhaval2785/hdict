@@ -610,13 +610,6 @@ Future<void> _indexEntry(_IndexArgs args) async {
         final offset = entry['offset'] as int;
         final length = entry['length'] as int;
 
-        // DEBUG: Log first 3 entries to verify content extraction
-        if (headwordCount < 3) {
-          hDebugPrint(
-            'DEBUG: word="$word", offset=$offset, length=$length, contentLength=${content.length}, contentPreview="${content.length > 50 ? content.substring(0, 50) : content}"',
-          );
-        }
-
         wordOffsets.add((offset: offset, length: length, content: content));
 
         dbBatch.add({
