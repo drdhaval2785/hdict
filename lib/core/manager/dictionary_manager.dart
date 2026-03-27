@@ -4948,11 +4948,15 @@ class DictionaryManager {
       final String rawPath = dict['path'] as String? ?? '';
 
       final String dictPath;
-      if (sourceType == 'linked' && sourceBookmark != null) {
-        dictPath = sourceBookmark;
+      final bool isLinked = sourceType == 'linked';
+      if (isLinked && rawPath.startsWith('content://')) {
+        dictPath = rawPath;
       } else {
         dictPath = await _dbHelper.resolvePath(rawPath);
       }
+
+      final bool isSaf =
+          Platform.isAndroid && dictPath.startsWith('content://');
 
       final String format = dict['format'] as String? ?? 'stardict';
       final String bookName = dict['name'] as String? ?? 'Unknown Dictionary';
@@ -4980,8 +4984,6 @@ class DictionaryManager {
 
       switch (format) {
         case 'mdict':
-          final isSafMdict =
-              Platform.isAndroid && dictPath.startsWith('content://');
           await Isolate.spawn(
             _indexMdictEntry,
             _IndexMdictArgs(
@@ -4989,12 +4991,12 @@ class DictionaryManager {
               mdxPath: dictPath,
               indexDefinitions: indexDefinitions,
               bookName: bookName,
-              sourceType: isSafMdict ? 'linked' : null,
-              sourceBookmark: isSafMdict ? dictPath : null,
+              sourceType: isSaf ? 'linked' : null,
+              sourceBookmark: isSaf ? sourceBookmark : null,
               sendPort: receivePort.sendPort,
               rootIsolateToken: rootIsolateToken,
-              mdxUri: isSafMdict ? dictPath : null,
-              mddUri: isSafMdict ? dictPath.replaceAll('.mdx', '.mdd') : null,
+              mdxUri: isSaf ? dictPath : null,
+              mddUri: isSaf ? dictPath.replaceAll('.mdx', '.mdd') : null,
             ),
           );
           break;
@@ -5007,14 +5009,8 @@ class DictionaryManager {
               slobPath: dictPath,
               indexDefinitions: indexDefinitions,
               bookName: bookName,
-              sourceType:
-                  (Platform.isAndroid && dictPath.startsWith('content://'))
-                  ? 'linked'
-                  : null,
-              sourceBookmark:
-                  (Platform.isAndroid && dictPath.startsWith('content://'))
-                  ? dictPath
-                  : null,
+              sourceType: isSaf ? 'linked' : null,
+              sourceBookmark: isSaf ? sourceBookmark : null,
               sendPort: receivePort.sendPort,
               rootIsolateToken: rootIsolateToken,
             ),
@@ -5022,14 +5018,12 @@ class DictionaryManager {
           break;
 
         case 'dictd':
-          final isSafDictd =
-              Platform.isAndroid && dictPath.startsWith('content://');
           // For DICTD, we need the .index file. It should be in the same folder.
           final indexPath = dictPath.replaceFirst(
             RegExp(r'\.dict(\.dz)?$'),
             '.index',
           );
-          if (!isSafDictd && !File(indexPath).existsSync()) {
+          if (!isSaf && !File(indexPath).existsSync()) {
             throw Exception('DICTD .index file not found at $indexPath');
           }
           await Isolate.spawn(
@@ -5040,20 +5034,18 @@ class DictionaryManager {
               dictPath: dictPath,
               indexDefinitions: indexDefinitions,
               bookName: bookName,
-              sourceType: isSafDictd ? 'linked' : null,
-              sourceBookmark: isSafDictd ? indexPath : null,
+              sourceType: isSaf ? 'linked' : null,
+              sourceBookmark: isSaf ? sourceBookmark : null,
               sendPort: receivePort.sendPort,
               rootIsolateToken: rootIsolateToken,
-              indexUri: isSafDictd ? indexPath : null,
-              dictUri: isSafDictd ? dictPath : null,
+              indexUri: isSaf ? indexPath : null,
+              dictUri: isSaf ? dictPath : null,
             ),
           );
           break;
 
         case 'stardict':
         default:
-          final isSaf = Platform.isAndroid && dictPath.startsWith('content://');
-
           // If the stored path is .dict.dz, strip the .dz before deriving sibling paths.
           final String dictBasePath = dictPath.endsWith('.dz')
               ? dictPath.substring(
