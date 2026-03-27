@@ -4963,8 +4963,16 @@ class DictionaryManager {
 
       final String dictPath;
       final bool isLinked = sourceType == 'linked';
-      if (isLinked && rawPath.startsWith('content://')) {
-        dictPath = rawPath;
+      if (isLinked) {
+        // For linked/SAF sources, use companionUri if available
+        final String? companionUri = dict['companion_uri'] as String?;
+        if (companionUri != null && companionUri.startsWith('content://')) {
+          dictPath = companionUri;
+        } else if (rawPath.startsWith('content://')) {
+          dictPath = rawPath;
+        } else {
+          dictPath = await _dbHelper.resolvePath(rawPath);
+        }
       } else {
         dictPath = await _dbHelper.resolvePath(rawPath);
       }
