@@ -456,15 +456,17 @@ Future<void> _indexEntry(_IndexArgs args) async {
       isLinked,
       args.sourceBookmark,
     );
-    final bool canLoadInMemory = dictFileSize < 50 * 1024 * 1024; // 50MB
+    // Don't use in-memory optimization for .dict.dz files - decompression requires file-based reading
+    final bool canLoadInMemory =
+        !_dictPathIsDz(args.dictPath) && dictFileSize < 50 * 1024 * 1024;
 
     hDebugPrint(
       'StarDict: dictFileSize=$dictFileSize, canLoadInMemory=$canLoadInMemory, isDz=${_dictPathIsDz(args.dictPath)}',
     );
 
     DictReader dictReader;
-    if (canLoadInMemory && _dictPathIsDz(args.dictPath)) {
-      hDebugPrint('StarDict: Using IN-MEMORY optimization for .dict.dz file');
+    if (canLoadInMemory) {
+      hDebugPrint('StarDict: Using IN-MEMORY optimization for .dict file');
       final dictBytes = await _loadDictFileIntoMemory(
         args.dictPath,
         args.dictUri,
@@ -515,6 +517,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
     final int totalAll = totalHeadwords + totalSyns; // unified denominator
     int headwordCount = 0;
     int defWordCount = 0;
+    int totalDuplicates = 0;
 
     // Single insert mode when not indexing definitions (faster)
     // FTS5 indexing is deferred when not indexing definitions
@@ -545,7 +548,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
 
       final List<String> contents;
       if (canLoadInMemory && dictFileBytes != null) {
-        // Fast path: extract from memory
+        // Fast path: extract from memory - ONLY for uncompressed .dict files!
         hDebugPrint('StarDict: Using IN-MEMORY read for batch $i');
         final bytes = dictFileBytes; // capture for closure
         contents = currentBatch.map((e) {
@@ -561,10 +564,8 @@ Future<void> _indexEntry(_IndexArgs args) async {
           );
         }).toList();
       } else {
-        // Default path: disk reads in batches
-        hDebugPrint(
-          'StarDict: Using DISK read for batch $i (file too large or no memory bytes)',
-        );
+        // Default path: disk reads (used for .dict.dz or large files)
+        hDebugPrint('StarDict: Using DISK read for batch $i');
         final List<({int offset, int length})> readEntries = currentBatch
             .map(
               (e) => (offset: e['offset'] as int, length: e['length'] as int),
@@ -581,6 +582,13 @@ Future<void> _indexEntry(_IndexArgs args) async {
         final word = entry['word'] as String;
         final offset = entry['offset'] as int;
         final length = entry['length'] as int;
+
+        // DEBUG: Log first 3 entries to verify content extraction
+        if (headwordCount < 3) {
+          hDebugPrint(
+            'DEBUG: word="$word", offset=$offset, length=$length, contentLength=${content.length}, contentPreview="${content.length > 50 ? content.substring(0, 50) : content}"',
+          );
+        }
 
         wordOffsets.add((offset: offset, length: length, content: content));
 
@@ -601,13 +609,15 @@ Future<void> _indexEntry(_IndexArgs args) async {
         }
 
         if (useBatching && dbBatch.length >= batchSize) {
-          startId = await dbHelper.batchInsertWords(
+          final result = await dbHelper.batchInsertWords(
             args.dictId,
             dbBatch,
             startId: startId,
             populateFts5: populateFts5,
             dictName: args.ifoParser.bookName,
           );
+          startId = result.startId;
+          totalDuplicates += result.duplicateCount;
           dbBatch.clear();
           sendPort.send(
             ImportProgress(
@@ -628,13 +638,15 @@ Future<void> _indexEntry(_IndexArgs args) async {
       hDebugPrint(
         'StarDict: Inserting all ${dbBatch.length} headwords to DB in single transaction',
       );
-      startId = await dbHelper.batchInsertWords(
+      final result = await dbHelper.batchInsertWords(
         args.dictId,
         dbBatch,
         startId: startId,
         populateFts5: populateFts5,
         dictName: args.ifoParser.bookName,
       );
+      startId = result.startId;
+      totalDuplicates += result.duplicateCount;
       hDebugPrint('StarDict: Headwords DB insertion complete');
     }
 
@@ -669,13 +681,15 @@ Future<void> _indexEntry(_IndexArgs args) async {
             hDebugPrint(
               'StarDict: Inserting synonym batch ${synBatch.length} to DB',
             );
-            startId = await dbHelper.batchInsertWords(
+            final result = await dbHelper.batchInsertWords(
               args.dictId,
               synBatch,
               startId: startId,
               populateFts5: populateFts5,
               dictName: args.ifoParser.bookName,
             );
+            startId = result.startId;
+            totalDuplicates += result.duplicateCount;
             synBatch.clear();
             sendPort.send(
               ImportProgress(
@@ -699,15 +713,23 @@ Future<void> _indexEntry(_IndexArgs args) async {
         hDebugPrint(
           'StarDict: Inserting all ${synBatch.length} synonyms to DB in single transaction',
         );
-        startId = await dbHelper.batchInsertWords(
+        final result = await dbHelper.batchInsertWords(
           args.dictId,
           synBatch,
           startId: startId,
           populateFts5: populateFts5,
           dictName: args.ifoParser.bookName,
         );
+        startId = result.startId;
+        totalDuplicates += result.duplicateCount;
         hDebugPrint('StarDict: Synonyms DB insertion complete');
       }
+    }
+
+    if (totalDuplicates > 0) {
+      hDebugPrint(
+        'StarDict: Total duplicate entries skipped: $totalDuplicates',
+      );
     }
 
     await dictReader.close();
@@ -800,6 +822,7 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
     List<Map<String, dynamic>> batch = [];
     int indexed = 0;
     int defWordCount = 0;
+    int totalDuplicates = 0;
 
     // Single insert mode when not indexing definitions (faster)
     // FTS5 indexing is deferred when not indexing definitions
@@ -834,13 +857,15 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
       }
 
       if (useBatching && batch.length >= batchSize) {
-        startId = await dbHelper.batchInsertWords(
+        final result = await dbHelper.batchInsertWords(
           args.dictId,
           batch,
           startId: startId,
           populateFts5: populateFts5,
           dictName: args.bookName,
         );
+        startId = result.startId;
+        totalDuplicates += result.duplicateCount;
         batch.clear();
         sendPort.send(
           ImportProgress(
@@ -860,14 +885,19 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
       hDebugPrint(
         'MDict: Inserting all ${batch.length} entries to DB in single transaction',
       );
-      startId = await dbHelper.batchInsertWords(
+      final result = await dbHelper.batchInsertWords(
         args.dictId,
         batch,
         startId: startId,
         populateFts5: populateFts5,
         dictName: args.bookName,
       );
+      startId = result.startId;
+      totalDuplicates += result.duplicateCount;
       hDebugPrint('MDict: DB insertion complete');
+    }
+    if (totalDuplicates > 0) {
+      hDebugPrint('MDict: Total duplicate entries skipped: $totalDuplicates');
     }
     await reader.close();
     hDebugPrint('MDict: Updating dictionary word count');
@@ -946,6 +976,7 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
 
     int headwordCount = 0;
     int defWordCount = 0;
+    int totalDuplicates = 0;
     final totalBlobs = reader.blobCount;
     // Use larger batches — getBlobs() decompresses each bin once, so bigger
     // batches hit fewer bins per call and yield best throughput.
@@ -992,13 +1023,15 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
         }
 
         if (dbBatch.length >= batchSize) {
-          startId = await dbHelper.batchInsertWords(
+          final result = await dbHelper.batchInsertWords(
             args.dictId,
             dbBatch,
             startId: startId,
             populateFts5: populateFts5,
             dictName: args.bookName,
           );
+          startId = result.startId;
+          totalDuplicates += result.duplicateCount;
           dbBatch.clear();
           sendPort.send(
             ImportProgress(
@@ -1036,14 +1069,19 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
       hDebugPrint(
         'Slob: Inserting all ${dbBatch.length} entries to DB in single transaction',
       );
-      startId = await dbHelper.batchInsertWords(
+      final result = await dbHelper.batchInsertWords(
         args.dictId,
         dbBatch,
         startId: startId,
         populateFts5: populateFts5,
         dictName: args.bookName,
       );
+      startId = result.startId;
+      totalDuplicates += result.duplicateCount;
       hDebugPrint('Slob: DB insertion complete');
+    }
+    if (totalDuplicates > 0) {
+      hDebugPrint('Slob: Total duplicate entries skipped: $totalDuplicates');
     }
     await reader.close();
     hDebugPrint('Slob: Updating dictionary word count');
@@ -1143,6 +1181,7 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
     final int totalHeadwords = entriesList.length;
     int headwordCount = 0;
     int defWordCount = 0;
+    int totalDuplicates = 0;
     const int batchSize = 50000;
 
     // Single insert mode when not indexing definitions (faster)
@@ -1220,13 +1259,15 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
         }
 
         if (dbBatch.length >= batchSize) {
-          startId = await dbHelper.batchInsertWords(
+          final result = await dbHelper.batchInsertWords(
             args.dictId,
             dbBatch,
             startId: startId,
             populateFts5: populateFts5,
             dictName: args.bookName,
           );
+          startId = result.startId;
+          totalDuplicates += result.duplicateCount;
           dbBatch.clear();
           sendPort.send(
             ImportProgress(
@@ -1250,14 +1291,19 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
       hDebugPrint(
         'Dictd: Inserting all ${dbBatch.length} entries to DB in single transaction',
       );
-      startId = await dbHelper.batchInsertWords(
+      final result = await dbHelper.batchInsertWords(
         args.dictId,
         dbBatch,
         startId: startId,
         populateFts5: populateFts5,
         dictName: args.bookName,
       );
+      startId = result.startId;
+      totalDuplicates += result.duplicateCount;
       hDebugPrint('Dictd: DB insertion complete');
+    }
+    if (totalDuplicates > 0) {
+      hDebugPrint('Dictd: Total duplicate entries skipped: $totalDuplicates');
     }
     await dictdReader.close();
     hDebugPrint('Dictd: Updating dictionary word count');
@@ -4004,6 +4050,7 @@ class DictionaryManager {
       List<({int offset, int length, String content})> wordOffsets = [];
       int headwordCount = 0;
       int defWordCount = 0;
+      int totalDuplicates = 0;
 
       final idxStream = idxParser.parseFromBytes(decompressedIdxBytes);
       await for (final entry in idxStream) {
@@ -4041,12 +4088,14 @@ class DictionaryManager {
         wordOffsets.add((offset: offset, length: length, content: content));
 
         if (batch.length >= 1000) {
-          startId = await _dbHelper.batchInsertWords(
+          final result = await _dbHelper.batchInsertWords(
             dictId,
             batch,
             startId: startId,
             dictName: bookName,
           );
+          startId = result.startId;
+          totalDuplicates += result.duplicateCount;
           batch.clear();
           yield ImportProgress(
             message: 'Indexing $headwordCount words...',
@@ -4060,13 +4109,16 @@ class DictionaryManager {
           );
         }
       }
-      if (batch.isNotEmpty)
-        startId = await _dbHelper.batchInsertWords(
+      if (batch.isNotEmpty) {
+        final result = await _dbHelper.batchInsertWords(
           dictId,
           batch,
           startId: startId,
           dictName: bookName,
         );
+        startId = result.startId;
+        totalDuplicates += result.duplicateCount;
+      }
 
       // SYN support for Web
       if (finalSynName != null && decompressedSynBytes != null) {
@@ -4088,22 +4140,33 @@ class DictionaryManager {
             headwordCount++;
           }
           if (synBatch.length >= 1000) {
-            startId = await _dbHelper.batchInsertWords(
+            final result = await _dbHelper.batchInsertWords(
               dictId,
               synBatch,
               startId: startId,
               dictName: bookName,
             );
+            startId = result.startId;
+            totalDuplicates += result.duplicateCount;
             synBatch.clear();
           }
         }
-        if (synBatch.isNotEmpty)
-          startId = await _dbHelper.batchInsertWords(
+        if (synBatch.isNotEmpty) {
+          final result = await _dbHelper.batchInsertWords(
             dictId,
             synBatch,
             startId: startId,
             dictName: bookName,
           );
+          startId = result.startId;
+          totalDuplicates += result.duplicateCount;
+        }
+      }
+
+      if (totalDuplicates > 0) {
+        hDebugPrint(
+          'Web Import: Total duplicate entries skipped: $totalDuplicates',
+        );
       }
 
       await dictReader.close();
@@ -4976,6 +5039,10 @@ class DictionaryManager {
       } else {
         dictPath = await _dbHelper.resolvePath(rawPath);
       }
+
+      hDebugPrint(
+        'Reindex: sourceType=$sourceType, rawPath=$rawPath, companionUri=${dict['companion_uri']}, dictPath=$dictPath',
+      );
 
       final bool isSaf =
           Platform.isAndroid && dictPath.startsWith('content://');

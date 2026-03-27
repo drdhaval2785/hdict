@@ -1616,23 +1616,47 @@ class DatabaseHelper {
     );
   }
 
-  Future<int> batchInsertWords(
+  Future<({int startId, int duplicateCount})> batchInsertWords(
     int dictId,
     List<Map<String, dynamic>> words, {
     int? startId,
     bool populateFts5 = true,
     String? dictName,
   }) async {
-    if (words.isEmpty) return startId ?? 0;
+    if (words.isEmpty) return (startId: startId ?? 0, duplicateCount: 0);
     final db = await database;
-    return await db.transaction<int>((txn) async {
+    return await db.transaction<({int startId, int duplicateCount})>((
+      txn,
+    ) async {
       final bool useFts5 = (_fts5Available ?? true) && populateFts5;
       int newStartId = startId ?? 0;
+      int duplicateCount = 0;
 
       if (useFts5) {
         final List<String> tokenizedContents = words
             .map((w) => _tokenizeContent(w['content'] as String?))
             .toList();
+
+        // DEBUG: Log content stats
+        int emptyContentCount = 0;
+        int nonEmptyContentCount = 0;
+        for (int i = 0; i < words.length && i < 3; i++) {
+          final content = words[i]['content'] as String?;
+          final tokenized = tokenizedContents[i];
+          hDebugPrint(
+            'DEBUG batchInsert: word="${words[i]['word']}", originalContentLength=${content?.length ?? 0}, tokenizedLength=${tokenized.length}',
+          );
+        }
+        for (final w in words) {
+          if ((w['content'] as String?)?.isNotEmpty ?? false) {
+            nonEmptyContentCount++;
+          } else {
+            emptyContentCount++;
+          }
+        }
+        hDebugPrint(
+          'DEBUG batchInsert: dictId=$dictId, total=${words.length}, nonEmptyContent=$nonEmptyContentCount, emptyContent=$emptyContentCount, dictName=$dictName',
+        );
 
         final metaBatch = txn.batch();
         for (final word in words) {
@@ -1655,7 +1679,6 @@ class DatabaseHelper {
         }
         final idxResult = await idxBatch.commit(noResult: false);
 
-        int duplicateCount = 0;
         for (final r in idxResult) {
           if (r == 0) duplicateCount++;
         }
@@ -1684,7 +1707,7 @@ class DatabaseHelper {
         }
         await batch.commit(noResult: true);
       }
-      return newStartId;
+      return (startId: newStartId, duplicateCount: duplicateCount);
     });
   }
 

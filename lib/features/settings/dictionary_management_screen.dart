@@ -1209,7 +1209,7 @@ class _DictionaryManagementScreenState
                             overflow: TextOverflow.ellipsis,
                           ),
                           subtitle: Text(
-                            '${dict['word_count']} headwords${(dict['definition_word_count'] ?? 0) > 0 ? ', ${dict['definition_word_count']} in meanings' : ''}',
+                            '${dict['word_count']} hw${(dict['definition_word_count'] ?? 0) > 0 ? ', ${dict['definition_word_count']} def' : ''}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
