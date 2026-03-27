@@ -533,7 +533,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
     // FTS5 indexing is deferred when not indexing definitions
     final bool useBatching = args.indexDefinitions;
     final bool populateFts5 = args.indexDefinitions;
-    const int batchSize = 50000;
+    const int batchSize = 10000;
     List<Map<String, dynamic>> dbBatch = [];
 
     hDebugPrint(
@@ -855,7 +855,7 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
     // FTS5 indexing is deferred when not indexing definitions
     final bool useBatching = args.indexDefinitions;
     final bool populateFts5 = args.indexDefinitions;
-    const int batchSize = 50000;
+    const int batchSize = 10000;
     hDebugPrint(
       'MDict: useBatching=$useBatching, populateFts5=$populateFts5 (indexDefinitions=${args.indexDefinitions})',
     );
@@ -1007,7 +1007,7 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
     final totalBlobs = reader.blobCount;
     // Use larger batches — getBlobs() decompresses each bin once, so bigger
     // batches hit fewer bins per call and yield best throughput.
-    const int batchSize = 50000;
+    const int batchSize = 10000;
 
     // Single insert mode when not indexing definitions (faster)
     // FTS5 indexing is deferred when not indexing definitions
@@ -1209,7 +1209,7 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
     int headwordCount = 0;
     int defWordCount = 0;
     int totalDuplicates = 0;
-    const int batchSize = 50000;
+    const int batchSize = 10000;
 
     // Single insert mode when not indexing definitions (faster)
     // FTS5 indexing is deferred when not indexing definitions
@@ -2698,158 +2698,177 @@ class DictionaryManager {
     final List<DiscoveredDict> discovered = [];
     final List<IncompleteDict> incomplete = [];
     final List<String> foundArchives = [];
+    int filesScanned = 0;
 
     // docman's DirectoryInfo for the tree URI
     final dir = await DocumentFile.fromUri(treeUri);
     if (dir == null)
       return const FolderScanResult(discovered: [], incomplete: []);
 
-    // We need to list files recursively. docman might not have a recursive list,
-    // so we'll implement a simple one.
+    // Recursive scan with parallelism for subdirectories
     Future<void> scan(DocumentFile d) async {
       final List<DocumentFile> entities = await d.listDocuments();
       final String parentName = d.name;
 
+      // Separate files and directories
+      final directories = <DocumentFile>[];
+      final files = <DocumentFile>[];
+
       for (final entity in entities) {
         if (entity.isDirectory) {
-          await scan(entity);
+          directories.add(entity);
         } else {
-          final String name = entity.name;
-          final String lowerName = name.toLowerCase();
-          final String path = entity.uri.toString();
+          files.add(entity);
+        }
+      }
 
-          if (lowerName.endsWith('.zip') ||
-              lowerName.endsWith('.tar.gz') ||
-              lowerName.endsWith('.tgz') ||
-              lowerName.endsWith('.tar.bz2') ||
-              lowerName.endsWith('.7z')) {
-            foundArchives.add(path);
-            continue;
+      // Process all files in this directory
+      for (final entity in files) {
+        filesScanned++;
+        final String name = entity.name;
+        final String lowerName = name.toLowerCase();
+        final String path = entity.uri.toString();
+
+        if (lowerName.endsWith('.zip') ||
+            lowerName.endsWith('.tar.gz') ||
+            lowerName.endsWith('.tgz') ||
+            lowerName.endsWith('.tar.bz2') ||
+            lowerName.endsWith('.7z')) {
+          foundArchives.add(path);
+          continue;
+        }
+
+        // Get all files in parent for checking companions
+        final allFilesInDir = files;
+
+        // -- StarDict --
+        if (lowerName.endsWith('.ifo')) {
+          final String baseName = name.substring(0, name.length - 4);
+          bool hasIdx = false;
+          bool hasDict = false;
+          for (final f in allFilesInDir) {
+            final n = f.name.toLowerCase();
+            if (n.startsWith(baseName.toLowerCase())) {
+              if (n.endsWith('.idx')) hasIdx = true;
+              if (n.endsWith('.dict') || n.endsWith('.dict.dz')) hasDict = true;
+            }
           }
-
-          // -- StarDict --
-          if (lowerName.endsWith('.ifo')) {
-            final String baseName = name.substring(0, name.length - 4);
-            bool hasIdx = false;
-            bool hasDict = false;
-            for (final f in entities) {
+          if (hasIdx && hasDict) {
+            String? idxUri, dictUri, synUri;
+            for (final f in allFilesInDir) {
               final n = f.name.toLowerCase();
               if (n.startsWith(baseName.toLowerCase())) {
-                if (n.endsWith('.idx')) hasIdx = true;
+                if (n.endsWith('.idx')) idxUri = f.uri;
                 if (n.endsWith('.dict') || n.endsWith('.dict.dz'))
-                  hasDict = true;
-              }
-            }
-            if (hasIdx && hasDict) {
-              String? idxUri, dictUri, synUri;
-              for (final f in entities) {
-                final n = f.name.toLowerCase();
-                if (n.startsWith(baseName.toLowerCase())) {
-                  if (n.endsWith('.idx')) idxUri = f.uri;
-                  if (n.endsWith('.dict') || n.endsWith('.dict.dz'))
-                    dictUri = f.uri;
-                  if (n.endsWith('.syn')) synUri = f.uri;
-                }
-              }
-              discovered.add(
-                DiscoveredDict(
-                  path: path,
-                  format: 'stardict',
-                  parentFolderName: parentName,
-                  safUris: {
-                    'tree': treeUri,
-                    'ifo': path,
-                    ...?idxUri == null ? null : {'idx': idxUri},
-                    ...?dictUri == null ? null : {'dict': dictUri},
-                    ...?synUri == null ? null : {'syn': synUri},
-                  },
-                ),
-              );
-            } else {
-              incomplete.add(
-                IncompleteDict(
-                  name: baseName,
-                  format: 'stardict',
-                  missingFiles: [if (!hasIdx) '.idx', if (!hasDict) '.dict'],
-                  parentFolderName: parentName,
-                ),
-              );
-            }
-          }
-          // -- MDict --
-          else if (lowerName.endsWith('.mdx')) {
-            // Check for companion MDD file in the same directory
-            String? mddUri;
-            final mdxBaseName = name.substring(0, name.length - 4);
-            for (final f in entities) {
-              final n = f.name.toLowerCase();
-              if (n == '$mdxBaseName.mdd') {
-                mddUri = f.uri;
-                break;
+                  dictUri = f.uri;
+                if (n.endsWith('.syn')) synUri = f.uri;
               }
             }
             discovered.add(
               DiscoveredDict(
                 path: path,
-                format: 'mdict',
+                format: 'stardict',
                 parentFolderName: parentName,
                 safUris: {
                   'tree': treeUri,
-                  'mdx': path,
-                  ...?mddUri == null ? null : {'mdd': mddUri},
+                  'ifo': path,
+                  ...?idxUri == null ? null : {'idx': idxUri},
+                  ...?dictUri == null ? null : {'dict': dictUri},
+                  ...?synUri == null ? null : {'syn': synUri},
                 },
               ),
             );
+          } else {
+            incomplete.add(
+              IncompleteDict(
+                name: baseName,
+                format: 'stardict',
+                missingFiles: [if (!hasIdx) '.idx', if (!hasDict) '.dict'],
+                parentFolderName: parentName,
+              ),
+            );
           }
-          // -- Slob --
-          else if (lowerName.endsWith('.slob')) {
+        }
+        // -- MDict --
+        else if (lowerName.endsWith('.mdx')) {
+          String? mddUri;
+          final mdxBaseName = name.substring(0, name.length - 4);
+          for (final f in allFilesInDir) {
+            final n = f.name.toLowerCase();
+            if (n == '$mdxBaseName.mdd') {
+              mddUri = f.uri;
+              break;
+            }
+          }
+          discovered.add(
+            DiscoveredDict(
+              path: path,
+              format: 'mdict',
+              parentFolderName: parentName,
+              safUris: {
+                'tree': treeUri,
+                'mdx': path,
+                ...?mddUri == null ? null : {'mdd': mddUri},
+              },
+            ),
+          );
+        }
+        // -- Slob --
+        else if (lowerName.endsWith('.slob')) {
+          discovered.add(
+            DiscoveredDict(
+              path: path,
+              format: 'slob',
+              parentFolderName: parentName,
+              safUris: {'tree': treeUri},
+            ),
+          );
+        }
+        // -- DICTD --
+        else if (lowerName.endsWith('.index')) {
+          final String baseName = name.substring(0, name.length - 6);
+          String? dictPath;
+          for (final f in allFilesInDir) {
+            final n = f.name.toLowerCase();
+            if (n.startsWith(baseName.toLowerCase()) &&
+                (n.endsWith('.dict') || n.endsWith('.dict.dz'))) {
+              dictPath = f.uri.toString();
+              break;
+            }
+          }
+          if (dictPath != null) {
             discovered.add(
               DiscoveredDict(
                 path: path,
-                format: 'slob',
+                format: 'dictd',
+                companionPath: dictPath,
                 parentFolderName: parentName,
                 safUris: {'tree': treeUri},
               ),
             );
-          }
-          // -- DICTD --
-          else if (lowerName.endsWith('.index')) {
-            final String baseName = name.substring(0, name.length - 6);
-            String? dictPath;
-            for (final f in entities) {
-              final n = f.name.toLowerCase();
-              if (n.startsWith(baseName.toLowerCase()) &&
-                  (n.endsWith('.dict') || n.endsWith('.dict.dz'))) {
-                dictPath = f.uri.toString();
-                break;
-              }
-            }
-            if (dictPath != null) {
-              discovered.add(
-                DiscoveredDict(
-                  path: path,
-                  format: 'dictd',
-                  companionPath: dictPath,
-                  parentFolderName: parentName,
-                  safUris: {'tree': treeUri},
-                ),
-              );
-            } else {
-              incomplete.add(
-                IncompleteDict(
-                  name: baseName,
-                  format: 'dictd',
-                  missingFiles: ['.dict'],
-                  parentFolderName: parentName,
-                ),
-              );
-            }
+          } else {
+            incomplete.add(
+              IncompleteDict(
+                name: baseName,
+                format: 'dictd',
+                missingFiles: ['.dict'],
+                parentFolderName: parentName,
+              ),
+            );
           }
         }
+      }
+
+      // Scan subdirectories in PARALLEL for better performance
+      if (directories.isNotEmpty) {
+        await Future.wait(directories.map((d) => scan(d)));
       }
     }
 
     await scan(dir);
+    hDebugPrint(
+      'SAF Scan complete: $filesScanned files scanned, ${discovered.length} dicts found',
+    );
     return FolderScanResult(
       discovered: discovered,
       incomplete: incomplete,
