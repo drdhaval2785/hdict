@@ -606,6 +606,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
             dbBatch,
             startId: startId,
             populateFts5: populateFts5,
+            dictName: args.ifoParser.bookName,
           );
           dbBatch.clear();
           sendPort.send(
@@ -632,6 +633,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
         dbBatch,
         startId: startId,
         populateFts5: populateFts5,
+        dictName: args.ifoParser.bookName,
       );
       hDebugPrint('StarDict: Headwords DB insertion complete');
     }
@@ -672,6 +674,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
               synBatch,
               startId: startId,
               populateFts5: populateFts5,
+              dictName: args.ifoParser.bookName,
             );
             synBatch.clear();
             sendPort.send(
@@ -701,6 +704,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
           synBatch,
           startId: startId,
           populateFts5: populateFts5,
+          dictName: args.ifoParser.bookName,
         );
         hDebugPrint('StarDict: Synonyms DB insertion complete');
       }
@@ -835,6 +839,7 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
           batch,
           startId: startId,
           populateFts5: populateFts5,
+          dictName: args.bookName,
         );
         batch.clear();
         sendPort.send(
@@ -860,6 +865,7 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
         batch,
         startId: startId,
         populateFts5: populateFts5,
+        dictName: args.bookName,
       );
       hDebugPrint('MDict: DB insertion complete');
     }
@@ -991,6 +997,7 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
             dbBatch,
             startId: startId,
             populateFts5: populateFts5,
+            dictName: args.bookName,
           );
           dbBatch.clear();
           sendPort.send(
@@ -1034,6 +1041,7 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
         dbBatch,
         startId: startId,
         populateFts5: populateFts5,
+        dictName: args.bookName,
       );
       hDebugPrint('Slob: DB insertion complete');
     }
@@ -1217,6 +1225,7 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
             dbBatch,
             startId: startId,
             populateFts5: populateFts5,
+            dictName: args.bookName,
           );
           dbBatch.clear();
           sendPort.send(
@@ -1246,6 +1255,7 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
         dbBatch,
         startId: startId,
         populateFts5: populateFts5,
+        dictName: args.bookName,
       );
       hDebugPrint('Dictd: DB insertion complete');
     }
@@ -4035,6 +4045,7 @@ class DictionaryManager {
             dictId,
             batch,
             startId: startId,
+            dictName: bookName,
           );
           batch.clear();
           yield ImportProgress(
@@ -4054,6 +4065,7 @@ class DictionaryManager {
           dictId,
           batch,
           startId: startId,
+          dictName: bookName,
         );
 
       // SYN support for Web
@@ -4080,6 +4092,7 @@ class DictionaryManager {
               dictId,
               synBatch,
               startId: startId,
+              dictName: bookName,
             );
             synBatch.clear();
           }
@@ -4089,6 +4102,7 @@ class DictionaryManager {
             dictId,
             synBatch,
             startId: startId,
+            dictName: bookName,
           );
       }
 

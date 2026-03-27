@@ -1611,6 +1611,7 @@ class DatabaseHelper {
     List<Map<String, dynamic>> words, {
     int? startId,
     bool populateFts5 = true,
+    String? dictName,
   }) async {
     if (words.isEmpty) return startId ?? 0;
     final db = await database;
@@ -1619,12 +1620,10 @@ class DatabaseHelper {
       int newStartId = startId ?? 0;
 
       if (useFts5) {
-        // Pre-tokenize all content in batch
         final List<String> tokenizedContents = words
             .map((w) => _tokenizeContent(w['content'] as String?))
             .toList();
 
-        // --- Pass 1: insert all word_metadata rows in a single batch ---
         final metaBatch = txn.batch();
         for (final word in words) {
           metaBatch.insert('word_metadata', {
@@ -1634,24 +1633,36 @@ class DatabaseHelper {
             'length': word['length'],
           });
         }
-        // Commit the batch and capture the actual auto-incremented IDs
         final metaResults = await metaBatch.commit(noResult: false);
 
-        // --- Pass 2: insert all word_index rows in a single batch ---
         final idxBatch = txn.batch();
         for (int i = 0; i < words.length; i++) {
           final int actualInsertedId = metaResults[i] as int;
           idxBatch.rawInsert(
-            'INSERT INTO word_index(rowid, word, content) VALUES (?, ?, ?)',
+            'INSERT OR IGNORE INTO word_index(rowid, word, content) VALUES (?, ?, ?)',
             [actualInsertedId, words[i]['word'], tokenizedContents[i]],
           );
         }
-        await idxBatch.commit(noResult: true);
+        final idxResult = await idxBatch.commit(noResult: false);
 
-        // For backwards compatibility with DictionaryManager loop
+        int duplicateCount = 0;
+        for (final r in idxResult) {
+          if (r == 0) duplicateCount++;
+        }
+        if (duplicateCount > 0) {
+          final dupWords = words
+              .skip(duplicateCount > 10 ? 0 : 0)
+              .take(duplicateCount > 10 ? 10 : duplicateCount)
+              .map((w) => w['word'] as String)
+              .toList();
+          final suffix = duplicateCount > 10 ? ' (first 10 shown)' : '';
+          hDebugPrint(
+            'DatabaseHelper: Skipped $duplicateCount duplicate entries in "$dictName"$suffix: $dupWords',
+          );
+        }
+
         newStartId = (metaResults.last as int);
       } else {
-        // Skip FTS5 - only insert into word_metadata
         final batch = txn.batch();
         for (final word in words) {
           batch.insert('word_metadata', {
@@ -1684,14 +1695,12 @@ class DatabaseHelper {
 
     if (words.isEmpty) return;
 
-    // Delete existing FTS5 entries for this dict
     await db.delete(
       'word_index',
       where: 'rowid IN (SELECT id FROM word_metadata WHERE dict_id = ?)',
       whereArgs: [dictId],
     );
 
-    // Tokenize and insert in batches
     const batchSize = 50000;
     for (int i = 0; i < words.length; i += batchSize) {
       final end = (i + batchSize < words.length) ? words.length : i + batchSize;
@@ -1703,14 +1712,13 @@ class DatabaseHelper {
         final content = word['content'] as String?;
         final tokenized = _tokenizeContent(content);
         idxBatch.rawInsert(
-          'INSERT INTO word_index(rowid, word, content) VALUES (?, ?, ?)',
+          'INSERT OR IGNORE INTO word_index(rowid, word, content) VALUES (?, ?, ?)',
           [word['id'], word['word'], tokenized],
         );
       }
       await idxBatch.commit(noResult: true);
     }
 
-    // Optimize the FTS5 table
     await db.execute("INSERT INTO word_index(word_index) VALUES('optimize')");
 
     hDebugPrint('DatabaseHelper: FTS5 index rebuilt for dict_id=$dictId');
