@@ -398,7 +398,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       'HomeScreen._performSearch: START gen=$searchGen for "$headword"',
     );
 
-    if (headword.isNotEmpty) {
+    if (headword.isNotEmpty && definition.isNotEmpty) {
+      await _dbHelper.addSearchHistory(headword, searchType: 'Combined Search');
+    } else if (headword.isNotEmpty) {
       await _dbHelper.addSearchHistory(headword, searchType: 'Headword Search');
     } else if (definition.isNotEmpty) {
       await _dbHelper.addSearchHistory(
@@ -428,8 +430,43 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
       List<Map<String, dynamic>> results = [];
 
-      if (headword.isNotEmpty) {
-        // First try with user's preferred mode
+      if (headword.isNotEmpty && definition.isNotEmpty) {
+        // Combined: search with BOTH headword AND definition
+        results = await _dbHelper.searchWords(
+          headwordQuery: headword,
+          headwordMode: settings.headwordSearchMode,
+          definitionQuery: definition,
+          definitionMode: settings.definitionSearchMode,
+          limit: settings.searchResultLimit,
+        );
+
+        // If robust mode is on and we found nothing, try fallbacks
+        if (isRobust && results.isEmpty) {
+          if (settings.headwordSearchMode != SearchMode.exact) {
+            results = await _dbHelper.searchWords(
+              headwordQuery: headword,
+              headwordMode: SearchMode.exact,
+              definitionQuery: definition,
+              definitionMode: settings.definitionSearchMode,
+            );
+          }
+          if (results.isEmpty) {
+            String prefix = headword;
+            while (prefix.length > 2) {
+              prefix = prefix.substring(0, prefix.length - 1);
+              results = await _dbHelper.searchWords(
+                headwordQuery: prefix,
+                headwordMode: SearchMode.prefix,
+                definitionQuery: definition,
+                definitionMode: settings.definitionSearchMode,
+                limit: settings.searchResultLimit,
+              );
+              if (results.isNotEmpty) break;
+            }
+          }
+        }
+      } else if (headword.isNotEmpty) {
+        // Headword only search
         results = await _dbHelper.searchWords(
           headwordQuery: headword,
           headwordMode: settings.headwordSearchMode,
