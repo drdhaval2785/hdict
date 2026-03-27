@@ -1378,77 +1378,21 @@ class DatabaseHelper {
     clearQueryCache();
     clearDictionaryCache();
 
-    // Check if this dictionary has FTS5 content (word_index entries)
-    final hasFts5Content = await db.rawQuery(
-      'SELECT COUNT(*) as cnt FROM word_index WHERE rowid IN (SELECT id FROM word_metadata WHERE dict_id = ?)',
-      [id],
-    );
-    final fts5Count = (hasFts5Content.first['cnt'] as int?) ?? 0;
-    hDebugPrint(
-      'DatabaseHelper: word_index has $fts5Count entries for dict_id=$id',
+    // Delete from word_index using subquery (avoids SQL variable limit)
+    hDebugPrint('DatabaseHelper: Deleting from word_index (FTS5)');
+    await db.delete(
+      'word_index',
+      where: "rowid IN (SELECT id FROM word_metadata WHERE dict_id = ?)",
+      whereArgs: [id],
     );
 
-    // Delete from word_index only if there are entries
-    if (fts5Count > 0) {
-      hDebugPrint('DatabaseHelper: Deleting from word_index (FTS5) in batches');
-      const batchSize = 50000;
-      int offset = 0;
-      bool hasMore = true;
-      while (hasMore) {
-        // Get batch of IDs that have FTS5 content
-        final ids = await db.rawQuery(
-          'SELECT id FROM word_metadata WHERE dict_id = ? ORDER BY id LIMIT ? OFFSET ?',
-          [id, batchSize, offset],
-        );
-        if (ids.isEmpty) {
-          hasMore = false;
-          continue;
-        }
-        final idList = ids.map((r) => r['id'] as int).toList();
+    // Delete from word_metadata
+    hDebugPrint('DatabaseHelper: Deleting from word_metadata');
+    await db.delete('word_metadata', where: 'dict_id = ?', whereArgs: [id]);
 
-        // Delete from word_index using the IDs
-        await db.delete(
-          'word_index',
-          where: 'rowid IN (${idList.map((_) => '?').join(',')})',
-          whereArgs: idList,
-        );
-
-        hDebugPrint(
-          'DatabaseHelper: Deleted batch of ${idList.length} from word_index',
-        );
-
-        offset += batchSize;
-        if (ids.length < batchSize) {
-          hasMore = false;
-        }
-      }
-    }
-
-    // Delete from word_metadata in batches (always needed)
-    hDebugPrint('DatabaseHelper: Deleting from word_metadata in batches');
-    const metaBatchSize = 50000;
-    bool hasMoreMeta = true;
-    while (hasMoreMeta) {
-      final count = await db.rawDelete(
-        'DELETE FROM word_metadata WHERE dict_id = ? LIMIT ?',
-        [id, metaBatchSize],
-      );
-      hDebugPrint('DatabaseHelper: Deleted batch of $count from word_metadata');
-      if (count < metaBatchSize) hasMoreMeta = false;
-    }
-
-    // Delete from files table in batches
-    hDebugPrint('DatabaseHelper: Deleting from files table in batches');
-    const batchSize = 10000;
-    bool hasMoreFiles = true;
-    while (hasMoreFiles) {
-      final count = await db.rawDelete(
-        'DELETE FROM files WHERE dict_id = ? LIMIT ?',
-        [id, batchSize],
-      );
-      hDebugPrint('DatabaseHelper: Deleted batch of $count from files');
-      if (count < batchSize) hasMoreFiles = false;
-    }
+    // Delete from files table
+    hDebugPrint('DatabaseHelper: Deleting from files table');
+    await db.delete('files', where: 'dict_id = ?', whereArgs: [id]);
 
     hDebugPrint('DatabaseHelper: Dictionary delete complete for id=$id');
   }
