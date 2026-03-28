@@ -258,6 +258,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _searchOtherMs = 0;
   int _searchTotalMs = 0;
   int _searchResultCount = 0;
+  int _firstDictFetchMs = 0;
 
   // Search generation counter to prevent stale results from overwriting newer searches
   int _searchGeneration = 0;
@@ -420,6 +421,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _searchOtherMs = 0;
       _searchTotalMs = 0;
       _searchResultCount = 0;
+      _firstDictFetchMs = 0;
     });
 
     try {
@@ -536,6 +538,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       // - First, fetch highest priority dictionary (display_order=0) and show results immediately
       // - Then fetch remaining dictionaries in parallel while user sees first results
       final fetchAllDictsWatch = HPerf.start('fetchAllDicts_Wall');
+      int firstDictFetchMs = 0;
+      final firstDictStopwatch = Stopwatch();
 
       // Get display_order for each dict to sort by priority
       final Map<int, int> dictDisplayOrder = {};
@@ -554,6 +558,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       // First, fetch the highest priority dictionary (display_order=0) synchronously
       // This ensures user sees results from first dict immediately
       if (sortedEntries.isNotEmpty) {
+        firstDictStopwatch.start();
         final firstEntry = sortedEntries.first;
         final firstDictId = firstEntry.key;
         final firstRequests = firstEntry.value;
@@ -581,6 +586,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           );
           resultsMetadata.add(req);
         }
+        firstDictStopwatch.stop();
+        firstDictFetchMs = firstDictStopwatch.elapsedMilliseconds;
       }
 
       // Then, fetch remaining dictionaries in parallel (if any)
@@ -710,6 +717,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           _searchSqliteMs = sqliteMs;
           _searchTotalMs = totalWatch?.elapsedMilliseconds ?? 0;
           _searchOtherMs = _searchTotalMs - _searchSqliteMs;
+          _firstDictFetchMs = firstDictFetchMs;
           _tabController?.dispose();
           if (consolidatedDefs.isNotEmpty) {
             _tabController = TabController(
@@ -1497,14 +1505,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     final totalMs = searchTotalMs ?? _searchTotalMs;
                     final otherMs = searchOtherMs ?? _searchOtherMs;
                     final resultCount = searchResultCount ?? _searchResultCount;
+                    final firstDictMs = _firstDictFetchMs;
                     final dictName =
                         defMap['dict_name'] ?? 'Unknown Dictionary';
 
                     return Text(
                       'Dictionary: $dictName\n'
-                      'Showed $resultCount results in $totalMs ms.\n'
-                      'Sqlite query took $sqliteMs ms.\n'
-                      'Other work took $otherMs ms.',
+                      'Sqlite query: $sqliteMs ms.\n'
+                      'First dict results: $firstDictMs ms.\n'
+                      'Rest dicts fetch: ${totalMs - sqliteMs - firstDictMs > 0 ? totalMs - sqliteMs - firstDictMs : 0} ms.\n'
+                      'Showed $resultCount results in $totalMs ms.',
                       style: TextStyle(
                         fontSize: 11,
                         color: theme.colorScheme.onSurfaceVariant,
