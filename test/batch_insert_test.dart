@@ -76,7 +76,8 @@ void main() {
         },
       );
 
-      final newStartId = await dbHelper.batchInsertWords(dictId, words, startId: startId);
+      final resultTuple = await dbHelper.batchInsertWords(dictId, words, startId: startId);
+      final newStartId = resultTuple.startId;
       expect(newStartId, 100);
 
       final result = await db.query(
@@ -263,7 +264,8 @@ void main() {
             'length': 10,
           },
         );
-        startId = await dbHelper.batchInsertWords(dictId, words1, startId: startId);
+        final result1 = await dbHelper.batchInsertWords(dictId, words1, startId: startId);
+        startId = result1.startId;
         expect(startId, 100);
 
         final words2 = List.generate(
@@ -278,7 +280,8 @@ void main() {
         );
         // This will throw a constraint exception if rowid overlaps.
         // But since startId is correctly advanced, it shouldn't.
-        startId = await dbHelper.batchInsertWords(dictId, words2, startId: startId);
+        final result2 = await dbHelper.batchInsertWords(dictId, words2, startId: startId);
+        startId = result2.startId;
         expect(startId, 200);
 
         final result = await db.query(
