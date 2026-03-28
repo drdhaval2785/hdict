@@ -31,7 +31,7 @@ void hDebugPrint(String? message, {int? wrapWidth}) {
 /// HPerf.reset();
 /// ```
 class HPerf {
-  /// Map from operation name → list of individual durations (ms).
+  /// Map from operation name → list of individual durations (microseconds).
   static final Map<String, List<int>> _samples = {};
 
   /// Returns a started [Stopwatch] — call [end] with the same [name] when done.
@@ -46,13 +46,19 @@ class HPerf {
   static void end(Stopwatch? sw, String name) {
     if (sw == null || !enableDebugLogs) return;
     sw.stop();
-    _samples.putIfAbsent(name, () => []).add(sw.elapsedMilliseconds);
+    _samples.putIfAbsent(name, () => []).add(sw.elapsedMicroseconds);
   }
 
   /// One-liner shortcut: records a known [ms] value under [name].
   static void record(String name, int ms) {
     if (!enableDebugLogs) return;
-    _samples.putIfAbsent(name, () => []).add(ms);
+    _samples.putIfAbsent(name, () => []).add(ms * 1000);
+  }
+
+  /// Records a known [us] value under [name].
+  static void recordUs(String name, int us) {
+    if (!enableDebugLogs) return;
+    _samples.putIfAbsent(name, () => []).add(us);
   }
 
   /// Dumps a formatted summary of all recorded operations to the debug log.
@@ -62,13 +68,19 @@ class HPerf {
     for (final entry in _samples.entries) {
       final list = entry.value;
       final count = list.length;
-      final total = list.fold(0, (a, b) => a + b);
-      final avg = (total / count).toStringAsFixed(1);
-      final min = list.reduce((a, b) => a < b ? a : b);
-      final max = list.reduce((a, b) => a > b ? a : b);
+      final totalUs = list.fold(0, (a, b) => a + b);
+      final avgUs = totalUs / count;
+      final minUs = list.reduce((a, b) => a < b ? a : b);
+      final maxUs = list.reduce((a, b) => a > b ? a : b);
+
+      final totalMs = (totalUs / 1000.0).toStringAsFixed(2);
+      final avgMs = (avgUs / 1000.0).toStringAsFixed(3);
+      final minMs = (minUs / 1000.0).toStringAsFixed(3);
+      final maxMs = (maxUs / 1000.0).toStringAsFixed(3);
+
       buf.writeln(
         '  ${entry.key.padRight(32)} calls=$count  '
-        'total=${total}ms  avg=${avg}ms  min=${min}ms  max=${max}ms',
+        'total=${totalMs}ms  avg=${avgMs}ms  min=${minMs}ms  max=${maxMs}ms',
       );
     }
     buf.write('---');

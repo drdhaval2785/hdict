@@ -88,7 +88,25 @@ class SafRandomAccessSource implements RandomAccessSource {
   }
 
   @override
-  Future<Uint8List> read(int offset, int length) async {
+  Future<Uint8List> read(int offset, int length) {
+    // 1. FAST PATH: If full file is in memory, bypass everything (including lock)
+    if (_isFullFileInMemory && _buffer != null) {
+      final sw = Stopwatch()..start();
+      final start = max(0, offset);
+      final end = min(start + length, _buffer!.length);
+      final result = Uint8List.fromList(_buffer!.sublist(start, end));
+      sw.stop();
+      hDebugPrint(
+        '[SAF${name != null ? ": $name" : ""}] SafRandomAccessSource.read (FULL-SYNC): offset=$offset length=$length time=${sw.elapsedMicroseconds}us',
+      );
+      return Future.value(result);
+    }
+
+    // 2. SLOW PATH: Use lock for buffered/streamed reads
+    return _readWithLock(offset, length);
+  }
+
+  Future<Uint8List> _readWithLock(int offset, int length) async {
     while (_readLock != null) {
       await _readLock!.future;
     }
@@ -96,17 +114,6 @@ class SafRandomAccessSource implements RandomAccessSource {
 
     final stopwatch = Stopwatch()..start();
     try {
-      // If full file is in memory, always a hit
-      if (_isFullFileInMemory && _buffer != null) {
-        final start = max(0, offset);
-        final end = min(start + length, _buffer!.length);
-        final result = Uint8List.fromList(_buffer!.sublist(start, end));
-        stopwatch.stop();
-        hDebugPrint(
-          '[SAF${name != null ? ": $name" : ""}] SafRandomAccessSource.read (FULL): offset=$offset length=$length time=${stopwatch.elapsedMilliseconds}ms',
-        );
-        return result;
-      }
 
       // For reads larger than the buffer size, skip buffering entirely
       if (length > bufferSize) {
@@ -117,7 +124,7 @@ class SafRandomAccessSource implements RandomAccessSource {
         );
         stopwatch.stop();
         hDebugPrint(
-          '[SAF${name != null ? ": $name" : ""}] SafRandomAccessSource.read: offset=$offset length=$length bufferSkip=true time=${stopwatch.elapsedMilliseconds}ms',
+          '[SAF${name != null ? ": $name" : ""}] SafRandomAccessSource.read: offset=$offset length=$length bufferSkip=true time=${stopwatch.elapsedMicroseconds}us (${stopwatch.elapsedMilliseconds}ms)',
         );
         return result;
       }
@@ -144,7 +151,7 @@ class SafRandomAccessSource implements RandomAccessSource {
       if (start >= _buffer!.length) {
         stopwatch.stop();
         hDebugPrint(
-          '[SAF${name != null ? ": $name" : ""}] SafRandomAccessSource.read: offset=$offset length=$length bufferHit=$bufferHit time=${stopwatch.elapsedMilliseconds}ms (EOF)',
+          '[SAF${name != null ? ": $name" : ""}] SafRandomAccessSource.read: offset=$offset length=$length bufferHit=$bufferHit time=${stopwatch.elapsedMicroseconds}us (${stopwatch.elapsedMilliseconds}ms) (EOF)',
         );
         return Uint8List(0); // EOF
       }
@@ -152,7 +159,7 @@ class SafRandomAccessSource implements RandomAccessSource {
       final result = Uint8List.fromList(_buffer!.sublist(start, end));
       stopwatch.stop();
       hDebugPrint(
-        '[SAF${name != null ? ": $name" : ""}] SafRandomAccessSource.read: offset=$offset length=$length bufferHit=$bufferHit time=${stopwatch.elapsedMilliseconds}ms',
+        '[SAF${name != null ? ": $name" : ""}] SafRandomAccessSource.read: offset=$offset length=$length bufferHit=$bufferHit time=${stopwatch.elapsedMicroseconds}us (${stopwatch.elapsedMilliseconds}ms)',
       );
       return result;
     } finally {

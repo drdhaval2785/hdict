@@ -559,7 +559,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         final allFetchesStopwatch = Stopwatch()..start();
         final fetchStartTime = DateTime.now().millisecondsSinceEpoch;
 
-        // Decide between Parallel vs Serial fetch based on whether readers are "fast" (cached)
+        // 1. PRE-WARM metadata cache so we can use SYNC lookup inside the loops
+        await _dbHelper.getDictionaries();
+
+        // 2. Decide between Parallel vs Serial fetch based on whether readers are "fast" (cached)
         // This avoids the 15-20ms Future.wait overhead for data that is already in-memory.
         final bool allFast = sortedEntries.every(
           (entry) => _dictManager.isFastReader(entry.key),
@@ -574,7 +577,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             final dictId = entry.key;
             final requests = entry.value;
             final originalIndices = originalIndicesByDict[dictId]!;
-            final dict = (await _dbHelper.getDictionaryById(dictId))!;
+            // Use SYNC lookup now that cache is pre-warmed
+            final dict = _dbHelper.getDictionaryByIdSync(dictId)!;
 
             final fetchDictStopwatch = Stopwatch()..start();
             final batchContents = await _dictManager.fetchDefinitionsBatch(
@@ -582,6 +586,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               requests,
             );
             fetchDictStopwatch.stop();
+
+            hDebugPrint(
+              '[SERIAL_FETCH] dictId=$dictId completed in ${fetchDictStopwatch.elapsedMicroseconds}us (${fetchDictStopwatch.elapsedMilliseconds}ms)',
+            );
 
             allFetchResults.add({
               'dictId': dictId,
@@ -599,7 +607,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               final dictId = entry.key;
               final requests = entry.value;
               final originalIndices = originalIndicesByDict[dictId]!;
-              final dict = (await _dbHelper.getDictionaryById(dictId))!;
+              // Use SYNC lookup now that cache is pre-warmed
+              final dict = _dbHelper.getDictionaryByIdSync(dictId)!;
 
               final fetchDictStopwatch = Stopwatch()..start();
               final batchContents = await _dictManager.fetchDefinitionsBatch(
@@ -609,7 +618,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               fetchDictStopwatch.stop();
 
               hDebugPrint(
-                '[PARALLEL_FETCH] dictId=$dictId completed in ${fetchDictStopwatch.elapsedMilliseconds}ms',
+                '[PARALLEL_FETCH] dictId=$dictId completed in ${fetchDictStopwatch.elapsedMicroseconds}us (${fetchDictStopwatch.elapsedMilliseconds}ms)',
               );
 
               return {
