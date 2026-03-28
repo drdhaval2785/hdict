@@ -1880,6 +1880,24 @@ class DictionaryManager {
     return null;
   }
 
+  /// Checks if a cached reader is "fast" (e.g. in-memory or local file).
+  /// This helps the UI decide whether to fetch results in parallel or serially.
+  bool isFastReader(int dictId) {
+    final reader = _readerCache[dictId];
+    if (reader == null) return false;
+
+    dynamic source;
+    if (reader is DictReader) source = reader.source;
+    if (reader is MdictReader) source = reader.source;
+    if (reader is DictdReader) source = reader.source;
+    if (reader is SlobReader) source = reader.source;
+
+    if (source is FileRandomAccessSource) return true;
+    if (source is SafRandomAccessSource) return source.isFullFileInMemory;
+
+    return false;
+  }
+
   /// Calculates the MD5 checksum of a file.
   Future<String> _calculateChecksum(String filePath) async {
     try {

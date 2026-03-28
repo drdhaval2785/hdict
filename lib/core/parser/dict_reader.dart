@@ -158,24 +158,36 @@ class DictReader {
       return results;
     }
 
-    // For SAF, read entries in PARALLEL for much better performance
-    // The buffer will handle efficiency - parallel reads can still benefit from buffer hits
-    // on adjacent reads. We track original indices to return results in requested order.
-    final entriesWithIndex = entries.asMap().entries.toList();
-
-    // Launch all reads in parallel using Future.wait()
-    final List<String?> results = List.filled(entries.length, null);
-    final futures = entriesWithIndex.map((item) async {
-      final result = await readAtIndex(item.value.offset, item.value.length);
-      return (index: item.key, content: result);
-    }).toList();
-
-    final responses = await Future.wait(futures);
-    for (final resp in responses) {
-      results[resp.index] = resp.content;
+    // For SAF, read entries in PARALLEL if not in memory, for much better performance.
+    // However, if the data is already in memory, use a SERIAL loop to avoid Future overhead.
+    final src = source;
+    bool isFast = src is FileRandomAccessSource;
+    if (src is SafRandomAccessSource && src.isFullFileInMemory) {
+      isFast = true;
     }
 
-    return results.cast<String>();
+    final List<String> results = List.filled(entries.length, '');
+
+    if (isFast) {
+      // SERIAL PATH: Minimize event loop churn for in-memory/local data
+      for (int i = 0; i < entries.length; i++) {
+        results[i] = await readAtIndex(entries[i].offset, entries[i].length);
+      }
+    } else {
+      // PARALLEL PATH: Launch all reads in parallel using Future.wait()
+      final entriesWithIndex = entries.asMap().entries.toList();
+      final futures = entriesWithIndex.map((item) async {
+        final result = await readAtIndex(item.value.offset, item.value.length);
+        return (index: item.key, content: result);
+      }).toList();
+
+      final responses = await Future.wait(futures);
+      for (final resp in responses) {
+        results[resp.index] = resp.content;
+      }
+    }
+
+    return results;
   }
 
   /// Closes the file.

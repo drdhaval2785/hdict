@@ -30,6 +30,9 @@ class SafRandomAccessSource implements RandomAccessSource {
   bool _isFullFileInMemory = false;
   Completer<void>? _readLock;
 
+  /// Whether the entire file is currently cached in memory.
+  bool get isFullFileInMemory => _isFullFileInMemory;
+
   SafRandomAccessSource(
     this.uri, {
     this.name,

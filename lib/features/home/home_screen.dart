@@ -559,9 +559,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         final allFetchesStopwatch = Stopwatch()..start();
         final fetchStartTime = DateTime.now().millisecondsSinceEpoch;
 
-        // Fetch ALL dictionaries in parallel
-        final allFetchResults = await Future.wait(
-          sortedEntries.map((entry) async {
+        // Decide between Parallel vs Serial fetch based on whether readers are "fast" (cached)
+        // This avoids the 15-20ms Future.wait overhead for data that is already in-memory.
+        final bool allFast = sortedEntries.every(
+          (entry) => _dictManager.isFastReader(entry.key),
+        );
+
+        final List<Map<String, dynamic>> allFetchResults;
+
+        if (allFast) {
+          // SERIAL PATH: Extremely low overhead for in-memory dictionaries
+          allFetchResults = [];
+          for (final entry in sortedEntries) {
             final dictId = entry.key;
             final requests = entry.value;
             final originalIndices = originalIndicesByDict[dictId]!;
@@ -574,20 +583,46 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             );
             fetchDictStopwatch.stop();
 
-            hDebugPrint(
-              '[PARALLEL_FETCH] dictId=$dictId completed in ${fetchDictStopwatch.elapsedMilliseconds}ms',
-            );
-
-            return {
+            allFetchResults.add({
               'dictId': dictId,
               'dict': dict,
               'requests': requests,
               'originalIndices': originalIndices,
               'batchContents': batchContents,
               'fetchTime': fetchDictStopwatch.elapsedMilliseconds,
-            };
-          }),
-        );
+            });
+          }
+        } else {
+          // PARALLEL PATH: Better for mixed or cold SAF dictionaries
+          allFetchResults = await Future.wait(
+            sortedEntries.map((entry) async {
+              final dictId = entry.key;
+              final requests = entry.value;
+              final originalIndices = originalIndicesByDict[dictId]!;
+              final dict = (await _dbHelper.getDictionaryById(dictId))!;
+
+              final fetchDictStopwatch = Stopwatch()..start();
+              final batchContents = await _dictManager.fetchDefinitionsBatch(
+                dict,
+                requests,
+              );
+              fetchDictStopwatch.stop();
+
+              hDebugPrint(
+                '[PARALLEL_FETCH] dictId=$dictId completed in ${fetchDictStopwatch.elapsedMilliseconds}ms',
+              );
+
+              return {
+                'dictId': dictId,
+                'dict': dict,
+                'requests': requests,
+                'originalIndices': originalIndices,
+                'batchContents': batchContents,
+                'fetchTime': fetchDictStopwatch.elapsedMilliseconds,
+              };
+            }),
+          );
+        }
 
         // Collect ALL results and track first dict completion time
         final firstDictId = sortedEntries.first.key;
