@@ -1146,19 +1146,34 @@ class _DictionaryManagementScreenState
                     onReorder: (oldIndex, newIndex) async {
                       if (newIndex > oldIndex) newIndex -= 1;
 
-                      final item = _filteredDictionaries[oldIndex];
-                      final actualOldIndex = _dictionaries.indexOf(item);
+                      // Find items by ID instead of object reference (fixes issue when filtering is active)
+                      final movedItem = _filteredDictionaries[oldIndex];
+                      final movedId = movedItem['id'] as int;
 
                       final targetItem = _filteredDictionaries[newIndex];
-                      final actualNewIndex = _dictionaries.indexOf(targetItem);
+                      final targetId = targetItem['id'] as int;
 
-                      if (actualOldIndex == -1 || actualNewIndex == -1) return;
+                      // Find actual indices in _dictionaries by matching IDs
+                      int actualOldIndex = -1;
+                      int actualNewIndex = -1;
+                      for (int i = 0; i < _dictionaries.length; i++) {
+                        if (_dictionaries[i]['id'] == movedId) {
+                          actualOldIndex = i;
+                        }
+                        if (_dictionaries[i]['id'] == targetId) {
+                          actualNewIndex = i;
+                        }
+                      }
+
+                      if (actualOldIndex == -1 || actualNewIndex == -1) {
+                        return;
+                      }
 
                       final List<Map<String, dynamic>> updatedList = List.from(
                         _dictionaries,
                       );
-                      final movedItem = updatedList.removeAt(actualOldIndex);
-                      updatedList.insert(actualNewIndex, movedItem);
+                      final item = updatedList.removeAt(actualOldIndex);
+                      updatedList.insert(actualNewIndex, item);
 
                       setState(() {
                         _dictionaries = updatedList;
