@@ -2011,24 +2011,51 @@ class DatabaseHelper {
       likePattern = hq;
     }
 
-    // 2. Single query for all dictionaries using IN clause
-    // This leverages the composite index idx_metadata_dict_word
-    // and is much faster than 46 parallel/sequential queries
+    // 2. Build dict_id -> display_order map for sorting
+    final Map<int, int> dictDisplayOrder = {};
+    for (final dict in dicts) {
+      dictDisplayOrder[dict['id'] as int] = dict['display_order'] as int? ?? 0;
+    }
+
+    // 3. Single query WITHOUT ORDER BY - let SQLite just grab matching rows fast
+    // Cap at 10000 to avoid huge result sets
     final dictIds = dicts.map((d) => d['id'] as int).toList();
     final dictIdList = dictIds.join(',');
+    const cap = 10000;
 
-    final results = await db.rawQuery(
-      'SELECT word, dict_id, offset, length FROM word_metadata WHERE dict_id IN ($dictIdList) AND word $operator ? ORDER BY dict_id ASC, word ASC LIMIT ?',
-      [likePattern, limit],
+    var results = await db.rawQuery(
+      'SELECT word, dict_id, offset, length FROM word_metadata WHERE dict_id IN ($dictIdList) AND word $operator ? LIMIT ?',
+      [likePattern, cap],
     );
+
+    // Convert to mutable list (needed for Web/some platforms)
+    results = List<Map<String, dynamic>>.from(results);
+
+    // 4. Sort in Dart by display_order, then dict_id, then word (case-insensitive)
+    results.sort((a, b) {
+      final aDictId = a['dict_id'] as int;
+      final bDictId = b['dict_id'] as int;
+      final aOrder = dictDisplayOrder[aDictId] ?? 0;
+      final bOrder = dictDisplayOrder[bDictId] ?? 0;
+
+      if (aOrder != bOrder) return aOrder.compareTo(bOrder);
+      if (aDictId != bDictId) return aDictId.compareTo(bDictId);
+
+      final aWord = (a['word'] as String? ?? '').toLowerCase();
+      final bWord = (b['word'] as String? ?? '').toLowerCase();
+      return aWord.compareTo(bWord);
+    });
+
+    // 5. Apply final limit
+    final trimmedResults = results.take(limit).toList();
 
     _log(
-      'SINGLE_QUERY [$operator]',
-      'Single query over ${dicts.length} dicts',
-      [likePattern],
-      results,
+      'SINGLE_QUERY_NO_ORDER [$operator]',
+      'Single query over ${dicts.length} dicts, sorted in Dart',
+      [likePattern, '${trimmedResults.length}/$cap'],
+      trimmedResults,
     );
-    return results;
+    return trimmedResults;
   }
 
   Future<List<String>> getPrefixSuggestions(
