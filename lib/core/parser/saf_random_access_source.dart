@@ -30,6 +30,8 @@ class SafRandomAccessSource implements RandomAccessSource {
   bool _isFullFileInMemory = false;
   Completer<void>? _readLock;
 
+  int _size = 0;
+
   /// Whether the entire file is currently cached in memory.
   bool get isFullFileInMemory => _isFullFileInMemory;
 
@@ -41,9 +43,21 @@ class SafRandomAccessSource implements RandomAccessSource {
 
   @override
   Future<void> open() async {
-    final stopwatch = Stopwatch()..start();
+    // Lazy opening: just get the size.
     final docFile = await DocumentFile.fromUri(uri);
-    final size = docFile?.size ?? 0;
+    _size = docFile?.size ?? 0;
+    
+    // Reset state in case this source is reopened
+    _buffer = null;
+    _bufferOffset = -1;
+    _isFullFileInMemory = false;
+  }
+
+  Future<void> _triggerInitialLoad() async {
+    if (_buffer != null) return; // Already loaded or pre-fetched
+
+    final stopwatch = Stopwatch()..start();
+    final size = _size;
 
     // Check if we can fit the whole file in memory
     if (size > 0 &&
@@ -77,14 +91,8 @@ class SafRandomAccessSource implements RandomAccessSource {
 
   @override
   Future<int> get length async {
-    final stopwatch = Stopwatch()..start();
-    final docFile = await DocumentFile.fromUri(uri);
-    stopwatch.stop();
-    if (docFile == null) throw Exception('File not found: $uri');
-    hDebugPrint(
-      '[SAF${name != null ? ": $name" : ""}] SafRandomAccessSource.length: size=${docFile.size} time=${stopwatch.elapsedMilliseconds}ms',
-    );
-    return docFile.size;
+    // Return cached size from open()
+    return _size;
   }
 
   @override
@@ -126,8 +134,10 @@ class SafRandomAccessSource implements RandomAccessSource {
     }
     _readLock = Completer<void>();
 
-    final stopwatch = Stopwatch()..start();
     try {
+      await _triggerInitialLoad();
+
+      final stopwatch = Stopwatch()..start();
 
       // For reads larger than the buffer size, skip buffering entirely
       if (length > bufferSize) {

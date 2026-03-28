@@ -450,100 +450,75 @@ Future<void> _indexEntry(_IndexArgs args) async {
         : FileRandomAccessSource(args.idxPath);
 
     // 2. Dict Reader
-    final dictFileSize = await _getDictFileSize(
-      args.dictPath,
-      args.dictUri,
-      isLinked,
-      args.sourceBookmark,
-    );
-    final bool canLoadInMemory = dictFileSize < 50 * 1024 * 1024;
+    final int dictFileSize = args.indexDefinitions
+        ? await _getDictFileSize(
+            args.dictPath,
+            args.dictUri,
+            isLinked,
+            args.sourceBookmark,
+          )
+        : 0;
+    final bool canLoadInMemory =
+        args.indexDefinitions && dictFileSize < 50 * 1024 * 1024;
 
-    hDebugPrint(
-      'StarDict: dictFileSize=$dictFileSize, canLoadInMemory=$canLoadInMemory, isDz=${_dictPathIsDz(args.dictPath)}',
-    );
+    if (args.indexDefinitions) {
+      hDebugPrint(
+        'StarDict: dictFileSize=$dictFileSize, canLoadInMemory=$canLoadInMemory, isDz=${_dictPathIsDz(args.dictPath)}',
+      );
+    }
 
-    DictReader dictReader;
-    if (canLoadInMemory && _dictPathIsDz(args.dictPath)) {
-      hDebugPrint('StarDict: Using IN-MEMORY optimization for .dict.dz file');
-      final dictBytes = await _loadDictFileIntoMemory(
-        args.dictPath,
-        args.dictUri,
-        isLinked,
-        args.sourceBookmark,
-      );
-      dictReader = await DictReader.fromBytes(
-        dictBytes,
-        fileName: p.basename(args.dictPath),
-      );
-    } else if (canLoadInMemory) {
-      hDebugPrint('StarDict: Using IN-MEMORY optimization for .dict file');
-      final dictBytes = await _loadDictFileIntoMemory(
-        args.dictPath,
-        args.dictUri,
-        isLinked,
-        args.sourceBookmark,
-      );
-      dictReader = await DictReader.fromBytes(
-        dictBytes,
-        fileName: p.basename(args.dictPath),
-      );
-    } else {
-      dictReader = (isLinked && Platform.isAndroid && args.dictUri != null)
-          ? await DictReader.fromUri(args.dictUri!)
-          : (isLinked
+    DictReader? dictReader;
+    if (args.indexDefinitions) {
+      if (canLoadInMemory && _dictPathIsDz(args.dictPath)) {
+        hDebugPrint('StarDict: Using IN-MEMORY optimization for .dict.dz file');
+        final dictBytes = await _loadDictFileIntoMemory(
+          args.dictPath,
+          args.dictUri,
+          isLinked,
+          args.sourceBookmark,
+        );
+        dictReader = await DictReader.fromBytes(
+          dictBytes,
+          fileName: p.basename(args.dictPath),
+        );
+      } else if (canLoadInMemory) {
+        hDebugPrint('StarDict: Using IN-MEMORY optimization for .dict file');
+        final dictBytes = await _loadDictFileIntoMemory(
+          args.dictPath,
+          args.dictUri,
+          isLinked,
+          args.sourceBookmark,
+        );
+        dictReader = await DictReader.fromBytes(
+          dictBytes,
+          fileName: p.basename(args.dictPath),
+        );
+      } else {
+        dictReader = (isLinked && Platform.isAndroid && args.dictUri != null)
+            ? await DictReader.fromUri(args.dictUri!)
+            : (isLinked
                 ? await DictReader.fromLinkedSource(
                     args.sourceBookmark!,
                     targetPath: p.basename(args.dictPath),
                     actualPath: args.dictPath,
                   )
                 : await DictReader.fromPath(args.dictPath));
-    }
-    await dictReader.open();
+      }
+      await dictReader!.open();
 
-    // Check file size for optimization decision
-    // Memory loading now works for both .dict and .dict.dz files when < 50MB
-    hDebugPrint(
-      'StarDict: DictReader opened, canLoadInMemory=$canLoadInMemory',
-    );
+      // Check file size for optimization decision
+      // Memory loading now works for both .dict and .dict.dz files when < 50MB
+      hDebugPrint(
+        'StarDict: DictReader opened, canLoadInMemory=$canLoadInMemory',
+      );
+    }
 
     // Start batch insert optimization
-    int startId = await dbHelper.startBatchInsert();
-    await dbHelper.enableBulkInsertMode();
-
-    List<({int offset, int length, String content})> wordOffsets = [];
-
-    final List<Map<String, dynamic>> entriesList = [];
-    try {
-      await for (final entry in idxParser.parse(idxSource)) {
-        entriesList.add(entry);
-      }
-    } finally {
-      await idxSource.close();
-    }
-
-    final int totalHeadwords = entriesList.length;
-    // synWordCount comes from the .ifo file — known before opening the .syn file
-    final int totalSyns = args.ifoParser.synWordCount;
-    final int totalAll = totalHeadwords + totalSyns; // unified denominator
-    int headwordCount = 0;
-    int defWordCount = 0;
-    int totalDuplicates = 0;
-
-    // Single insert mode when not indexing definitions (faster)
-    // FTS5 indexing is deferred when not indexing definitions
-    final bool useBatching = args.indexDefinitions;
-    final bool populateFts5 = args.indexDefinitions;
-    const int batchSize = 10000;
-    List<Map<String, dynamic>> dbBatch = [];
-
-    hDebugPrint(
-      'StarDict: useBatching=$useBatching, populateFts5=$populateFts5 (indexDefinitions=${args.indexDefinitions})',
-    );
-
+// ... (lines 510-542 skipped)
     // Optimization: Load entire .dict or .dict.dz file into memory for small files (<50MB)
     // For .dict.dz files, bytes are loaded before creating DictReader
     Uint8List? dictFileBytes;
-    if (canLoadInMemory) {
+    if (canLoadInMemory && dictReader != null) {
       dictFileBytes = await dictReader.source.read(0, dictFileSize);
       hDebugPrint(
         'StarDict: Loaded ${dictFileBytes.length} bytes into memory for reading',
@@ -557,7 +532,10 @@ Future<void> _indexEntry(_IndexArgs args) async {
       final currentBatch = entriesList.sublist(i, end);
 
       final List<String> contents;
-      if (canLoadInMemory &&
+      if (!args.indexDefinitions) {
+        // FAST PATH: Skip reading entirely
+        contents = List.filled(currentBatch.length, '');
+      } else if (canLoadInMemory &&
           dictFileBytes != null &&
           _dictPathIsDz(args.dictPath)) {
         // For .dict.dz files in memory: use DictReader which handles decompression via DictzipReader
@@ -569,9 +547,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
               (e) => (offset: e['offset'] as int, length: e['length'] as int),
             )
             .toList();
-        contents = args.indexDefinitions
-            ? await dictReader.readBulk(readEntries)
-            : List.filled(currentBatch.length, '');
+        contents = await dictReader!.readBulk(readEntries);
       } else if (canLoadInMemory && dictFileBytes != null) {
         // For uncompressed .dict files in memory: read directly from bytes
         hDebugPrint(
@@ -579,7 +555,6 @@ Future<void> _indexEntry(_IndexArgs args) async {
         );
         final bytes = dictFileBytes; // capture for closure
         contents = currentBatch.map((e) {
-          if (!args.indexDefinitions) return '';
           final offset = e['offset'] as int;
           final length = e['length'] as int;
           if (offset + length > bytes.length) {
@@ -598,9 +573,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
               (e) => (offset: e['offset'] as int, length: e['length'] as int),
             )
             .toList();
-        contents = args.indexDefinitions
-            ? await dictReader.readBulk(readEntries)
-            : List.filled(currentBatch.length, '');
+        contents = await dictReader!.readBulk(readEntries);
       }
 
       for (int j = 0; j < currentBatch.length; j++) {
@@ -752,7 +725,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
       );
     }
 
-    await dictReader.close();
+    await dictReader?.close();
     hDebugPrint('StarDict: Updating dictionary word count');
     await dbHelper.updateDictionaryWordCount(
       args.dictId,
