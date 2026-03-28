@@ -458,6 +458,20 @@ Future<void> _indexEntry(_IndexArgs args) async {
             args.sourceBookmark,
           )
         : 0;
+
+    final entriesList = await idxParser.parse(idxSource).toList();
+    final int totalHeadwords = entriesList.length;
+    final List<({int offset, int length, String content})> wordOffsets = [];
+    final List<Map<String, dynamic>> dbBatch = [];
+    int headwordCount = 0;
+    int defWordCount = 0;
+    int totalDuplicates = 0;
+    final int totalAll = totalHeadwords + args.ifoParser.synWordCount;
+
+    const int batchSize = 1000;
+    const bool useBatching = true;
+    int startId = await dbHelper.startBatchInsert();
+    bool populateFts5 = false; // Background indexing logic will be triggered at end if needed
     final bool canLoadInMemory =
         args.indexDefinitions && dictFileSize < 50 * 1024 * 1024;
 
@@ -670,9 +684,10 @@ Future<void> _indexEntry(_IndexArgs args) async {
             });
             headwordCount++;
           }
-          if (useBatching && synBatch.length >= batchSize) {
+          if (useBatching && synBatch.length >= (batchSize * 10)) {
+            final int batchIdx = headwordCount;
             hDebugPrint(
-              'StarDict: Inserting synonym batch ${synBatch.length} to DB',
+              'StarDict: Inserting synonym batch $batchIdx to DB',
             );
             final result = await dbHelper.batchInsertWords(
               args.dictId,

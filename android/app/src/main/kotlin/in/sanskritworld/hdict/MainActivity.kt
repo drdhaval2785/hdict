@@ -62,6 +62,39 @@ class MainActivity : FlutterActivity() {
                         result.error("INVALID_ARGS", "Path is required", null)
                     }
                 }
+                "getFileMetadata" -> {
+                    val uriString = call.argument<String>("uri")
+                    if (uriString != null) {
+                        try {
+                            val uri = Uri.parse(uriString)
+                            // Querying with null projection returns all available columns
+                            val cursor = contentResolver.query(uri, null, null, null, null)
+                            cursor?.use {
+                                if (it.moveToFirst()) {
+                                    // Try OpenableColumns.DISPLAY_NAME (standard)
+                                    val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                                    val name = if (nameIndex != -1) it.getString(nameIndex) else uri.lastPathSegment ?: "unknown"
+                                    
+                                    // Try OpenableColumns.SIZE (standard) then fallback to "size"
+                                    var sizeIndex = it.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                                    if (sizeIndex == -1) {
+                                        sizeIndex = it.getColumnIndex("size") // Alternative name used by some providers
+                                    }
+                                    
+                                    val size = if (sizeIndex != -1) it.getLong(sizeIndex) else 0L
+                                    
+                                    result.success(mapOf("name" to name, "size" to size))
+                                } else {
+                                    result.error("NOT_FOUND", "File metadata not found", null)
+                                }
+                            } ?: result.error("QUERY_FAILED", "Failed to query metadata", null)
+                        } catch (e: Exception) {
+                            result.error("METADATA_ERROR", e.localizedMessage, null)
+                        }
+                    } else {
+                        result.error("INVALID_ARGS", "Uri is required", null)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }

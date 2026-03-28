@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:math';
-import 'dart:typed_data';
 import 'package:saf_stream/saf_stream.dart';
 import 'package:docman/docman.dart';
+import 'package:flutter/services.dart';
 import 'package:hdict/core/utils/logger.dart';
 import 'random_access_source.dart';
 
@@ -19,6 +19,7 @@ class SafRandomAccessSource implements RandomAccessSource {
   final String? name;
   final int bufferSize;
   final _safStream = SafStream();
+  static const _channel = MethodChannel('com.drdhaval2785.hdict/bookmarks');
 
   // Global memory tracking for all SAF sources
   static int _totalMemoryUsed = 0;
@@ -31,6 +32,8 @@ class SafRandomAccessSource implements RandomAccessSource {
   Completer<void>? _readLock;
 
   int _size = 0;
+  bool _sizePopulated = false;
+  Future<void>? _openFuture;
 
   /// Whether the entire file is currently cached in memory.
   bool get isFullFileInMemory => _isFullFileInMemory;
@@ -43,10 +46,43 @@ class SafRandomAccessSource implements RandomAccessSource {
 
   @override
   Future<void> open() async {
+    if (_openFuture != null) return _openFuture;
+    _openFuture = _performOpen();
+    return _openFuture;
+  }
+
+  Future<void> _performOpen() async {
     // Lazy opening: just get the size.
-    final docFile = await DocumentFile.fromUri(uri);
-    _size = docFile?.size ?? 0;
+    // Optimized: Use native method for fast metadata lookup (~5-10ms)
+    // instead of docman's DocumentFile instance (~100-150ms).
+    try {
+      final Map<dynamic, dynamic>? metadata = 
+          await _channel.invokeMethod('getFileMetadata', {'uri': uri});
+      if (metadata != null) {
+        _size = metadata['size'] as int;
+
+        // BUG FIX: If native method returns 0, it might be an issue with the specific SAF provider.
+        // Fall back to docman to be safe, as docman handles more edge cases.
+        if (_size == 0) {
+          hDebugPrint('SafRandomAccessSource: Native size returned 0 for $uri. Falling back to docman metadata retrieval.');
+          final docFile = await DocumentFile.fromUri(uri);
+          _size = docFile?.size ?? 0;
+        } else {
+          hDebugPrint('SafRandomAccessSource: Native metadata success: size=$_size, name=${metadata['name']}');
+        }
+      } else {
+        // Fallback to docman if native fails (unlikely)
+        final docFile = await DocumentFile.fromUri(uri);
+        _size = docFile?.size ?? 0;
+      }
+    } catch (e, s) {
+      hDebugPrint('SafRandomAccessSource: Error getting native metadata: $e. Falling back to docman.\n$s');
+      final docFile = await DocumentFile.fromUri(uri);
+      _size = docFile?.size ?? 0;
+    }
     
+    _sizePopulated = true;
+
     // Reset state in case this source is reopened
     _buffer = null;
     _bufferOffset = -1;
@@ -55,6 +91,9 @@ class SafRandomAccessSource implements RandomAccessSource {
 
   Future<void> _triggerInitialLoad() async {
     if (_buffer != null) return; // Already loaded or pre-fetched
+
+    // Ensure open() has been called and completed
+    if (!_sizePopulated) await open();
 
     final stopwatch = Stopwatch()..start();
     final size = _size;
@@ -91,7 +130,8 @@ class SafRandomAccessSource implements RandomAccessSource {
 
   @override
   Future<int> get length async {
-    // Return cached size from open()
+    // Ensure open() has been called and completed before returning size
+    if (!_sizePopulated) await open();
     return _size;
   }
 
@@ -135,6 +175,9 @@ class SafRandomAccessSource implements RandomAccessSource {
     _readLock = Completer<void>();
 
     try {
+      // Ensure open() has been called and completed
+      if (!_sizePopulated) await open();
+
       await _triggerInitialLoad();
 
       final stopwatch = Stopwatch()..start();
