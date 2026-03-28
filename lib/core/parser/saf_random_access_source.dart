@@ -3,6 +3,7 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'package:saf_stream/saf_stream.dart';
 import 'package:docman/docman.dart';
+import 'package:hdict/core/utils/logger.dart';
 import 'random_access_source.dart';
 
 /// Android SAF implementation of [RandomAccessSource] using [SafStream].
@@ -31,8 +32,13 @@ class SafRandomAccessSource implements RandomAccessSource {
 
   @override
   Future<int> get length async {
+    final stopwatch = Stopwatch()..start();
     final docFile = await DocumentFile.fromUri(uri);
+    stopwatch.stop();
     if (docFile == null) throw Exception('File not found: $uri');
+    hDebugPrint(
+      '[SAF] SafRandomAccessSource.length: size=${docFile.size} time=${stopwatch.elapsedMilliseconds}ms',
+    );
     return docFile.size;
   }
 
@@ -43,27 +49,54 @@ class SafRandomAccessSource implements RandomAccessSource {
     }
     _readLock = Completer<void>();
 
+    final stopwatch = Stopwatch()..start();
     try {
       // For reads larger than the buffer size, skip buffering entirely
       if (length > bufferSize) {
-        return await _safStream.readFileBytes(uri, start: offset, count: length);
+        final result = await _safStream.readFileBytes(
+          uri,
+          start: offset,
+          count: length,
+        );
+        stopwatch.stop();
+        hDebugPrint(
+          '[SAF] SafRandomAccessSource.read: offset=$offset length=$length bufferSkip=true time=${stopwatch.elapsedMilliseconds}ms',
+        );
+        return result;
       }
 
       // Check if requested range is fully inside the current buffer
-      if (_buffer == null || offset < _bufferOffset || (offset + length) > (_bufferOffset + _buffer!.length)) {
+      final bool bufferHit =
+          _buffer != null &&
+          offset >= _bufferOffset &&
+          (offset + length) <= (_bufferOffset + _buffer!.length);
+      if (!bufferHit) {
         // Buffer Miss: fetch a new block of `bufferSize` bytes
         _bufferOffset = offset;
-        _buffer = await _safStream.readFileBytes(uri, start: _bufferOffset, count: bufferSize);
+        _buffer = await _safStream.readFileBytes(
+          uri,
+          start: _bufferOffset,
+          count: bufferSize,
+        );
       }
 
       // Buffer Hit: return sliced copy
       final start = offset - _bufferOffset;
       final end = min(start + length, _buffer!.length);
       if (start >= _buffer!.length) {
+        stopwatch.stop();
+        hDebugPrint(
+          '[SAF] SafRandomAccessSource.read: offset=$offset length=$length bufferHit=$bufferHit time=${stopwatch.elapsedMilliseconds}ms (EOF)',
+        );
         return Uint8List(0); // EOF
       }
 
-      return Uint8List.fromList(_buffer!.sublist(start, end));
+      final result = Uint8List.fromList(_buffer!.sublist(start, end));
+      stopwatch.stop();
+      hDebugPrint(
+        '[SAF] SafRandomAccessSource.read: offset=$offset length=$length bufferHit=$bufferHit time=${stopwatch.elapsedMilliseconds}ms',
+      );
+      return result;
     } finally {
       final lock = _readLock!;
       _readLock = null;

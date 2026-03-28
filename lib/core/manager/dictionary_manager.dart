@@ -1565,13 +1565,26 @@ class DictionaryManager {
   static Future<void> _safLock = Future.value();
 
   /// Runs a SAF operation serially. All calls are queued and run one after another.
-  static Future<T> _runSafAction<T>(Future<T> Function() action) async {
+  static Future<T> _runSafAction<T>(
+    Future<T> Function() action, [
+    String? debugLabel,
+  ]) async {
+    final stopwatch = Stopwatch()..start();
     final prev = _safLock;
     final completer = Completer<void>();
     _safLock = completer.future;
     try {
       await prev;
-      return await action();
+      stopwatch.stop();
+      final queueTime = stopwatch.elapsedMilliseconds;
+      stopwatch.reset();
+      stopwatch.start();
+      final result = await action();
+      stopwatch.stop();
+      hDebugPrint(
+        '[SAF] _runSafAction(${debugLabel ?? "anon"}): queueWait=${queueTime}ms actionTime=${stopwatch.elapsedMilliseconds}ms',
+      );
+      return result;
     } finally {
       completer.complete();
     }
@@ -1615,10 +1628,15 @@ class DictionaryManager {
     final String? storedMddPath = dict['mdd_path'] as String?;
 
     dynamic reader;
+    final stopwatch = Stopwatch()..start();
     if (sourceType == 'linked' && sourceBookmark != null) {
       final isSaf =
           Platform.isAndroid && sourceBookmark.startsWith('content://');
       final bool isIos = Platform.isIOS || Platform.isMacOS;
+
+      hDebugPrint(
+        '[SAF] _getReader: dictId=$dictId format=$format isSaf=$isSaf isLinked=true',
+      );
 
       if (format == 'mdict') {
         final mddPath =
@@ -1640,17 +1658,27 @@ class DictionaryManager {
         );
       } else if (format == 'stardict') {
         if (isSaf) {
+          hDebugPrint(
+            '[SAF] _getReader stardict: dictId=$dictId isSaf=true companionUri=${companionUri != null ? "present" : "null"}',
+          );
           // Fast path: use the pre-resolved companion URI stored at link-time.
           // This avoids all runtime DocumentFile.fromUri + listDocuments calls.
           String? dictUri = companionUri;
           if (dictUri == null) {
             // Fallback for dictionaries linked before companion_uri was introduced.
             // Use the serialized SAF action queue to avoid concurrent docman calls.
+            hDebugPrint(
+              '[SAF] _getReader: Using fallback DocumentFile.fromUri for dictId=$dictId',
+            );
             final docFile = await _runSafAction(
               () => DocumentFile.fromUri(rawPath),
+              'DocumentFile.fromUri($dictId)',
             );
             if (docFile == null) return null;
             final baseName = p.basenameWithoutExtension(docFile.name);
+            hDebugPrint(
+              '[SAF] _getReader: Resolving dict file for baseName=$baseName',
+            );
             dictUri = await _resolveSafFile(sourceBookmark, baseName, [
               '.dict',
               '.dict.dz',
@@ -1756,16 +1784,28 @@ class DictionaryManager {
     } else {
       final String dictPath = await _dbHelper.resolvePath(rawPath);
       if (format == 'mdict') {
+        hDebugPrint(
+          '[SAF] _getReader: dictId=$dictId format=mdict isLinked=false (local file)',
+        );
         final mddPath = storedMddPath ?? _deriveMddPath(dictPath);
         final resolvedMddPath = mddPath != null
             ? await _dbHelper.resolvePath(mddPath)
             : null;
         reader = await MdictReader.fromPath(dictPath, mddPath: resolvedMddPath);
       } else if (format == 'slob') {
+        hDebugPrint(
+          '[SAF] _getReader: dictId=$dictId format=slob isLinked=false (local file)',
+        );
         reader = await SlobReader.fromPath(dictPath);
       } else if (format == 'stardict') {
+        hDebugPrint(
+          '[SAF] _getReader: dictId=$dictId format=stardict isLinked=false (local file)',
+        );
         reader = await DictReader.fromPath(dictPath);
       } else if (format == 'dictd') {
+        hDebugPrint(
+          '[SAF] _getReader: dictId=$dictId format=dictd isLinked=false (local file)',
+        );
         reader = await DictdReader.fromPath(dictPath);
       }
     }
@@ -1777,6 +1817,10 @@ class DictionaryManager {
       if (reader is DictdReader) await reader.open();
       _readerCache[dictId] = reader;
     }
+    stopwatch.stop();
+    hDebugPrint(
+      '[SAF] _getReader: dictId=$dictId completed in ${stopwatch.elapsedMilliseconds}ms',
+    );
     return reader;
   }
 
@@ -3230,21 +3274,35 @@ class DictionaryManager {
     String baseName,
     List<String> extensions,
   ) async {
+    hDebugPrint(
+      '[SAF] _resolveSafFile: treeUri=$treeUri baseName=$baseName extensions=$extensions',
+    );
     // All DocumentFile operations must be serialized globally to avoid
     // the docman "AlreadyRunning" error from concurrent channel calls.
     return _runSafAction(() async {
       final dir = await DocumentFile.fromUri(treeUri);
-      if (dir == null) return null;
+      if (dir == null) {
+        hDebugPrint(
+          '[SAF] _resolveSafFile: DocumentFile.fromUri returned null',
+        );
+        return null;
+      }
       final entities = await dir.listDocuments();
+      hDebugPrint(
+        '[SAF] _resolveSafFile: Listed ${entities.length} files in folder',
+      );
       final lowerBase = baseName.toLowerCase();
       for (final ext in extensions) {
         for (final f in entities) {
           final n = f.name.toLowerCase();
-          if (n == '$lowerBase$ext') return f.uri;
+          if (n == '$lowerBase$ext') {
+            hDebugPrint('[SAF] _resolveSafFile: Found $n');
+            return f.uri;
+          }
         }
       }
       return null;
-    });
+    }, '_resolveSafFile($baseName)');
   }
 
   Stream<ImportProgress> _linkStarDict(
@@ -4234,6 +4292,40 @@ class DictionaryManager {
         isCompleted: true,
       );
     }
+  }
+
+  /// Pre-warms all dictionary readers in parallel.
+  /// This eliminates the cold SAF read penalty (~200ms) on first search.
+  /// Call this after database initialization for faster first search.
+  Future<void> preWarmReaders() async {
+    hDebugPrint('[PreWarm] Starting parallel dictionary reader pre-warming...');
+    final stopwatch = Stopwatch()..start();
+
+    final dicts = await getDictionaries();
+    final enabledDicts = dicts.where((d) => d['is_enabled'] == 1).toList();
+
+    if (enabledDicts.isEmpty) {
+      hDebugPrint('[PreWarm] No enabled dictionaries to pre-warm');
+      return;
+    }
+
+    hDebugPrint(
+      '[PreWarm] Pre-warming ${enabledDicts.length} dictionaries in parallel...',
+    );
+
+    // Create all readers in parallel using Future.wait()
+    await Future.wait(
+      enabledDicts.map((dict) async {
+        try {
+          await getReader(dict['id'] as int);
+        } catch (e) {
+          // Ignore errors during pre-warm - reader will be created on-demand anyway
+        }
+      }),
+    );
+
+    stopwatch.stop();
+    hDebugPrint('[PreWarm] Completed in ${stopwatch.elapsedMilliseconds}ms');
   }
 
   Future<List<Map<String, dynamic>>> getDictionaries() async {

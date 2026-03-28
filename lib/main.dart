@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hdict/core/theme/app_theme.dart';
 import 'package:hdict/core/database/database_helper.dart';
+import 'package:hdict/core/manager/dictionary_manager.dart';
 import 'package:hdict/features/home/home_screen.dart';
 import 'package:hdict/features/settings/settings_provider.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +9,10 @@ import 'package:provider/provider.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await DatabaseHelper.initializeDatabaseFactory();
+
+  // Pre-warm all dictionary readers in parallel (~200-250ms)
+  // This eliminates cold SAF read penalty on first search
+  await DictionaryManager.instance.preWarmReaders();
 
   runApp(
     MultiProvider(
@@ -32,8 +37,8 @@ class MyApp extends StatelessWidget {
       themeMode: settings.appThemeMode == AppThemeMode.light
           ? ThemeMode.light
           : (settings.appThemeMode == AppThemeMode.dark
-              ? ThemeMode.dark
-              : ThemeMode.system),
+                ? ThemeMode.dark
+                : ThemeMode.system),
       home: const HomeScreen(),
     );
   }
