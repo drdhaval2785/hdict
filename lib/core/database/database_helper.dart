@@ -1972,7 +1972,7 @@ class DatabaseHelper {
     }
   }
 
-  /// Sequential dictionary search to leverage indexing and avoid global sorts.
+  /// Single-query dictionary search using IN clause and composite index
   Future<List<Map<String, dynamic>>> _searchWordsSequential({
     String? headwordQuery,
     required SearchMode headwordMode,
@@ -2011,42 +2011,21 @@ class DatabaseHelper {
       likePattern = hq;
     }
 
-    // 2. Build multi-query using UNION ALL to fetch early limits per dictionary natively,
-    // avoiding the overhead of N sequential Flutter-to-Native SQLite method channels.
-    // By nesting, we ensure each table lookup stops at `limit` internally.
-    final List<String> subQueries = [];
-    final List<Object?> args = [];
+    // 2. Single query for all dictionaries using IN clause
+    // This leverages the composite index idx_metadata_dict_word
+    // and is much faster than 46 parallel/sequential queries
+    final dictIds = dicts.map((d) => d['id'] as int).toList();
+    final dictIdList = dictIds.join(',');
 
-    for (int i = 0; i < dicts.length; i++) {
-      final sortOrder = dicts[i]['display_order'] as int? ?? i;
-      subQueries.add('''
-        SELECT * FROM (
-          SELECT word, dict_id, offset, length, ? as sort_order 
-          FROM word_metadata 
-          WHERE dict_id = ? AND word $operator ? 
-          ORDER BY word ASC LIMIT ?
-        )
-      ''');
-      args.addAll([sortOrder, dicts[i]['id'], likePattern, limit]);
-    }
-
-    final String finalSql =
-        '''
-      SELECT word, dict_id, offset, length 
-      FROM (
-        ${subQueries.join(' UNION ALL ')}
-      )
-      ORDER BY sort_order ASC, dict_id ASC, word ASC
-      LIMIT ?
-    ''';
-    args.add(limit);
-
-    final results = await db.rawQuery(finalSql, args);
+    final results = await db.rawQuery(
+      'SELECT word, dict_id, offset, length FROM word_metadata WHERE dict_id IN ($dictIdList) AND word $operator ? ORDER BY dict_id ASC, word ASC LIMIT ?',
+      [likePattern, limit],
+    );
 
     _log(
-      'UNION_ALL_QUERY [$operator]',
-      'SELECT ... UNION ALL ... LIMIT $limit',
-      ['[IDs of \${dicts.length} dicts]', likePattern],
+      'SINGLE_QUERY [$operator]',
+      'Single query over ${dicts.length} dicts',
+      [likePattern],
       results,
     );
     return results;
