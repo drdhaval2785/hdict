@@ -28,15 +28,15 @@ class DictdReader {
   /// Returns the RandomAccessSource used for reading.
   RandomAccessSource? get source => _source;
 
-  static Future<DictdReader> fromPath(String path) async {
+  static Future<DictdReader> fromPath(String path, {String? name}) async {
     final reader = DictdReader(path);
     await reader.openSource(FileRandomAccessSource(path));
     return reader;
   }
 
-  static Future<DictdReader> fromUri(String uri) async {
+  static Future<DictdReader> fromUri(String uri, {String? name}) async {
     final reader = DictdReader(uri);
-    await reader.openSource(SafRandomAccessSource(uri));
+    await reader.openSource(SafRandomAccessSource(uri, name: name));
     return reader;
   }
 
@@ -44,18 +44,19 @@ class DictdReader {
     String source, {
     String? targetPath,
     String? actualPath,
+    String? name,
   }) async {
     if (!kIsWeb && Platform.isAndroid) {
       if (source.startsWith('content://')) {
         final reader = DictdReader(source);
-        await reader.openSource(SafRandomAccessSource(source));
+        await reader.openSource(SafRandomAccessSource(source, name: name));
         return reader;
       } else {
         final String fullPath = targetPath != null
             ? join(source, targetPath)
             : source;
         final reader = DictdReader(fullPath);
-        await reader.openSource(SafRandomAccessSource(fullPath));
+        await reader.openSource(SafRandomAccessSource(fullPath, name: name));
         return reader;
       }
     } else if (!kIsWeb && (Platform.isIOS || Platform.isMacOS)) {

@@ -28,17 +28,25 @@ class MdictReader {
     String? mddPath,
     MdictSourceType mddSourceType = MdictSourceType.local,
     String? mddBookmark,
+    this.name,
   }) : _mddPath = mddPath,
        _mddSourceType = mddSourceType,
        _mddBookmark = mddBookmark {
     _parser = dr.DictReader(mdxPath);
   }
 
-  static Future<MdictReader> fromPath(String path, {String? mddPath}) async {
+  final String? name;
+
+  static Future<MdictReader> fromPath(
+    String path, {
+    String? mddPath,
+    String? name,
+  }) async {
     return MdictReader(
       path,
       source: FileRandomAccessSource(path),
       mddPath: mddPath,
+      name: name,
     );
   }
 
@@ -47,12 +55,13 @@ class MdictReader {
     String? targetPath,
     String? actualPath,
     String? mddPath,
+    String? name,
   }) async {
     final String path = actualPath ?? targetPath ?? source;
     RandomAccessSource src;
     MdictSourceType mddSourceType;
     if (Platform.isAndroid) {
-      src = SafRandomAccessSource(source);
+      src = SafRandomAccessSource(source, name: name);
       mddSourceType = MdictSourceType.saf;
     } else if (Platform.isIOS || Platform.isMacOS) {
       src = BookmarkRandomAccessSource(source, targetPath: targetPath);
@@ -70,15 +79,21 @@ class MdictReader {
       mddPath: mddPath,
       mddSourceType: mddSourceType,
       mddBookmark: source,
+      name: name,
     );
   }
 
-  static Future<MdictReader> fromUri(String uri, {String? mddPath}) async {
+  static Future<MdictReader> fromUri(
+    String uri, {
+    String? mddPath,
+    String? name,
+  }) async {
     return MdictReader(
       uri,
-      source: SafRandomAccessSource(uri),
+      source: SafRandomAccessSource(uri, name: name),
       mddPath: mddPath,
       mddSourceType: MdictSourceType.saf,
+      name: name,
     );
   }
 
@@ -95,13 +110,17 @@ class MdictReader {
   }
 
   /// Internal constructor for creating from parser
-  MdictReader._fromParser(dr.DictReader parser, String path, {String? mddPath})
-    : mdxPath = path,
-      source = FileRandomAccessSource(path),
-      _mddPath = mddPath,
-      _mddSourceType = MdictSourceType.local,
-      _mddBookmark = null,
-      _parser = parser;
+  MdictReader._fromParser(
+    dr.DictReader parser,
+    String path, {
+    String? mddPath,
+    this.name,
+  }) : mdxPath = path,
+       source = FileRandomAccessSource(path),
+       _mddPath = mddPath,
+       _mddSourceType = MdictSourceType.local,
+       _mddBookmark = null,
+       _parser = parser;
 
   Future<void> open() async {
     if (kIsWeb) throw UnsupportedError('MDict is not supported on Web.');
@@ -127,7 +146,10 @@ class MdictReader {
 
       switch (_mddSourceType) {
         case MdictSourceType.saf:
-          mddSource = SafRandomAccessSource(mddPath);
+          mddSource = SafRandomAccessSource(
+            mddPath,
+            name: name != null ? '$name (MDD)' : null,
+          );
         case MdictSourceType.bookmark:
           final bookmark = _mddBookmark;
           mddSource = BookmarkRandomAccessSource(

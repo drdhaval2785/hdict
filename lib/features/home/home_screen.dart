@@ -244,7 +244,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final TextEditingController _headwordController = TextEditingController();
   final TextEditingController _definitionController = TextEditingController();
   final DatabaseHelper _dbHelper = DatabaseHelper();
-  final DictionaryManager _dictManager = DictionaryManager();
+  final DictionaryManager _dictManager = DictionaryManager.instance;
   final AudioPlayer _pronunciationPlayer = AudioPlayer();
 
   List<Map<String, dynamic>> _currentDefinitions = [];
@@ -534,12 +534,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         }
       }
 
-      // Phase 1: Priority-based definition fetching
-      // - First, fetch highest priority dictionary (display_order=0) and show results immediately
-      // - Then fetch remaining dictionaries in parallel while user sees first results
+      // Phase 1: Fully parallel definition fetching
+      // All dictionaries are fetched in parallel from the start
       final fetchAllDictsWatch = HPerf.start('fetchAllDicts_Wall');
       int firstDictFetchMs = 0;
-      final firstDictStopwatch = Stopwatch();
 
       // Get display_order for each dict to sort by priority
       final Map<int, int> dictDisplayOrder = {};
@@ -555,72 +553,79 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               dictDisplayOrder[a.key]!.compareTo(dictDisplayOrder[b.key]!),
         );
 
-      // First, fetch the highest priority dictionary (display_order=0) synchronously
-      // This ensures user sees results from first dict immediately
+      // START ALL dictionary fetches IN PARALLEL from the beginning
+      // This eliminates the sequential gap between first dict and others
       if (sortedEntries.isNotEmpty) {
-        firstDictStopwatch.start();
-        final firstEntry = sortedEntries.first;
-        final firstDictId = firstEntry.key;
-        final firstRequests = firstEntry.value;
-        final firstOriginalIndices = originalIndicesByDict[firstDictId]!;
-        final firstDict = (await _dbHelper.getDictionaryById(firstDictId))!;
+        final allFetchesStopwatch = Stopwatch()..start();
+        final fetchStartTime = DateTime.now().millisecondsSinceEpoch;
 
-        final firstBatchContents = await _dictManager.fetchDefinitionsBatch(
-          firstDict,
-          firstRequests,
-        );
-
-        for (int i = 0; i < firstRequests.length; i++) {
-          final content = firstBatchContents[i] ?? '';
-          final req = firstRequests[i];
-          final ogIndex = firstOriginalIndices[i];
-
-          entriesToProcess.add(
-            _EntryToProcess(
-              index: ogIndex,
-              content: content,
-              word: req['word'] as String,
-              format: firstDict['format'],
-              typeSequence: firstDict['type_sequence'],
-            ),
-          );
-          resultsMetadata.add(req);
-        }
-        firstDictStopwatch.stop();
-        firstDictFetchMs = firstDictStopwatch.elapsedMilliseconds;
-      }
-
-      // Then, fetch remaining dictionaries in parallel (if any)
-      if (sortedEntries.length > 1) {
-        await Future.wait(
-          sortedEntries.skip(1).map((entry) async {
+        // Fetch ALL dictionaries in parallel
+        final allFetchResults = await Future.wait(
+          sortedEntries.map((entry) async {
             final dictId = entry.key;
             final requests = entry.value;
             final originalIndices = originalIndicesByDict[dictId]!;
             final dict = (await _dbHelper.getDictionaryById(dictId))!;
 
+            final fetchDictStopwatch = Stopwatch()..start();
             final batchContents = await _dictManager.fetchDefinitionsBatch(
               dict,
               requests,
             );
+            fetchDictStopwatch.stop();
 
-            for (int i = 0; i < requests.length; i++) {
-              final content = batchContents[i] ?? '';
-              final req = requests[i];
-              final ogIndex = originalIndices[i];
+            hDebugPrint(
+              '[PARALLEL_FETCH] dictId=$dictId completed in ${fetchDictStopwatch.elapsedMilliseconds}ms',
+            );
 
-              entriesToProcess.add(
-                _EntryToProcess(
-                  index: ogIndex,
-                  content: content,
-                  word: req['word'] as String,
-                  format: dict['format'],
-                  typeSequence: dict['type_sequence'],
-                ),
-              );
-              resultsMetadata.add(req);
-            }
+            return {
+              'dictId': dictId,
+              'dict': dict,
+              'requests': requests,
+              'originalIndices': originalIndices,
+              'batchContents': batchContents,
+              'fetchTime': fetchDictStopwatch.elapsedMilliseconds,
+            };
           }),
+        );
+
+        // Collect ALL results and track first dict completion time
+        final firstDictId = sortedEntries.first.key;
+        for (final fetchResult in allFetchResults) {
+          final dictId = fetchResult['dictId'] as int;
+          final dict = fetchResult['dict'] as Map<String, dynamic>;
+          final requests =
+              fetchResult['requests'] as List<Map<String, dynamic>>;
+          final originalIndices = fetchResult['originalIndices'] as List<int>;
+          final batchContents = fetchResult['batchContents'] as List<String?>;
+
+          // Track first dict completion time
+          if (dictId == firstDictId && firstDictFetchMs == 0) {
+            firstDictFetchMs =
+                DateTime.now().millisecondsSinceEpoch - fetchStartTime;
+          }
+
+          for (int i = 0; i < requests.length; i++) {
+            final content = batchContents[i] ?? '';
+            final req = requests[i];
+            final ogIndex = originalIndices[i];
+
+            entriesToProcess.add(
+              _EntryToProcess(
+                index: ogIndex,
+                content: content,
+                word: req['word'] as String,
+                format: dict['format'],
+                typeSequence: dict['type_sequence'],
+              ),
+            );
+            resultsMetadata.add(req);
+          }
+        }
+
+        allFetchesStopwatch.stop();
+        hDebugPrint(
+          '[PARALLEL_FETCH] All ${sortedEntries.length} dictionaries fetched in ${allFetchesStopwatch.elapsedMilliseconds}ms',
         );
       }
 
@@ -1503,17 +1508,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   if (index == rawDefinitions.length) {
                     final sqliteMs = searchSqliteMs ?? _searchSqliteMs;
                     final totalMs = searchTotalMs ?? _searchTotalMs;
-                    final otherMs = searchOtherMs ?? _searchOtherMs;
                     final resultCount = searchResultCount ?? _searchResultCount;
-                    final firstDictMs = _firstDictFetchMs;
                     final dictName =
                         defMap['dict_name'] ?? 'Unknown Dictionary';
 
                     return Text(
                       'Dictionary: $dictName\n'
                       'Sqlite query: $sqliteMs ms.\n'
-                      'First dict results: $firstDictMs ms.\n'
-                      'Rest dicts fetch: ${totalMs - sqliteMs - firstDictMs > 0 ? totalMs - sqliteMs - firstDictMs : 0} ms.\n'
+                      'Definition fetch: ${totalMs - sqliteMs > 0 ? totalMs - sqliteMs : 0} ms.\n'
                       'Showed $resultCount results in $totalMs ms.',
                       style: TextStyle(
                         fontSize: 11,

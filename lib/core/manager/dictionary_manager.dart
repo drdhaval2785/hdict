@@ -1650,11 +1650,13 @@ class DictionaryManager {
           isSaf ? rawPath : sourceBookmark,
           actualPath: rawPath,
           mddPath: mddPath,
+          name: dict['name'],
         );
       } else if (format == 'slob') {
         reader = await SlobReader.fromLinkedSource(
           isSaf ? rawPath : sourceBookmark,
           actualPath: rawPath,
+          name: dict['name'],
         );
       } else if (format == 'stardict') {
         if (isSaf) {
@@ -1691,6 +1693,7 @@ class DictionaryManager {
           reader = await DictReader.fromLinkedSource(
             dictUri,
             actualPath: rawPath,
+            name: dict['name'],
           );
         } else {
           String? actualDictPath;
@@ -1728,6 +1731,7 @@ class DictionaryManager {
             sourceBookmark,
             targetPath: p.basename(actualDictPath),
             actualPath: actualDictPath,
+            name: dict['name'],
           );
         }
       } else if (format == 'dictd') {
@@ -1750,6 +1754,7 @@ class DictionaryManager {
           reader = await DictdReader.fromLinkedSource(
             dictUri,
             actualPath: rawPath,
+            name: dict['name'],
           );
         } else {
           String? actualDictPath;
@@ -1778,6 +1783,7 @@ class DictionaryManager {
             sourceBookmark,
             targetPath: p.basename(actualDictPath),
             actualPath: actualDictPath,
+            name: dict['name'],
           );
         }
       }
@@ -1791,22 +1797,26 @@ class DictionaryManager {
         final resolvedMddPath = mddPath != null
             ? await _dbHelper.resolvePath(mddPath)
             : null;
-        reader = await MdictReader.fromPath(dictPath, mddPath: resolvedMddPath);
+        reader = await MdictReader.fromPath(
+          dictPath,
+          mddPath: resolvedMddPath,
+          name: dict['name'],
+        );
       } else if (format == 'slob') {
         hDebugPrint(
           '[SAF] _getReader: dictId=$dictId format=slob isLinked=false (local file)',
         );
-        reader = await SlobReader.fromPath(dictPath);
+        reader = await SlobReader.fromPath(dictPath, name: dict['name']);
       } else if (format == 'stardict') {
         hDebugPrint(
           '[SAF] _getReader: dictId=$dictId format=stardict isLinked=false (local file)',
         );
-        reader = await DictReader.fromPath(dictPath);
+        reader = await DictReader.fromPath(dictPath, name: dict['name']);
       } else if (format == 'dictd') {
         hDebugPrint(
           '[SAF] _getReader: dictId=$dictId format=dictd isLinked=false (local file)',
         );
-        reader = await DictdReader.fromPath(dictPath);
+        reader = await DictdReader.fromPath(dictPath, name: dict['name']);
       }
     }
 
@@ -4317,7 +4327,7 @@ class DictionaryManager {
     await Future.wait(
       enabledDicts.map((dict) async {
         try {
-          await getReader(dict['id'] as int);
+          await _getReader(dict);
         } catch (e) {
           // Ignore errors during pre-warm - reader will be created on-demand anyway
         }

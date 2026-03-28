@@ -27,7 +27,7 @@ class SlobReader {
   }
 
   /// Factory to create a SlobReader from a local file path.
-  static Future<SlobReader> fromPath(String path) async {
+  static Future<SlobReader> fromPath(String path, {String? name}) async {
     return SlobReader(path, source: FileRandomAccessSource(path));
   }
 
@@ -36,10 +36,11 @@ class SlobReader {
     String source, {
     String? targetPath,
     String? actualPath,
+    String? name,
   }) async {
     final String path = actualPath ?? targetPath ?? source;
     if (Platform.isAndroid) {
-      return SlobReader(path, source: SafRandomAccessSource(source));
+      return SlobReader(path, source: SafRandomAccessSource(source, name: name));
     } else if (Platform.isIOS || Platform.isMacOS) {
       return SlobReader(
         path,
@@ -54,8 +55,8 @@ class SlobReader {
   }
 
   /// Factory to create a SlobReader from an Android SAF URI.
-  static Future<SlobReader> fromUri(String uri) async {
-    return SlobReader(uri, source: SafRandomAccessSource(uri));
+  static Future<SlobReader> fromUri(String uri, {String? name}) async {
+    return SlobReader(uri, source: SafRandomAccessSource(uri, name: name));
   }
 
   /// Factory to create a SlobReader from in-memory bytes.

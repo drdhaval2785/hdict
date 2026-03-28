@@ -27,7 +27,7 @@ class DictReader {
   DictReader(this.path, {required this.source, this.dictId});
 
   /// Factory to create a DictReader from a local file path.
-  static Future<DictReader> fromPath(String path, {int? dictId}) async {
+  static Future<DictReader> fromPath(String path, {int? dictId, String? name}) async {
     return DictReader(
       path,
       source: FileRandomAccessSource(path),
@@ -42,12 +42,13 @@ class DictReader {
     String source, {
     String? targetPath,
     String? actualPath,
+    String? name,
   }) async {
     if (Platform.isAndroid) {
       // On Android 'source' is the SAF content:// URI of the .dict or .dict.dz file.
       // Use 'source' (not 'actualPath' which may be the .ifo URI) as 'path' so that
       // isDz correctly detects .dict.dz and opens the dictzip reader.
-      return DictReader(source, source: SafRandomAccessSource(source));
+      return DictReader(source, source: SafRandomAccessSource(source, name: name));
     } else if (Platform.isIOS || Platform.isMacOS) {
       final String path = actualPath ?? targetPath ?? source;
       return DictReader(
@@ -87,10 +88,18 @@ class DictReader {
   bool get isDz => path.toLowerCase().endsWith('.dz');
 
   /// Opens the file for reading.
-  /// For plain `.dict` files this is a no-op (reads use stateless [File.openRead]).
-  /// For `.dict.dz` files this initialises the [DictzipLocalReader].
+  /// Calls [source.open()] first to prepare the underlying source:
+  /// - For [SafRandomAccessSource]: pre-fills the 1MB read-ahead buffer so the
+  ///   very first [readAtIndex] call is always a cache hit (~0ms instead of
+  ///   100-140ms MethodChannel roundtrip per dictionary).
+  /// - For [FileRandomAccessSource]: opens and holds the OS file handle.
+  /// - For [MemoryRandomAccessSource]: no-op.
+  ///
+  /// For `.dict.dz` files this also initialises the [DictzipLocalReader].
   Future<void> open() async {
     if (kIsWeb) return;
+    // Prepare the underlying source (fills SAF buffer / opens file handle).
+    await source.open();
     if (isDz) {
       _dzReader = DictzipReader(null);
       await _dzReader!.openSource(source);
@@ -149,19 +158,23 @@ class DictReader {
       return results;
     }
 
-    // For plain .dict, we sort by offset to minimize seeker movement and avoid parallel handle conflicts.
-    // Our RandomAccessSource implementations use a single handle, so we MUST be sequential.
-    // We keep track of original indices to return results in requested order
-    final entriesWithIndex = entries.asMap().entries.toList()
-      ..sort((a, b) => a.value.offset.compareTo(b.value.offset));
+    // For SAF, read entries in PARALLEL for much better performance
+    // The buffer will handle efficiency - parallel reads can still benefit from buffer hits
+    // on adjacent reads. We track original indices to return results in requested order.
+    final entriesWithIndex = entries.asMap().entries.toList();
 
+    // Launch all reads in parallel using Future.wait()
     final List<String?> results = List.filled(entries.length, null);
-    for (final item in entriesWithIndex) {
-      results[item.key] = await readAtIndex(
-        item.value.offset,
-        item.value.length,
-      );
+    final futures = entriesWithIndex.map((item) async {
+      final result = await readAtIndex(item.value.offset, item.value.length);
+      return (index: item.key, content: result);
+    }).toList();
+
+    final responses = await Future.wait(futures);
+    for (final resp in responses) {
+      results[resp.index] = resp.content;
     }
+
     return results.cast<String>();
   }
 
