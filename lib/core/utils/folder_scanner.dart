@@ -30,12 +30,23 @@ class DiscoveredDict {
     this.safUris,
   });
 
-  Map<String, String?> toMap() => {
-    'path': path,
-    'format': format,
-    'companionPath': companionPath,
-    'parentFolderName': parentFolderName,
-  };
+  Map<String, dynamic> toMap() => {
+        'path': path,
+        'format': format,
+        'companionPath': companionPath,
+        'parentFolderName': parentFolderName,
+        'safUris': safUris,
+      };
+
+  static DiscoveredDict fromMap(Map<String, dynamic> map) => DiscoveredDict(
+        path: map['path'] as String,
+        format: map['format'] as String,
+        companionPath: map['companionPath'] as String?,
+        parentFolderName: map['parentFolderName'] as String?,
+        safUris: map['safUris'] != null
+            ? Map<String, String>.from(map['safUris'] as Map)
+            : null,
+      );
 }
 
 /// A dictionary entry whose mandatory files are missing.
@@ -58,6 +69,20 @@ class IncompleteDict {
     required this.missingFiles,
     this.parentFolderName,
   });
+
+  Map<String, dynamic> toMap() => {
+        'name': name,
+        'format': format,
+        'missingFiles': missingFiles,
+        'parentFolderName': parentFolderName,
+      };
+
+  static IncompleteDict fromMap(Map<String, dynamic> map) => IncompleteDict(
+        name: map['name'] as String,
+        format: map['format'] as String,
+        missingFiles: List<String>.from(map['missingFiles'] as List),
+        parentFolderName: map['parentFolderName'] as String?,
+      );
 }
 
 /// Result returned by [scanFolderForDictionaries].
@@ -76,6 +101,22 @@ class FolderScanResult {
     required this.incomplete,
     this.foundArchives = const [],
   });
+
+  Map<String, dynamic> toMap() => {
+        'discovered': discovered.map((e) => e.toMap()).toList(),
+        'incomplete': incomplete.map((e) => e.toMap()).toList(),
+        'foundArchives': foundArchives,
+      };
+
+  static FolderScanResult fromMap(Map<String, dynamic> map) => FolderScanResult(
+        discovered: (map['discovered'] as List)
+            .map((e) => DiscoveredDict.fromMap(e as Map<String, dynamic>))
+            .toList(),
+        incomplete: (map['incomplete'] as List)
+            .map((e) => IncompleteDict.fromMap(e as Map<String, dynamic>))
+            .toList(),
+        foundArchives: List<String>.from(map['foundArchives'] as List),
+      );
 }
 
 // ---------------------------------------------------------------------------

@@ -2636,11 +2636,27 @@ class DictionaryManager {
     try {
       FolderScanResult scanResult;
       if (Platform.isAndroid && folderPath.startsWith('content://')) {
-        // TODO: Implement SAF-specific folder scanner using docman
-        // For now, we'll try to adapt the existing scanner if it can handle URIs,
-        // but it likely can't. I'll need a specialized one.
-        yield ImportProgress(message: 'Scanning SAF folder...', value: 0.1);
-        scanResult = await _scanSafFolder(folderPath);
+        yield ImportProgress(message: 'Checking cache...', value: 0.05);
+        final dbHelper = DatabaseHelper();
+        final cachedData = await dbHelper.getSafScanCache(folderPath);
+
+        if (cachedData != null) {
+          hDebugPrint('[SAF] Cache Hit: Loading folder structure from DB for $folderPath');
+          try {
+            final map = jsonDecode(cachedData) as Map<String, dynamic>;
+            scanResult = FolderScanResult.fromMap(map);
+
+            // Trigger background sync
+            _syncSafFolderBackground(folderPath, scanResult);
+          } catch (e) {
+            hDebugPrint('[SAF] Cache read failed, rescanning: $e');
+            yield ImportProgress(message: 'Scanning SAF folder...', value: 0.1);
+            scanResult = await _scanSafFolder(folderPath);
+          }
+        } else {
+          yield ImportProgress(message: 'Scanning SAF folder...', value: 0.1);
+          scanResult = await _scanSafFolder(folderPath);
+        }
       } else {
         scanResult = await scanFolderForDictionaries(
           folderPath,
@@ -2760,6 +2776,30 @@ class DictionaryManager {
   }
 
   /// Specialized SAF folder scanner for Android.
+  Future<void> _syncSafFolderBackground(String treeUri, FolderScanResult cachedResult) async {
+    hDebugPrint('[SAF] Background Sync started for $treeUri');
+    try {
+      final freshResult = await _scanSafFolder(treeUri);
+
+      // Compare fresh vs cached
+      final cachedPaths = cachedResult.discovered.map((d) => d.path).toSet();
+      final freshPaths = freshResult.discovered.map((d) => d.path).toSet();
+
+      final newPaths = freshPaths.difference(cachedPaths);
+      final missingPaths = cachedPaths.difference(freshPaths);
+
+      if (newPaths.isNotEmpty || missingPaths.isNotEmpty) {
+        hDebugPrint('[SAF] Background Sync found changes: ${newPaths.length} new, ${missingPaths.length} missing.');
+        // We could trigger an event here, but for now we just keep the cache up to date
+        // so the next 'Link Folder' action picks up the changes instantly.
+      } else {
+        hDebugPrint('[SAF] Background Sync complete: No changes detected.');
+      }
+    } catch (e) {
+      hDebugPrint('[SAF] Background Sync failed: $e');
+    }
+  }
+
   Future<FolderScanResult> _scanSafFolder(String treeUri) async {
     final List<DiscoveredDict> discovered = [];
     final List<IncompleteDict> incomplete = [];
@@ -2932,14 +2972,27 @@ class DictionaryManager {
     }
 
     await scan(dir);
-    hDebugPrint(
-      'SAF Scan complete: $filesScanned files scanned, ${discovered.length} dicts found',
-    );
-    return FolderScanResult(
+    
+    final result = FolderScanResult(
       discovered: discovered,
       incomplete: incomplete,
       foundArchives: foundArchives,
     );
+
+    hDebugPrint(
+      'SAF Scan complete: $filesScanned files scanned, ${discovered.length} dicts found',
+    );
+
+    // Save to persistent cache
+    try {
+      final jsonStr = jsonEncode(result.toMap());
+      await DatabaseHelper().saveSafScanCache(treeUri, jsonStr);
+      hDebugPrint('[SAF] Saved scan result to cache.');
+    } catch (e) {
+      hDebugPrint('[SAF] Failed to save scan cache: $e');
+    }
+
+    return result;
   }
 
   /// Merged folder action: links direct dictionaries and imports archives.
@@ -2983,8 +3036,27 @@ class DictionaryManager {
     try {
       FolderScanResult scanResult;
       if (Platform.isAndroid && folderPath.startsWith('content://')) {
-        yield ImportProgress(message: 'Scanning SAF folder...', value: 0.05);
-        scanResult = await _scanSafFolder(folderPath);
+        yield ImportProgress(message: 'Checking cache...', value: 0.05);
+        final dbHelper = DatabaseHelper();
+        final cachedData = await dbHelper.getSafScanCache(folderPath);
+
+        if (cachedData != null) {
+          hDebugPrint('[SAF] Cache Hit: Loading folder structure from DB for $folderPath');
+          try {
+            final map = jsonDecode(cachedData) as Map<String, dynamic>;
+            scanResult = FolderScanResult.fromMap(map);
+
+            // Trigger background sync
+            _syncSafFolderBackground(folderPath, scanResult);
+          } catch (e) {
+            hDebugPrint('[SAF] Cache read failed, rescanning: $e');
+            yield ImportProgress(message: 'Scanning SAF folder...', value: 0.05);
+            scanResult = await _scanSafFolder(folderPath);
+          }
+        } else {
+          yield ImportProgress(message: 'Scanning SAF folder...', value: 0.05);
+          scanResult = await _scanSafFolder(folderPath);
+        }
       } else {
         scanResult = await scanFolderForDictionaries(
           folderPath,
