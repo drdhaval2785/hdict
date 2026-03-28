@@ -468,7 +468,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
     int totalDuplicates = 0;
     final int totalAll = totalHeadwords + args.ifoParser.synWordCount;
 
-    const int batchSize = 1000;
+    const int batchSize = 10000;
     const bool useBatching = true;
     int startId = await dbHelper.startBatchInsert();
     bool populateFts5 = false; // Background indexing logic will be triggered at end if needed
@@ -684,7 +684,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
             });
             headwordCount++;
           }
-          if (useBatching && synBatch.length >= (batchSize * 10)) {
+          if (useBatching && synBatch.length >= batchSize) {
             final int batchIdx = headwordCount;
             hDebugPrint(
               'StarDict: Inserting synonym batch $batchIdx to DB',
