@@ -31,9 +31,7 @@ class DatabaseHelper {
   DatabaseHelper._internal();
 
   /// LRU Cache for SQLite search results.
-  /// Key: "$headwordQuery|$headwordMode|$definitionQuery|$definitionMode|$dictId|$limit|$dictOrderKey"
-  /// where dictOrderKey is either "dictId1:order1,dictId2:order2,..." for multi-dict
-  /// or "dictId:order" for single-dict searches.
+  /// Key: "$headwordQuery|$headwordMode|$definitionQuery|$definitionMode|$dictId|$limit"
   final LinkedHashMap<String, List<Map<String, dynamic>>> _queryCache =
       LinkedHashMap<String, List<Map<String, dynamic>>>();
   static const int _maxQueryCacheEntries = 100;
@@ -1744,25 +1742,10 @@ class DatabaseHelper {
     int? dictId,
     int limit = 50,
   }) async {
-    // Include enabled dictionaries and their order in cache key to ensure
-    // results respect user-configured dictionary priority.
-    String dictOrderKey = '';
-    if (dictId == null) {
-      // Multi-dictionary search: include all enabled dict IDs and their display_order
-      final enabledDicts = await getEnabledDictionaries();
-      dictOrderKey = enabledDicts
-          .map((d) => '${d['id']}:${d['display_order']}')
-          .join(',');
-    } else {
-      // Single dictionary search: include that dict's display_order
-      final dict = await getDictionaryById(dictId);
-      if (dict != null) {
-        dictOrderKey = '${dict['id']}:${dict['display_order']}';
-      }
-    }
-
+    // Check cache FIRST before any DB calls - use simple cache key
+    // (dictOrderKey affects result ordering but not results themselves)
     final String cacheKey =
-        '$headwordQuery|$headwordMode|$definitionQuery|$definitionMode|$dictId|$limit|$dictOrderKey';
+        '$headwordQuery|$headwordMode|$definitionQuery|$definitionMode|$dictId|$limit';
     final cachedResults = _getFromQueryCache(cacheKey);
     if (cachedResults != null) {
       HPerf.record('searchWords_CacheHit', 0);
