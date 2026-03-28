@@ -91,19 +91,33 @@ class SafRandomAccessSource implements RandomAccessSource {
   Future<Uint8List> read(int offset, int length) {
     // 1. FAST PATH: If full file is in memory, bypass everything (including lock)
     if (_isFullFileInMemory && _buffer != null) {
-      final sw = Stopwatch()..start();
-      final start = max(0, offset);
-      final end = min(start + length, _buffer!.length);
-      final result = Uint8List.fromList(_buffer!.sublist(start, end));
-      sw.stop();
-      hDebugPrint(
-        '[SAF${name != null ? ": $name" : ""}] SafRandomAccessSource.read (FULL-SYNC): offset=$offset length=$length time=${sw.elapsedMicroseconds}us',
-      );
-      return Future.value(result);
+      return Future.value(readSync(offset, length));
     }
 
     // 2. SLOW PATH: Use lock for buffered/streamed reads
     return _readWithLock(offset, length);
+  }
+
+  /// Truly synchronous read for in-memory files.
+  /// Throws an exception if the file is not fully in memory.
+  Uint8List readSync(int offset, int length) {
+    if (!_isFullFileInMemory || _buffer == null) {
+      throw Exception('readSync called on a non-cached SAF source: $uri');
+    }
+
+    final sw = Stopwatch()..start();
+    final start = max(0, offset);
+    final end = min(start + length, _buffer!.length);
+    final result = Uint8List.fromList(_buffer!.sublist(start, end));
+    sw.stop();
+    
+    // Low-frequency logging for sync reads to avoid string formatting overhead in the hot path
+    if (sw.elapsedMicroseconds > 1000) {
+      hDebugPrint(
+        '[SAF${name != null ? ": $name" : ""}] SafRandomAccessSource.readSync: offset=$offset length=$length time=${sw.elapsedMicroseconds}us',
+      );
+    }
+    return result;
   }
 
   Future<Uint8List> _readWithLock(int offset, int length) async {

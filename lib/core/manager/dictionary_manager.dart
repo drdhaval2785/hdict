@@ -5012,6 +5012,85 @@ class DictionaryManager {
   ///
   /// For stateless readers (plain .dict), it fires all reads in parallel since
   /// they don't share state or need a lock.
+  /// Truly synchronous data fetching path for in-memory dictionaries.
+  /// Returns null if the reader or its source do not support sync access.
+  List<String?>? fetchDefinitionsBatchSync(
+    Map<String, dynamic> dictRecord,
+    List<Map<String, dynamic>> requests,
+  ) {
+    if (kIsWeb) return null;
+
+    final format = (dictRecord['format'] as String?) ?? 'stardict';
+    final int? dictId = dictRecord['id'] as int?;
+    if (dictId == null) return null;
+
+    // 1. Check if reader is even capable of sync (currently only uncompressed StarDict)
+    final reader = _readerCache[dictId];
+    if (reader == null || reader is! DictReader || reader.isDz) {
+      return null;
+    }
+
+    final src = reader.source;
+    if (src is! SafRandomAccessSource || !src.isFullFileInMemory) {
+      return null;
+    }
+
+    final totalWatch = HPerf.start('fetchBatch_Sync_Total[$format]');
+    try {
+      final List<String?> results = List.filled(requests.length, null);
+      final List<int> missingIndices = [];
+      final List<Map<String, dynamic>> missingRequests = [];
+
+      // 1. Check LRU Cache (Sync)
+      for (int i = 0; i < requests.length; i++) {
+        final req = requests[i];
+        final String word = (req['word'] as String?) ?? '';
+        final int offset = (req['offset'] as int?) ?? 0;
+        final int length = (req['length'] as int?) ?? 0;
+        final String cacheKey = '$dictId:$offset:$length';
+
+        final cached = _getFromCache(cacheKey);
+        if (cached != null) {
+          results[i] = cached;
+        } else {
+          missingIndices.add(i);
+          missingRequests.add(req);
+        }
+      }
+
+      if (missingRequests.isEmpty) {
+        HPerf.end(totalWatch, 'fetchBatch_Sync_Total[$format]');
+        return results;
+      }
+
+      // 2. Sync Fetch for Missing Entries
+      final entries = missingRequests
+          .map((req) => (offset: req['offset'] as int, length: req['length'] as int))
+          .toList();
+      
+      final batchResults = reader.readBulkSync(entries);
+
+      // 3. Map back and update Cache (Sync)
+      for (int i = 0; i < missingIndices.length; i++) {
+        final originalIdx = missingIndices[i];
+        final res = batchResults[i];
+        results[originalIdx] = res;
+
+        final req = missingRequests[i];
+        final int offset = (req['offset'] as int?) ?? 0;
+        final int length = (req['length'] as int?) ?? 0;
+        final String cacheKey = '$dictId:$offset:$length';
+        _addToCache(cacheKey, res);
+      }
+
+      HPerf.end(totalWatch, 'fetchBatch_Sync_Total[$format]');
+      return results;
+    } catch (e) {
+      hDebugPrint('Error in fetchDefinitionsBatchSync: $e');
+      return null;
+    }
+  }
+
   Future<List<String?>> fetchDefinitionsBatch(
     Map<String, dynamic> dictRecord,
     List<Map<String, dynamic>> requests,

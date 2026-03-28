@@ -581,10 +581,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             final dict = _dbHelper.getDictionaryByIdSync(dictId)!;
 
             final fetchDictStopwatch = Stopwatch()..start();
-            final batchContents = await _dictManager.fetchDefinitionsBatch(
+            
+            // 3. TRY SYNC EXPRESS LANE FIRST
+            List<String?>? batchContents = _dictManager.fetchDefinitionsBatchSync(
               dict,
               requests,
             );
+
+            // 4. FALLBACK TO ASYNC ONLY IF NECESSARY
+            if (batchContents == null) {
+              batchContents = await _dictManager.fetchDefinitionsBatch(
+                dict,
+                requests,
+              );
+            }
+            
             fetchDictStopwatch.stop();
 
             hDebugPrint(

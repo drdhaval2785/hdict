@@ -133,8 +133,37 @@ class DictReader {
       return await _dzReader!.read(offset, length);
     }
 
-    final bytes = await source.read(offset, length);
+  final bytes = await source.read(offset, length);
     return utf8.decode(bytes, allowMalformed: true);
+  }
+
+  /// Truly synchronous reading from in-memory sources.
+  /// Throws an exception if called on a non-cached source.
+  String readAtIndexSync(int offset, int length) {
+    if (kIsWeb || isDz) {
+      throw Exception('readAtIndexSync not supported for Web or compressed files');
+    }
+
+    final src = source;
+    if (src is SafRandomAccessSource) {
+      final bytes = src.readSync(offset, length);
+      return utf8.decode(bytes, allowMalformed: true);
+    }
+
+    throw Exception('readAtIndexSync called on a non-sync source: ${src.runtimeType}');
+  }
+
+  /// Synchronous bulk read for StarDict entries.
+  List<String> readBulkSync(List<({int offset, int length})> entries) {
+    if (kIsWeb || isDz) {
+      throw Exception('readBulkSync not supported for Web or compressed files');
+    }
+
+    final List<String> results = List.filled(entries.length, '');
+    for (int i = 0; i < entries.length; i++) {
+      results[i] = readAtIndexSync(entries[i].offset, entries[i].length);
+    }
+    return results;
   }
 
   /// Reads multiple definitions at the given offsets and lengths.
