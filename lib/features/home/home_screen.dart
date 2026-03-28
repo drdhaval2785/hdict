@@ -848,6 +848,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _checkDictionaries();
     _cleanHistory();
     _cleanOrphanedFiles();
+    
+    // Background dictionary pre-warming (caching and inflation)
+    // This removes the cold SAF read penalty without blocking app launch.
+    DictionaryManager.instance.preWarmReaders();
 
     // Check for migration alert from version 16
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2075,9 +2079,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         if (dict == null || dict['is_enabled'] != 1)
                           return null;
 
-                        hDebugPrint(
-                          'HomeScreen: Fetching definition for "$wordValue" from dictId=$dictId (offset=${res['offset']}, length=${res['length']})',
-                        );
                         String content =
                             await _dictManager.fetchDefinition(
                               dict,
@@ -2086,9 +2087,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               res['length'] as int,
                             ) ??
                             '';
-                        hDebugPrint(
-                          'HomeScreen: fetchDefinition for "$wordValue" returned: ${content.isEmpty ? "EMPTY" : "${content.length} chars"}',
-                        );
 
                         return {
                           'id': dictId,

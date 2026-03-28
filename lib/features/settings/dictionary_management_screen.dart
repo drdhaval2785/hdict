@@ -760,6 +760,15 @@ class _DictionaryManagementScreenState
     ImportProgress progress, {
     String title = 'Import Report',
   }) {
+    String clean(String? s) {
+      if (s == null) return '';
+      try {
+        return Uri.decodeFull(s);
+      } catch (_) {
+        return s;
+      }
+    }
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -782,7 +791,7 @@ class _DictionaryManagementScreenState
                 ...progress.linkedEntries!.map(
                   (e) => Padding(
                     padding: const EdgeInsets.only(left: 8.0, bottom: 2.0),
-                    child: Text('• $e', style: const TextStyle(fontSize: 12)),
+                    child: Text('• ${clean(e)}', style: const TextStyle(fontSize: 12)),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -800,7 +809,7 @@ class _DictionaryManagementScreenState
                 ...progress.importedEntries!.map(
                   (e) => Padding(
                     padding: const EdgeInsets.only(left: 8.0, bottom: 2.0),
-                    child: Text('• $e', style: const TextStyle(fontSize: 12)),
+                    child: Text('• ${clean(e)}', style: const TextStyle(fontSize: 12)),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -818,7 +827,7 @@ class _DictionaryManagementScreenState
                 ...progress.alreadyExistsEntries!.map(
                   (e) => Padding(
                     padding: const EdgeInsets.only(left: 8.0, bottom: 2.0),
-                    child: Text('• $e', style: const TextStyle(fontSize: 12)),
+                    child: Text('• ${clean(e)}', style: const TextStyle(fontSize: 12)),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -836,7 +845,7 @@ class _DictionaryManagementScreenState
                 ...progress.incompleteEntries!.map(
                   (e) => Padding(
                     padding: const EdgeInsets.only(left: 8.0, bottom: 2.0),
-                    child: Text('• $e', style: const TextStyle(fontSize: 12)),
+                    child: Text('• ${clean(e)}', style: const TextStyle(fontSize: 12)),
                   ),
                 ),
               ],
@@ -1636,13 +1645,22 @@ class _DictionaryManagementScreenState
     ImportProgress progress, {
     VoidCallback? onCancel,
   }) {
+    String clean(String? s) {
+      if (s == null) return '';
+      try {
+        return Uri.decodeFull(s);
+      } catch (_) {
+        return s;
+      }
+    }
+
     return SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (progress.dictionaryName != null) ...[
             Text(
-              progress.dictionaryName!,
+              clean(progress.dictionaryName),
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
               textAlign: TextAlign.center,
             ),
@@ -1650,7 +1668,7 @@ class _DictionaryManagementScreenState
           ],
           LinearProgressIndicator(value: progress.value),
           const SizedBox(height: 16),
-          Text(progress.message, textAlign: TextAlign.center),
+          Text(clean(progress.message), textAlign: TextAlign.center),
           if (progress.headwordCount > 0) ...[
             const SizedBox(height: 8),
             Text(

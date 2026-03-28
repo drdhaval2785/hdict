@@ -10,10 +10,6 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await DatabaseHelper.initializeDatabaseFactory();
 
-  // Pre-warm all dictionary readers in parallel (~200-250ms)
-  // This eliminates cold SAF read penalty on first search
-  await DictionaryManager.instance.preWarmReaders();
-
   runApp(
     MultiProvider(
       providers: [ChangeNotifierProvider(create: (_) => SettingsProvider())],

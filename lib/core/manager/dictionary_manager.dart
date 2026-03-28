@@ -4326,6 +4326,9 @@ class DictionaryManager {
   /// This eliminates the cold SAF read penalty (~200ms) on first search.
   /// Call this after database initialization for faster first search.
   Future<void> preWarmReaders() async {
+    // Wait a brief moment to let the UI finish its initial frame(s)
+    await Future.delayed(const Duration(milliseconds: 200));
+    
     hDebugPrint('[PreWarm] Starting parallel dictionary reader pre-warming...');
     final stopwatch = Stopwatch()..start();
 
