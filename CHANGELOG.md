@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.9] - 2026-03-28
+
+### Fixed
+- **Queries on Android**: Androids require SAF for accessing files outside AppData. As some users already have data and do not want to duplicate data to our AppData, started to handle SAF. That is notoriously slow. Optimized it quite a bit so that for majority of cases, results are available within 100ms. Quite fast for human eyes.
+
+
 ## [1.5.8] - 2026-03-26
 
 ### Fixed

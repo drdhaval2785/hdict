@@ -1,4 +1,4 @@
-# Public API Reference (version 0.1.0)
+# Public API Reference (version 1.5.9)
 
 This document lists all public classes, functions, and methods in the HDict codebase. Each entry includes the file location, description, parameters, return types, and usage examples where applicable.
 
@@ -211,6 +211,7 @@ Creates a DictReader from a local file path.
 |-----------|------|-------------|
 | `path` | `String` | Path to the dictionary file |
 | `dictId` | `int?` | Optional dictionary ID |
+| `name` | `String?` | Optional name for the source |
 
 **Returns:** `Future<DictReader>` - A new DictReader instance.
 
@@ -234,6 +235,19 @@ Creates a DictReader from a linked source (SAF or Bookmark).
 | `source` | `String` | Content URI (Android) or bookmark/path (iOS/macOS) |
 | `targetPath` | `String?` | Optional target path |
 | `actualPath` | `String?` | Optional actual path (iOS/macOS) |
+| `name` | `String?` | Optional name for the source |
+
+**Returns:** `Future<DictReader>` - A new DictReader instance.
+
+##### Static Method: `fromBytes`
+
+Creates a DictReader from in-memory bytes.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `bytes` | `Uint8List` | Raw dictionary file bytes |
+| `fileName` | `String?` | Optional file name |
+| `dictId` | `int?` | Optional dictionary ID |
 
 **Returns:** `Future<DictReader>` - A new DictReader instance.
 
@@ -251,8 +265,15 @@ Reads MDict dictionary files (.mdx, .mdd).
 |-------|------|-------------|
 | `mdxPath` | `String` | Path to MDX file |
 | `source` | `RandomAccessSource` | Random access source |
+| `name` | `String?` | Optional name for the reader |
 | `cssContent` | `String?` | CSS content from style.css |
 | `hasMdd` | `bool` | Whether MDD resource file is attached |
+
+##### Constructor
+
+```dart
+MdictReader(String mdxPath, {required RandomAccessSource source, String? mddPath, String? name})
+```
 
 ##### Static Method: `fromPath`
 
@@ -261,6 +282,8 @@ Creates an MdictReader from a file path.
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `path` | `String` | Path to the MDX file |
+| `mddPath` | `String?` | Optional MDD file path |
+| `name` | `String?` | Optional name for the source |
 
 **Returns:** `Future<MdictReader>` - A new MdictReader instance.
 
@@ -271,6 +294,8 @@ Creates an MdictReader from a URI.
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `uri` | `Uri` | URI to the MDX file |
+| `mddPath` | `String?` | Optional MDD file path |
+| `name` | `String?` | Optional name for the source |
 
 **Returns:** `Future<MdictReader>` - A new MdictReader instance.
 
@@ -284,27 +309,18 @@ Creates an MdictReader from a linked source.
 | `targetPath` | `String?` | Optional target path |
 | `actualPath` | `String?` | Optional actual path |
 | `mddPath` | `String?` | Optional MDD path |
+| `name` | `String?` | Optional name for the source |
 
 **Returns:** `Future<MdictReader>` - A new MdictReader instance.
 
-##### Static Method: `fromPath`
+##### Static Method: `fromBytes`
 
-Creates an MdictReader from a file path.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `path` | `String` | Path to the MDX file |
-| `mddPath` | `String?` | Optional MDD file path |
-
-**Returns:** `Future<MdictReader>` - A new MdictReader instance.
-
-##### Static Method: `fromUri`
-
-Creates an MdictReader from a URI.
+Creates an MdictReader from in-memory bytes.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `uri` | `Uri` | URI to the MDX file |
+| `bytes` | `Uint8List` | Raw MDX file bytes |
+| `fileName` | `String?` | Optional file name |
 | `mddPath` | `String?` | Optional MDD file path |
 
 **Returns:** `Future<MdictReader>` - A new MdictReader instance.
@@ -374,8 +390,29 @@ Reads SLOB (Sorted List of Blobs) dictionary files.
 |-------|------|-------------|
 | `path` | `String` | File path |
 | `source` | `RandomAccessSource` | Random access source |
-| `bookName` | `String` | Dictionary label from tags |
-| `blobCount` | `int` | Total number of blobs |
+| `fileSize` | `int` | File size of the dictionary |
+
+##### Constructor
+
+```dart
+SlobReader(String path, {required RandomAccessSource source})
+```
+
+##### Property: `bookName`
+
+```dart
+String get bookName
+```
+
+Returns the dictionary label from tags, or filename if unavailable.
+
+##### Property: `blobCount`
+
+```dart
+int get blobCount
+```
+
+Returns total number of blobs.
 
 ##### Property: `blobs`
 
@@ -385,6 +422,14 @@ Stream<dynamic> get blobs async*
 
 Stream of all blobs in the slob file (async generator).
 
+##### Property: `fileSize`
+
+```dart
+Future<int> get fileSize
+```
+
+Returns the file size of the dictionary.
+
 ##### Static Method: `fromPath`
 
 Creates a SlobReader from a file path.
@@ -392,6 +437,7 @@ Creates a SlobReader from a file path.
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `path` | `String` | Path to the SLOB file |
+| `name` | `String?` | Optional name for the source |
 
 **Returns:** `Future<SlobReader>` - A new SlobReader instance.
 
@@ -402,6 +448,7 @@ Creates a SlobReader from a URI.
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `uri` | `Uri` | URI to the SLOB file |
+| `name` | `String?` | Optional name for the source |
 
 **Returns:** `Future<SlobReader>` - A new SlobReader instance.
 
@@ -414,6 +461,18 @@ Creates a SlobReader from a linked source.
 | `source` | `String` | Source path or URI |
 | `targetPath` | `String?` | Optional target path |
 | `actualPath` | `String?` | Optional actual path |
+| `name` | `String?` | Optional name for the source |
+
+**Returns:** `Future<SlobReader>` - A new SlobReader instance.
+
+##### Static Method: `fromBytes`
+
+Creates a SlobReader from in-memory bytes.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `bytes` | `Uint8List` | Raw SLOB file bytes |
+| `fileName` | `String?` | Optional file name |
 
 **Returns:** `Future<SlobReader>` - A new SlobReader instance.
 
@@ -430,12 +489,30 @@ Reads Dictd dictionary files.
 | Field | Type | Description |
 |-------|------|-------------|
 | `dictPath` | `String` | Path to the Dictd dictionary file |
+| `fileSize` | `int` | File size of the dictionary |
+| `source` | `RandomAccessSource?` | Random access source for reading |
 
 ##### Constructor
 
 ```dart
 DictdReader(String dictPath)
 ```
+
+##### Property: `fileSize`
+
+```dart
+Future<int> get fileSize
+```
+
+Returns the file size of the dictionary.
+
+##### Property: `source`
+
+```dart
+RandomAccessSource? get source
+```
+
+Returns the RandomAccessSource used for reading.
 
 ##### Static Method: `fromPath`
 
@@ -444,6 +521,7 @@ Creates a DictdReader from a file path.
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `path` | `String` | Path to the Dictd index file |
+| `name` | `String?` | Optional name for the source |
 
 **Returns:** `Future<DictdReader>` - A new DictdReader instance.
 
@@ -454,6 +532,7 @@ Creates a DictdReader from a URI.
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `uri` | `Uri` | URI to the Dictd index file |
+| `name` | `String?` | Optional name for the source |
 
 **Returns:** `Future<DictdReader>` - A new DictdReader instance.
 
@@ -466,6 +545,7 @@ Creates a DictdReader from a linked source.
 | `source` | `String` | Source path or URI |
 | `targetPath` | `String?` | Optional target path |
 | `actualPath` | `String?` | Optional actual path |
+| `name` | `String?` | Optional name for the source |
 
 **Returns:** `Future<DictdReader>` - A new DictdReader instance.
 
@@ -629,6 +709,29 @@ Represents a dictionary discovered during scanning.
 | `format` | `String` | Format identifier ('stardict', 'mdict', 'slob', 'dictd') |
 | `companionPath` | `String?` | For DICTD: path to companion .dict file |
 | `parentFolderName` | `String?` | Name of the immediate parent folder |
+| `safUris` | `Map<String, String>?` | Mapped URIs for SAF files |
+
+##### Constructor
+
+```dart
+const DiscoveredDict({required String path, required String format, String? companionPath, String? parentFolderName, Map<String, String>? safUris})
+```
+
+##### Method: `toMap`
+
+Converts the instance to a Map.
+
+**Returns:** `Map<String, dynamic>`
+
+##### Static Method: `fromMap`
+
+Creates a DiscoveredDict from a Map.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `map` | `Map<String, dynamic>` | Map to convert |
+
+**Returns:** `DiscoveredDict`
 
 ---
 
@@ -646,6 +749,28 @@ Represents an incomplete or corrupted dictionary.
 | `format` | `String` | Format identifier |
 | `missingFiles` | `List<String>` | List of missing mandatory files |
 | `parentFolderName` | `String?` | Name of the immediate parent folder |
+
+##### Constructor
+
+```dart
+const IncompleteDict({required String name, required String format, required List<String> missingFiles, String? parentFolderName})
+```
+
+##### Method: `toMap`
+
+Converts the instance to a Map.
+
+**Returns:** `Map<String, dynamic>`
+
+##### Static Method: `fromMap`
+
+Creates an IncompleteDict from a Map.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `map` | `Map<String, dynamic>` | Map to convert |
+
+**Returns:** `IncompleteDict`
 
 ---
 
@@ -723,6 +848,28 @@ Represents the result of scanning a folder for dictionaries.
 | `discovered` | `List<DiscoveredDict>` | Valid dictionaries found |
 | `incomplete` | `List<IncompleteDict>` | Incomplete dictionaries |
 | `foundArchives` | `List<String>` | Archive files found |
+
+##### Constructor
+
+```dart
+const FolderScanResult({required List<DiscoveredDict> discovered, required List<IncompleteDict> incomplete, List<String> foundArchives = const []})
+```
+
+##### Method: `toMap`
+
+Converts the instance to a Map.
+
+**Returns:** `Map<String, dynamic>`
+
+##### Static Method: `fromMap`
+
+Creates a FolderScanResult from a Map.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `map` | `Map<String, dynamic>` | Map to convert |
+
+**Returns:** `FolderScanResult`
 
 ---
 
@@ -806,6 +953,15 @@ Records a value.
 | `name` | `String` | Metric name |
 | `ms` | `int` | Milliseconds value |
 
+##### Static Method: `recordUs`
+
+Records a microsecond value.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | `String` | Metric name |
+| `us` | `int` | Microseconds value |
+
 ---
 
 ## Main App
@@ -835,13 +991,7 @@ Gets a theme based on brightness and font family.
 
 **Returns:** `ThemeData` - The configured theme.
 
-##### Property: `lightTheme`
 
-Returns the light theme.
-
-##### Property: `darkTheme`
-
-Returns the dark theme.
 
 ---
 
@@ -1255,13 +1405,11 @@ Database get database
 
 Returns the database instance.
 
-##### Property: `initializeDatabaseFactory`
+##### Static Method: `initializeDatabaseFactory`
 
-```dart
-static DatabaseFactory get initializeDatabaseFactory
-```
+Initializes the database factory for the current platform.
 
-Returns the database factory.
+**Returns:** `Future<void>`
 
 ##### Method: `setDatabase`
 
