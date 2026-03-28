@@ -64,5 +64,7 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app requires access to audio functionality for playing sound for mdict dictionaries with audio files. App does not record audio.</string>
 </dict>
 </plist>
