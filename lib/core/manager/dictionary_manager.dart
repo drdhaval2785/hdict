@@ -2033,6 +2033,15 @@ class DictionaryManager {
     return path;
   }
 
+  /// Triggers a background pre-warming of dictionary readers.
+  /// This ensures new dictionaries are cached/inflated immediately.
+  void _triggerBackgroundPreWarm() {
+    // Non-blocking trigger. Errors are ignored as pre-warming is an optimization.
+    preWarmReaders().catchError((e) {
+      hDebugPrint('DictionaryManager: Background pre-warm error: $e');
+    });
+  }
+
   /// Imports a dictionary with progress updates.
   Stream<ImportProgress> importDictionaryStream(
     String archivePath, {
@@ -2166,6 +2175,7 @@ class DictionaryManager {
         }
       }
 
+      _triggerBackgroundPreWarm();
       yield ImportProgress(
         message: 'Import process complete',
         value: 1.0,
@@ -2402,6 +2412,7 @@ class DictionaryManager {
         }
       }
 
+      _triggerBackgroundPreWarm();
       yield ImportProgress(
         message: 'All imports complete.',
         value: 1.0,
@@ -2593,6 +2604,7 @@ class DictionaryManager {
         }
       }
 
+      _triggerBackgroundPreWarm();
       yield ImportProgress(
         message: 'Folder import complete.',
         value: 1.0,
@@ -2739,6 +2751,7 @@ class DictionaryManager {
         }
       }
 
+      _triggerBackgroundPreWarm();
       yield ImportProgress(
         message: 'Link complete.',
         value: 1.0,
@@ -3829,6 +3842,7 @@ class DictionaryManager {
         hDebugPrint('Web: skipped Slob $slobName — not supported in archive');
       }
 
+      _triggerBackgroundPreWarm();
       yield ImportProgress(
         message: 'All web imports complete.',
         value: 1.0,
@@ -4300,6 +4314,7 @@ class DictionaryManager {
 
       final sampleWords = await _dbHelper.getSampleWords(dictId);
 
+      _triggerBackgroundPreWarm();
       yield ImportProgress(
         message: 'Import complete (Web)!',
         value: 1.0,

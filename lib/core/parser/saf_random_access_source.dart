@@ -23,7 +23,7 @@ class SafRandomAccessSource implements RandomAccessSource {
   // Global memory tracking for all SAF sources
   static int _totalMemoryUsed = 0;
   static const int _maxTotalMemory = 500 * 1024 * 1024; // 500 MB limit
-  static const int _maxPerFileMemory = 50 * 1024 * 1024; // 50 MB per file limit
+  static const int _maxPerFileMemory = 500 * 1024 * 1024; // 500 MB per file limit
 
   int _bufferOffset = -1;
   Uint8List? _buffer;
