@@ -532,43 +532,105 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         }
       }
 
-      // Phase 1: Parallel definition fetching across dictionaries (IO bound)
+      // Phase 1: Priority-based definition fetching
+      // - First, fetch highest priority dictionary (display_order=0) and show results immediately
+      // - Then fetch remaining dictionaries in parallel while user sees first results
       final fetchAllDictsWatch = HPerf.start('fetchAllDicts_Wall');
-      await Future.wait(
-        resultsByDict.entries.map((entry) async {
-          final dictId = entry.key;
-          final requests = entry.value;
-          final originalIndices = originalIndicesByDict[dictId]!;
-          final dict = (await _dbHelper.getDictionaryById(dictId))!;
 
-          final batchContents = await _dictManager.fetchDefinitionsBatch(
-            dict,
-            requests,
+      // Get display_order for each dict to sort by priority
+      final Map<int, int> dictDisplayOrder = {};
+      for (final dictId in resultsByDict.keys) {
+        final dict = await _dbHelper.getDictionaryById(dictId);
+        dictDisplayOrder[dictId] = dict?['display_order'] as int? ?? 0;
+      }
+
+      // Sort dictionary entries by display_order (highest priority first)
+      final sortedEntries = resultsByDict.entries.toList()
+        ..sort(
+          (a, b) =>
+              dictDisplayOrder[a.key]!.compareTo(dictDisplayOrder[b.key]!),
+        );
+
+      // First, fetch the highest priority dictionary (display_order=0) synchronously
+      // This ensures user sees results from first dict immediately
+      if (sortedEntries.isNotEmpty) {
+        final firstEntry = sortedEntries.first;
+        final firstDictId = firstEntry.key;
+        final firstRequests = firstEntry.value;
+        final firstOriginalIndices = originalIndicesByDict[firstDictId]!;
+        final firstDict = (await _dbHelper.getDictionaryById(firstDictId))!;
+
+        final firstBatchContents = await _dictManager.fetchDefinitionsBatch(
+          firstDict,
+          firstRequests,
+        );
+
+        for (int i = 0; i < firstRequests.length; i++) {
+          final content = firstBatchContents[i] ?? '';
+          final req = firstRequests[i];
+          final ogIndex = firstOriginalIndices[i];
+
+          entriesToProcess.add(
+            _EntryToProcess(
+              index: ogIndex,
+              content: content,
+              word: req['word'] as String,
+              format: firstDict['format'],
+              typeSequence: firstDict['type_sequence'],
+            ),
           );
+          resultsMetadata.add(req);
+        }
+      }
 
-          for (int i = 0; i < requests.length; i++) {
-            final content = batchContents[i] ?? '';
-            final req = requests[i];
-            final ogIndex = originalIndices[i];
+      // Then, fetch remaining dictionaries in parallel (if any)
+      if (sortedEntries.length > 1) {
+        await Future.wait(
+          sortedEntries.skip(1).map((entry) async {
+            final dictId = entry.key;
+            final requests = entry.value;
+            final originalIndices = originalIndicesByDict[dictId]!;
+            final dict = (await _dbHelper.getDictionaryById(dictId))!;
 
-            entriesToProcess.add(
-              _EntryToProcess(
-                index: ogIndex,
-                content: content,
-                word: req['word'] as String,
-                format: dict['format'],
-                typeSequence: dict['type_sequence'],
-              ),
+            final batchContents = await _dictManager.fetchDefinitionsBatch(
+              dict,
+              requests,
             );
 
-            // We store ONLY the original result reference and the dictId.
-            // Dictionary metadata like name/format will be looked up during
-            // consolidation from the shared dictMap, avoiding 50k Map instances.
-            resultsMetadata.add(req);
-          }
-        }),
-      );
+            for (int i = 0; i < requests.length; i++) {
+              final content = batchContents[i] ?? '';
+              final req = requests[i];
+              final ogIndex = originalIndices[i];
+
+              entriesToProcess.add(
+                _EntryToProcess(
+                  index: ogIndex,
+                  content: content,
+                  word: req['word'] as String,
+                  format: dict['format'],
+                  typeSequence: dict['type_sequence'],
+                ),
+              );
+              resultsMetadata.add(req);
+            }
+          }),
+        );
+      }
+
       HPerf.end(fetchAllDictsWatch, 'fetchAllDicts_Wall');
+
+      // Sort entriesToProcess by display_order (priority) then by original index
+      // This ensures results are shown in dictionary display order
+      entriesToProcess.sort((a, b) {
+        final aOriginal = results[a.index];
+        final bOriginal = results[b.index];
+        final aDictId = aOriginal['dict_id'] as int;
+        final bDictId = bOriginal['dict_id'] as int;
+        final aOrder = dictDisplayOrder[aDictId] ?? 0;
+        final bOrder = dictDisplayOrder[bDictId] ?? 0;
+        if (aOrder != bOrder) return aOrder.compareTo(bOrder);
+        return a.index.compareTo(b.index);
+      });
 
       // Phase 2: HTML Processing is now done LAZILY during ListView scrolling!
       if (entriesToProcess.isNotEmpty) {
