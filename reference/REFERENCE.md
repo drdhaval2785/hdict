@@ -5856,22 +5856,32 @@ hdict
 HomeScreen._performSearch
 ├── DatabaseHelper.searchWords
 │   ├── DatabaseHelper._ensureDictionaryMapCache
+│   │   ├── DatabaseHelper.database
+│   │   └── sqflite queries
 │   └── sqflite FTS5 queries
 ├── DictionaryManager.fetchDefinitionsBatch
 │   ├── DictionaryManager._getReader
-│   │   ├── MdictReader.fromPath / .fromLinkedSource / .fromUri
-│   │   ├── SlobReader.fromPath / .fromLinkedSource / .fromUri
-│   │   ├── DictReader.fromPath / .fromLinkedSource / .fromUri
-│   │   └── DictdReader.fromPath / .fromLinkedSource / .fromUri
+│   │   ├── MdictReader._openMdict
+│   │   │   ├── IfoParser.parseContent / .parseSource
+│   │   │   └── MddReader._openMdd
+│   │   ├── SlobReader._openSlob
+│   │   │   └── SlobReader.blobs
+│   │   ├── DictReader._openDict
+│   │   │   ├── IfoParser.parseContent / .parseSource
+│   │   │   ├── IdxParser (for .idx)
+│   │   │   └── SynParser (for .syn)
+│   │   └── DictdReader._connect
 │   └── DictReader/MdictReader/SlobReader/DictdReader.readAtIndex/readBulk
 ├── HomeScreen.consolidateDefinitions
 │   └── DatabaseHelper.getDictionaryById
 └── HtmlLookupWrapper.processRecord
+    └── HtmlLookupWrapper._tagRegExp (private regex)
 
 DictionaryManager.importDictionaryStream
-├── _extractToWorkspace
-│   └── _extractToWorkspaceSync
-│       └── GZipDecoder / BZip2Decoder / XZDecoder / SZArchive.extract
+├── DictionaryManager._extractToWorkspace
+│   ├── DictionaryManager._extractToWorkspaceSync
+│   │   └── GZipDecoder / BZip2Decoder / XZDecoder / SZArchive.extract
+│   └── FolderScanner._extractArchiveToDir
 ├── scanFolderForDictionaries
 │   └── FolderScanner._extractArchiveToDir
 └── _processDictionaryFiles
@@ -5879,7 +5889,8 @@ DictionaryManager.importDictionaryStream
     ├── IdxParser
     ├── SynParser
     └── DatabaseHelper.batchInsertWords
-        └── DatabaseHelper.startBatchInsert / .endBatchInsert
+        ├── DatabaseHelper.startBatchInsert
+        └── DatabaseHelper.endBatchInsert
 
 DictionaryManager.fetchDefinition
 ├── DictionaryManager._getReader
@@ -5892,6 +5903,8 @@ DictionaryManager.fetchDefinition
 
 DatabaseHelper.searchWords
 ├── DatabaseHelper._ensureDictionaryMapCache
+│   ├── DatabaseHelper.database
+│   └── sqflite queries
 ├── sqflite database queries (FTS5 or fallback)
 └── DatabaseHelper._queryCache (LRU)
 
@@ -5901,71 +5914,39 @@ HtmlLookupWrapper.processRecord
 MultimediaProcessor.processHtmlWithMedia
 ├── MddReader.getMddResourceBytes
 ├── MultimediaProcessor._replaceImgSrcWithDataUris
+│   ├── MddReader.getMddResourceBytes
+│   └── MultimediaProcessor._base64EncodeImage
 └── MultimediaProcessor._addMediaTapHandlers
+    ├── MddReader.getCssContent
+    ├── MultimediaProcessor._createMediaWidget
     └── MultimediaProcessor.injectCss
 
 FlashCardsScreen._startQuiz
 ├── DatabaseHelper.getBatchSampleWords
 │   ├── DatabaseHelper._ensureDictionaryMapCache
+│   │   ├── DatabaseHelper.database
+│   │   └── sqflite queries
 │   └── Random.sample
 └── DictionaryManager.instance.fetchDefinition
 
 StardictService.refreshDictionaries
-├── http.get (package)
+├── StardictService._fetchDictionariesFromUrl
+│   ├── http.get (package)
+│   └── StardictDictionary.fromTsvRow
 ├── DatabaseHelper.insertFreedictDictionaries
 └── StardictDictionary.fromTsvRow
 
 DictionaryGroupManager.autoGenerateGroupsFromDownloaded
 ├── StardictService.fetchDictionaries
 │   └── DatabaseHelper.getFreedictDictionaries
-└── StardictService.refreshDictionaries
-```
-
----
-
-## Private Function-Level Dependencies
-
-```
-DictionaryManager._getReader
-├── MdictReader._openMdict
-│   ├── IfoParser.parseContent / .parseSource
-│   └── MddReader._openMdd
-├── SlobReader._openSlob
-│   └── SlobReader.blobs
-├── DictReader._openDict
-│   ├── IfoParser.parseContent / .parseSource
-│   ├── IdxParser (for .idx)
-│   └── SynParser (for .syn)
-└── DictdReader._connect
-
-DictionaryManager._extractToWorkspace
-├── GZipDecoder (dart:io)
-├── BZip2Decoder (archive)
-├── XZDecoder (archive)
-├── SZArchive.extract (flutter_7zip)
-└── FolderScanner._extractArchiveToDir
-
-DatabaseHelper._ensureDictionaryMapCache
-├── DatabaseHelper.database
-└── sqflite queries
-
-HtmlLookupWrapper._tagRegExp (private regex)
-└── logger.hDebugPrint (showHtmlProcessing check)
-
-MultimediaProcessor._replaceImgSrcWithDataUris
-├── MddReader.getMddResourceBytes
-└── MultimediaProcessor._base64EncodeImage
-
-MultimediaProcessor._addMediaTapHandlers
-├── MddReader.getCssContent
-└── MultimediaProcessor._createMediaWidget
-
-StardictService._fetchDictionariesFromUrl
-├── http.get (package)
-└── StardictDictionary.fromTsvRow
-
-DictionaryGroupManager._saveGroups
-└── SharedPreferences
+├── StardictService.refreshDictionaries
+│   ├── StardictService._fetchDictionariesFromUrl
+│   │   ├── http.get (package)
+│   │   └── StardictDictionary.fromTsvRow
+│   ├── DatabaseHelper.insertFreedictDictionaries
+│   └── StardictDictionary.fromTsvRow
+└── DictionaryGroupManager._saveGroups
+    └── SharedPreferences
 ```
 
 ---
