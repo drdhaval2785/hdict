@@ -2527,7 +2527,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           borderRadius: BorderRadius.circular(4),
         ),
         child: ExpansionTile(
-          key: PageStorageKey('accordion_${defData['id'] ?? index}'),
+          key: PageStorageKey('accordion_$globalIndex'),
           tilePadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           childrenPadding: EdgeInsets.zero,
           minTileHeight: 28,
@@ -3302,7 +3302,7 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
           borderRadius: BorderRadius.circular(4),
         ),
         child: ExpansionTile(
-          key: PageStorageKey('popup_accordion_${defData['id'] ?? index}'),
+          key: PageStorageKey('popup_accordion_$globalIndex'),
           tilePadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           childrenPadding: EdgeInsets.zero,
           minTileHeight: 28,
