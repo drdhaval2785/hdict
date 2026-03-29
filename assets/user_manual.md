@@ -30,14 +30,20 @@ Perfect for bulk importing entire collections from your device.
 2. Select a directory containing dictionary files.
 3. The app recursively scans for all supported formats and groups them under the folder's name.
 
-#### 3. Import File
-Use this for single dictionary files or compressed archives.
-1. Tap **Import File** and pick a file or archive (`.zip`, `.7z`, `.tar.xz`, etc.).
-2. **Mandatory Files per format**:
-    *   **StarDict**: Select `.dict/.dict.dz`, `.ifo`, and `.idx` files. Optionally `.syn`.
-    *   **MDict**: Select `.mdx` file. Optional `.mdd` for media.
-    *   **Slob**: Select a single `.slob` file.
-    *   **DICTD**: Select `.dict/.dict.dz` and `.index` files.
+> **📱 Android Note**: Due to Android's security restrictions, the "Downloads" folder (and some other system folders) cannot be accessed by apps. 
+> * Store your dictionary files in a user-accessible folder like `Downloads/DictData` or create a new folder.
+> * On Android 11+, you may need to grant "Files and media" permission to access certain locations.
+
+#### 3. Link Files
+Use this to link dictionary files directly from your device without copying them. This is ideal for saving storage space—linked dictionaries remain in their original location.
+1. Tap **Link Files** and pick dictionary files (`.ifo`, `.mdx`, `.slob`, `.index`) or archives (`.zip`, `.7z`, `.tar.xz`, etc.).
+2. For dictionary files: They are linked directly (no copy). The app stores the file reference and accesses it on demand.
+3. For archives: They are extracted and copied to internal storage.
+4. **Supported files**:
+    *   **StarDict**: `.ifo`, `.idx`, `.dict/.dict.dz` (optionally `.syn`).
+    *   **MDict**: `.mdx` file. Optional `.mdd` for media.
+    *   **Slob**: Single `.slob` file.
+    *   **DICTD**: `.index` and `.dict/.dict.dz` files.
 
 #### 4. Download Web
 If you have a direct link to a dictionary file or archive:
@@ -85,6 +91,9 @@ Head over to **Settings** to make the app your own:
 
 ### Search Settings
 *   **Search Modes**: Set whether your search should match the start of the word (**Prefix**), the end (**Suffix**), the internal (**Substring**) or the **Exact** word.
+*   **Search As You Type**: Enable this to automatically search as you type each character, providing instant results.
+*   **Show Search Suggestions**: Display suggestion chips while typing to help you find words faster.
+*   **List Mode**: When enabled, search results appear as an accordion—tap to expand and see the full definition. This is useful for browsing multiple results at a glance.
 
 ### Appearance
 *   **Theme**: Pick from colours of your choice.
