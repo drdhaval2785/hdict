@@ -2149,6 +2149,92 @@ class DatabaseHelper {
     }
   }
 
+  Future<List<String>> getDefinitionSuggestions(
+    String query, {
+    int limit = 10,
+  }) async {
+    if (query.trim().isEmpty) return [];
+
+    try {
+      final db = await database;
+      final String cleanQuery = query.trim();
+
+      final List<Map<String, dynamic>> dicts = await getEnabledDictionaries();
+      if (dicts.isEmpty) return [];
+
+      final List<String> suggestions = [];
+
+      for (final dict in dicts) {
+        if (suggestions.length >= limit) break;
+
+        final int currentLimit = limit - suggestions.length;
+        if (currentLimit <= 0) break;
+
+        final bool useFts5 = _fts5Available ?? true;
+
+        if (useFts5) {
+          final results = await db.rawQuery(
+            '''
+            SELECT DISTINCT snippet(word_index, 1, '<b>', '</b>', '...', 10) AS matched_word
+            FROM word_index
+            JOIN word_metadata m ON word_index.rowid = m.id
+            WHERE m.dict_id = ?
+            AND word_index.content MATCH ?
+            LIMIT ?
+          ''',
+            [dict['id'], '$cleanQuery*', currentLimit],
+          );
+
+          for (var r in results) {
+            String? snippet = r['matched_word'] as String?;
+            if (snippet != null && snippet.isNotEmpty) {
+              final regex = RegExp(r'<b>(.*?)</b>');
+              final matches = regex.allMatches(snippet);
+              for (final match in matches) {
+                String w = match.group(1)!.toLowerCase();
+                if (!suggestions.contains(w)) suggestions.add(w);
+              }
+            }
+          }
+        } else {
+          final results = await db.query(
+            'word_index',
+            columns: ['content'],
+            where: 'dict_id = ? AND content LIKE ?',
+            whereArgs: [dict['id'], '%$cleanQuery%'],
+            limit: currentLimit,
+          );
+
+          for (var r in results) {
+            String? content = r['content'] as String?;
+            if (content != null) {
+              final regex = RegExp(
+                r'\b\w*' + RegExp.escape(cleanQuery) + r'\w*\b',
+                caseSensitive: false,
+              );
+              final matches = regex.allMatches(content);
+              for (final match in matches) {
+                String w = match.group(0)!.toLowerCase();
+                if (!suggestions.contains(w)) suggestions.add(w);
+              }
+            }
+          }
+        }
+      }
+
+      _log(
+        'SEQUENTIAL_SUGGEST (Definition)',
+        'Searched ${dicts.length} dicts',
+        [cleanQuery, limit],
+        suggestions,
+      );
+      return suggestions;
+    } catch (e) {
+      hDebugPrint('Error getting definition suggestions: $e');
+      return [];
+    }
+  }
+
   // --- FreeDict Cache ---
 
   Future<void> insertFreedictDictionaries(

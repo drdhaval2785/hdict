@@ -15,6 +15,7 @@ import 'package:hdict/features/settings/dictionary_management_screen.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:hdict/core/utils/word_boundary.dart' as util;
+import 'package:hdict/core/utils/debouncer.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:video_player/video_player.dart';
 import 'package:path_provider/path_provider.dart';
@@ -22,6 +23,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_review/in_app_review.dart';
 import 'package:chewie/chewie.dart';
+
+enum SuggestionTarget { none, headword, definition }
 
 /// Arguments for HTML processing in a separate isolate.
 
@@ -265,6 +268,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // Track if a popup is currently open to prevent duplicate popups
   bool _isPopupOpen = false;
 
+  // Suggestions and debouncer for search-as-you-type
+  final Debouncer _suggestionsDebouncer = Debouncer(milliseconds: 250);
+  List<String> _suggestions = [];
+  bool _isLoadingSuggestions = false;
+  bool _showAllSuggestions = false;
+
+  // Focus nodes to track which field is active
+  final FocusNode _headwordFocusNode = FocusNode();
+  final FocusNode _definitionFocusNode = FocusNode();
+
+  // Definition suggestions state
+  final Debouncer _definitionSuggestionsDebouncer = Debouncer(
+    milliseconds: 250,
+  );
+  List<String> _definitionSuggestions = [];
+  bool _isLoadingDefinitionSuggestions = false;
+  bool _showAllDefinitionSuggestions = false;
+
   bool _hasDictionaries = false;
   bool _checkingDicts = true;
 
@@ -377,13 +398,98 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  @override
-  void dispose() {
-    _headwordController.dispose();
-    _definitionController.dispose();
-    _tabController?.dispose();
-    _pronunciationPlayer.dispose();
-    super.dispose();
+  SuggestionTarget _getActiveSuggestionTarget() {
+    if (_headwordFocusNode.hasFocus &&
+        _headwordController.text.trim().isNotEmpty) {
+      return SuggestionTarget.headword;
+    }
+    if (_definitionFocusNode.hasFocus &&
+        _definitionController.text.trim().isNotEmpty) {
+      return SuggestionTarget.definition;
+    }
+    return SuggestionTarget.none;
+  }
+
+  Future<List<String>> _getSuggestions(String query) async {
+    if (query.isEmpty) {
+      return [];
+    }
+
+    setState(() {
+      _isLoadingSuggestions = true;
+    });
+
+    try {
+      final suggestions = await _dbHelper.getPrefixSuggestions(
+        query,
+        limit: 10,
+      );
+
+      if (!mounted) return [];
+
+      setState(() {
+        _suggestions = suggestions;
+        _isLoadingSuggestions = false;
+      });
+
+      return suggestions;
+    } catch (e) {
+      hDebugPrint('Error fetching suggestions: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingSuggestions = false;
+        });
+      }
+      return [];
+    }
+  }
+
+  Future<List<String>> _getDefinitionSuggestions(String query) async {
+    if (query.isEmpty) {
+      return [];
+    }
+
+    setState(() {
+      _isLoadingDefinitionSuggestions = true;
+    });
+
+    try {
+      final suggestions = await _dbHelper.getDefinitionSuggestions(
+        query,
+        limit: 10,
+      );
+
+      if (!mounted) return [];
+
+      setState(() {
+        _definitionSuggestions = suggestions;
+        _isLoadingDefinitionSuggestions = false;
+      });
+
+      return suggestions;
+    } catch (e) {
+      hDebugPrint('Error fetching definition suggestions: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingDefinitionSuggestions = false;
+        });
+      }
+      return [];
+    }
+  }
+
+  void _triggerLiveSearch() {
+    final headword = _headwordController.text.trim();
+    if (headword.isNotEmpty) {
+      _performSearch();
+    }
+  }
+
+  void _onSuggestionSelected(String suggestion) {
+    _headwordController.text = suggestion;
+    _suggestions.clear();
+    _showAllSuggestions = false;
+    _performSearch();
   }
 
   Future<void> _performSearch({bool isRobust = false}) async {
@@ -874,6 +980,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     });
   }
 
+  @override
+  void dispose() {
+    _headwordController.dispose();
+    _definitionController.dispose();
+    _tabController?.dispose();
+    _pronunciationPlayer.dispose();
+    _headwordFocusNode.dispose();
+    _definitionFocusNode.dispose();
+    _suggestionsDebouncer.dispose();
+    _definitionSuggestionsDebouncer.dispose();
+    super.dispose();
+  }
+
   Future<void> _checkAndPromptReview() async {
     // Give the app some time to settle and for the user to see the home screen
     await Future.delayed(const Duration(seconds: 5));
@@ -1098,6 +1217,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           : Column(
               children: [
                 _buildSearchBars(theme),
+                _buildSuggestionsRow(),
                 if (_isLoading) const LinearProgressIndicator(),
                 Expanded(
                   child: _selectedWord == null
@@ -1261,33 +1381,220 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           if (settings.isSearchInHeadwordsEnabled)
             TextField(
               controller: _headwordController,
+              focusNode: _headwordFocusNode,
               decoration: InputDecoration(
                 hintText: 'Type headword to search',
                 border: InputBorder.none,
                 prefixIcon: const Icon(Icons.search),
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.clear),
-                  onPressed: () => _headwordController.clear(),
-                ),
+                suffixIcon: _isLoadingSuggestions
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _headwordController.clear();
+                          _suggestions.clear();
+                          _showAllSuggestions = false;
+                          setState(() {});
+                        },
+                      ),
               ),
+              onChanged: (value) {
+                if (value.isNotEmpty) {
+                  _suggestionsDebouncer.run(() {
+                    _getSuggestions(value);
+                    _triggerLiveSearch();
+                  });
+                } else {
+                  _suggestions.clear();
+                }
+                setState(() {});
+              },
+              onTap: () => setState(() {}),
               onSubmitted: (_) => _performSearch(),
             ),
           if (settings.isSearchInDefinitionsEnabled)
             TextField(
               controller: _definitionController,
+              focusNode: _definitionFocusNode,
               decoration: InputDecoration(
                 hintText: 'Type word to search in definition',
                 border: InputBorder.none,
                 prefixIcon: const Icon(Icons.manage_search),
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.clear),
-                  onPressed: () => _definitionController.clear(),
-                ),
+                suffixIcon: _isLoadingDefinitionSuggestions
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _definitionController.clear();
+                          _definitionSuggestions.clear();
+                          _showAllDefinitionSuggestions = false;
+                          setState(() {});
+                        },
+                      ),
               ),
+              onChanged: (value) {
+                if (value.isNotEmpty) {
+                  _definitionSuggestionsDebouncer.run(() {
+                    _getDefinitionSuggestions(value);
+                    _triggerLiveSearch();
+                  });
+                } else {
+                  _definitionSuggestions.clear();
+                }
+                setState(() {});
+              },
+              onTap: () => setState(() {}),
               onSubmitted: (_) => _performSearch(),
             ),
         ],
       ),
+    );
+  }
+
+  void _onDefinitionSuggestionSelected(String suggestion) {
+    _definitionController.text = suggestion;
+    _definitionSuggestions.clear();
+    _showAllDefinitionSuggestions = false;
+    _performSearch();
+  }
+
+  Widget _buildSuggestionsRow() {
+    final target = _getActiveSuggestionTarget();
+    if (target == SuggestionTarget.none) {
+      return const SizedBox.shrink();
+    }
+
+    final isHeadword = target == SuggestionTarget.headword;
+    final suggestions = isHeadword ? _suggestions : _definitionSuggestions;
+    final isLoading = isHeadword
+        ? _isLoadingSuggestions
+        : _isLoadingDefinitionSuggestions;
+    final showAll = isHeadword
+        ? _showAllSuggestions
+        : _showAllDefinitionSuggestions;
+    final onSelected = isHeadword
+        ? _onSuggestionSelected
+        : _onDefinitionSuggestionSelected;
+
+    final bool hasText = isHeadword
+        ? _headwordController.text.trim().isNotEmpty
+        : _definitionController.text.trim().isNotEmpty;
+
+    if (!hasText && suggestions.isEmpty && !isLoading) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            height: 40,
+            child: Stack(
+              children: [
+                if (isLoading && suggestions.isEmpty)
+                  _buildShimmerRow()
+                else if (suggestions.isNotEmpty)
+                  ShaderMask(
+                    shaderCallback: (Rect bounds) {
+                      return const LinearGradient(
+                        colors: [
+                          Colors.transparent,
+                          Colors.white,
+                          Colors.white,
+                          Colors.transparent,
+                        ],
+                        stops: [0.0, 0.05, 0.95, 1.0],
+                      ).createShader(bounds);
+                    },
+                    blendMode: BlendMode.dstIn,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: showAll
+                          ? suggestions.length
+                          : (suggestions.length > 5 ? 6 : suggestions.length),
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(width: 8),
+                      itemBuilder: (context, index) {
+                        if (!showAll && index == 5) {
+                          return ActionChip(
+                            avatar: const Icon(Icons.more_horiz, size: 18),
+                            label: const Text('More'),
+                            onPressed: () {
+                              if (isHeadword) {
+                                setState(() => _showAllSuggestions = true);
+                              } else {
+                                setState(
+                                  () => _showAllDefinitionSuggestions = true,
+                                );
+                              }
+                            },
+                          );
+                        }
+                        final suggestion = suggestions[index];
+                        return ActionChip(
+                          label: Text(suggestion),
+                          onPressed: () => onSelected(suggestion),
+                        );
+                      },
+                    ),
+                  )
+                else
+                  const SizedBox.shrink(),
+              ],
+            ),
+          ),
+          if (showAll && suggestions.length > 5)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: GestureDetector(
+                onTap: () {
+                  if (isHeadword) {
+                    setState(() => _showAllSuggestions = false);
+                  } else {
+                    setState(() => _showAllDefinitionSuggestions = false);
+                  }
+                },
+                child: Text(
+                  'Show less',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildShimmerRow() {
+    return ListView.separated(
+      scrollDirection: Axis.horizontal,
+      itemCount: 5,
+      separatorBuilder: (context, index) => const SizedBox(width: 8),
+      itemBuilder: (context, index) {
+        return Container(
+          width: 80 + (index * 15.0),
+          decoration: BoxDecoration(
+            color: Colors.grey[300],
+            borderRadius: BorderRadius.circular(16),
+          ),
+        );
+      },
     );
   }
 
