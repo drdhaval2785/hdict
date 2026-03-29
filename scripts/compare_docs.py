@@ -287,6 +287,10 @@ def parse_documentation_file(path):
     for m in re.finditer(r'##### Method: `[^.]+\.(\w+)`', content):
         methods.add(m.group(1))
 
+    # Extract methods from private instance methods format: ###### `methodName` or ###### `createState`
+    for m in re.finditer(r'###### `(\w+)`', content):
+        methods.add(m.group(1))
+
     # Extract properties from simple format: - Property: `type get property`
     for m in re.finditer(r'- Property: `[^`]*\s+get\s+(\w+)', content):
         fields.add(m.group(1))
@@ -306,23 +310,25 @@ def parse_documentation_file(path):
     # Extract fields from simple format: - Field: `type field`
     for m in re.finditer(r'- Field: `[^`]*\s+(\w+)`', content):
         name = m.group(1)
-        if not name.startswith('_'):
-            fields.add(name)
+        fields.add(name)  # Don't filter - include both public and private
 
     # Extract fields from table format: | `fieldName` | type |
     for m in re.finditer(r'\| `(\w+)` \|[^|]*\|', content):
         name = m.group(1)
-        if not name.startswith('_'):
-            fields.add(name)
+        fields.add(name)  # Don't filter - include both public and private
 
     # Extract fields from rich format: ##### Field: `fieldName`
     for m in re.finditer(r'##### Field: `(\w+)`', content):
         name = m.group(1)
-        if not name.startswith('_'):
-            fields.add(name)
+        fields.add(name)  # Don't filter - include both public and private
 
-    # Extract constructors from rich format: ##### Constructor
-    for m in re.finditer(r'##### Constructor', content):
+    # Extract private fields from private instance fields format: ###### `fieldName`
+    for m in re.finditer(r'###### `(\w+)`', content):
+        name = m.group(1)
+        fields.add(name)  # Don't filter - include both public and private
+
+    # Extract constructors from rich format: ##### Constructor or ##### Private Constructor
+    for m in re.finditer(r'##### (Private )?[Cc]onstructor', content):
         methods.add('<init>')
 
     return classes, enums, methods, fields
@@ -398,8 +404,10 @@ def compare_apis(api_data, pub_classes, pub_enums, pub_methods, pub_fields,
             # Check constructors
             for ctor in class_data.get('constructors', []):
                 ctor_name = extract_name_from_signature(ctor)
-                if ctor_name and ctor_name.startswith('_') and ctor_name not in priv_methods:
-                    file_issues['missing_private'].append(f"  Private constructor: {ctor_name} (in {class_name})")
+                if ctor_name and ctor_name.startswith('_'):
+                    # Private constructors are documented as <init>
+                    if '<init>' not in priv_methods:
+                        file_issues['missing_private'].append(f"  Private constructor: {ctor_name} (in {class_name})")
 
             # Check methods
             for method in class_data.get('methods', []):
