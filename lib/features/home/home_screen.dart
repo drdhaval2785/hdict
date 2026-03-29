@@ -25,14 +25,14 @@ import 'package:chewie/chewie.dart';
 
 /// Arguments for HTML processing in a separate isolate.
 
-class _EntryToProcess {
+class EntryToProcess {
   final int index;
   final String content;
   final String word;
   final String format;
   final String? typeSequence;
 
-  _EntryToProcess({
+  EntryToProcess({
     required this.index,
     required this.content,
     required this.word,
@@ -510,8 +510,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       HPerf.end(sqliteWatch, 'Search_SQLite');
       final sqliteMs = sqliteWatch?.elapsedMilliseconds ?? 0;
 
-      final List<_EntryToProcess> entriesToProcess = [];
-      final List<Map<String, dynamic>> resultsMetadata = [];
+      final List<EntryToProcess> entriesToProcess = [];
+      final List<Map<String, dynamic>?> resultsMetadata = List.filled(
+        results.length,
+        null,
+      );
 
       final enrichmentWatch = HPerf.start('Search_Enrichment');
 
@@ -581,12 +584,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             final dict = _dbHelper.getDictionaryByIdSync(dictId)!;
 
             final fetchDictStopwatch = Stopwatch()..start();
-            
+
             // 3. TRY SYNC EXPRESS LANE FIRST
-            List<String?>? batchContents = _dictManager.fetchDefinitionsBatchSync(
-              dict,
-              requests,
-            );
+            List<String?>? batchContents = _dictManager
+                .fetchDefinitionsBatchSync(dict, requests);
 
             // 4. FALLBACK TO ASYNC ONLY IF NECESSARY
             if (batchContents == null) {
@@ -595,7 +596,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 requests,
               );
             }
-            
+
             fetchDictStopwatch.stop();
 
             hDebugPrint(
@@ -666,7 +667,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             final ogIndex = originalIndices[i];
 
             entriesToProcess.add(
-              _EntryToProcess(
+              EntryToProcess(
                 index: ogIndex,
                 content: content,
                 word: req['word'] as String,
@@ -674,7 +675,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 typeSequence: dict['type_sequence'],
               ),
             );
-            resultsMetadata.add(req);
+            resultsMetadata[ogIndex] = req;
           }
         }
 
@@ -712,7 +713,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           final String uniqueKey =
               '${original['offset']}_${original['length']}';
 
-          final meta = resultsMetadata[i];
+          final meta = resultsMetadata[entry.index]!;
+
+          if (showSorting) {
+            hDebugPrint(
+              'SQLITE - dictId=$dictId, word=${meta['word']}, uniqueKey=$uniqueKey, '
+              'defPreview=${(meta['raw_content'] as String? ?? '').substring(0, (meta['raw_content'] as String? ?? '').length < 30 ? (meta['raw_content'] as String? ?? '').length : 30)}',
+            );
+            hDebugPrint(
+              'AFTER_SORT - dictId=$dictId, word=${entry.word}, '
+              'defPreview=${entry.content.substring(0, entry.content.length < 30 ? entry.content.length : 30)}',
+            );
+          }
 
           finalResultCount++;
           finalGrouped.putIfAbsent(dictId, () => {});
@@ -848,7 +860,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _checkDictionaries();
     _cleanHistory();
     _cleanOrphanedFiles();
-    
+
     // Background dictionary pre-warming (caching and inflation)
     // This removes the cold SAF read penalty without blocking app launch.
     DictionaryManager.instance.preWarmReaders();
@@ -1608,7 +1620,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     );
 
                     definitionHtml = '${defData['headwordHtml']}\n$processed';
-                    if (showHtmlProcessing) {
+                    if (showSorting) {
                       hDebugPrint(
                         'HomeScreen: Final definitionHtml: [$definitionHtml]',
                       );

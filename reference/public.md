@@ -1,4 +1,4 @@
-# Public API Reference (version 1.5.9)
+# Public API Reference (version 1.5.10)
 
 This document lists all public classes, functions, and methods in the HDict codebase. Each entry includes the file location, description, parameters, return types, and usage examples where applicable.
 
@@ -1025,6 +1025,32 @@ Consolidates definitions from multiple dictionaries.
 | `dictMap` | `Map<int, Map<String, dynamic>>?` | Optional dictionary metadata map |
 
 **Returns:** `Future<List<Map<String, dynamic>>>` - Consolidated definitions grouped by dictionary.
+
+##### Class: `EntryToProcess`
+
+Represents an entry to be processed with its content and metadata.
+
+##### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `index` | `int` | Original index in SQLite results |
+| `content` | `String` | The definition content |
+| `word` | `String` | The headword |
+| `format` | `String` | Dictionary format |
+| `typeSequence` | `String?` | Optional type sequence |
+
+##### Constructor
+
+```dart
+EntryToProcess({
+  required int index,
+  required String content,
+  required String word,
+  required String format,
+  String? typeSequence,
+})
+```
 
 ---
 

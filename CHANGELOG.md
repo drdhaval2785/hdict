@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.10] - 2026-03-29
+
+### Fixed
+- **Headword dissociation**: Especially on iOS and large dictionary collections, there were cases of some headwords and definitions getting dissociated. Wrong headword above the right definition. Corrected the bug. 
+
 ## [1.5.9] - 2026-03-28
 
 ### Fixed

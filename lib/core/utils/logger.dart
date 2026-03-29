@@ -5,10 +5,13 @@ import 'package:flutter/foundation.dart';
 bool enableDebugLogs = true;
 
 /// Flag to control verbose HTML processing logs.
-bool showHtmlProcessing = false ;
+bool showHtmlProcessing = false;
 
 /// Flag to control multimedia processing debug logs (images, audio, video).
 bool showMultimediaProcessing = false;
+
+/// Flag to control sorting debug logs (SQLite vs Dart sort verification).
+bool showSorting = false;
 
 /// A wrapper around [debugPrint] that checks the [enableDebugLogs] flag.
 void hDebugPrint(String? message, {int? wrapWidth}) {

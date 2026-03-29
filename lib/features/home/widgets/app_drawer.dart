@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:hdict/features/about/about_screen.dart';
 import 'package:hdict/features/flash_cards/flash_cards_screen.dart';
 import 'package:hdict/features/flash_cards/score_history_screen.dart';
@@ -13,6 +14,19 @@ import 'package:hdict/features/settings/dictionary_groups_screen.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
+
+  Future<String> _getVersion() async {
+    try {
+      final pubspec = await rootBundle.loadString('pubspec.yaml');
+      final match = RegExp(
+        r'^version:\s*(.*)$',
+        multiLine: true,
+      ).firstMatch(pubspec);
+      return match?.group(1)?.split('+').first.trim() ?? 'Unknown';
+    } catch (e) {
+      return 'Unknown';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +52,19 @@ class AppDrawer extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                       color: theme.colorScheme.onPrimaryContainer,
                     ),
+                  ),
+                  const SizedBox(height: 4),
+                  FutureBuilder<String>(
+                    future: _getVersion(),
+                    builder: (context, snapshot) {
+                      return Text(
+                        'v${snapshot.data ?? '...'}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onPrimaryContainer
+                              .withValues(alpha: 0.7),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),

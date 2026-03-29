@@ -1,4 +1,4 @@
-# Private API Reference (version 0.1.0)
+# Private API Reference (version 0.5.10)
 
 This document lists all private classes, functions, methods, and fields in the HDict codebase. These are implementation details not intended for external use.
 
@@ -630,19 +630,6 @@ Arguments for Dictd indexing.
 | `source` | `DiscoveredDict` | Source dictionary |
 | `destId` | `int?` | Destination ID |
 | `dictdReader` | `DictdReader` | Dictd reader |
-
-#### Class: `_EntryToProcess`
-
-Entry to be processed.
-
-##### Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `word` | `String` | Word |
-| `offset` | `int` | Offset in dictionary |
-| `length` | `int` | Entry length |
-| `dictId` | `int` | Dictionary ID |
 
 ---
 
