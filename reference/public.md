@@ -2420,12 +2420,6 @@ Gets search history from the database.
 
 **Returns:** `Future<List<Map<String, dynamic>>>`
 
-##### Static Method: `openDatabase`
-
-Opens the database.
-
-**Returns:** `Database`
-
 ##### Method: `searchWords`
 
 Searches for words in enabled dictionaries.

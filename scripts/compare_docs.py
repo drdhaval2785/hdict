@@ -211,9 +211,10 @@ def get_code_class_fields():
             # Pattern 1: final Type fieldName; or final Type fieldName = ...;
             # Only match BEFORE constructor (true class fields, not constructor params)
             # Handles types with spaces like "Map<String, String>" and nullable types
+            # Only match indent <= 2 to exclude local variables in methods
             for m in re.finditer(r'^(\s*)final\s+([\w<>,?\s]+?)\s*(\?)?\s+([a-z]\w*)\s*[;=]', body_no_comments, re.MULTILINE):
                 indent = len(m.group(1))
-                if indent > 20:
+                if indent > 2:
                     continue
                 if constructor_pos >= 0 and m.start() >= constructor_pos:
                     continue
@@ -225,9 +226,10 @@ def get_code_class_fields():
             
             # Pattern 2: Type fieldName; (non-final fields) - uppercase type like String, int, etc.
             # Only match BEFORE constructor
+            # Only match indent <= 2 to exclude local variables in methods
             for m in re.finditer(r'^(\s*)(?:static\s+)?(?:late\s+)?(?:final\s+)?(?:const\s+)?(?:var\s+)?([\w<>?\s]+?)\s+(\w+)\s*[;=]', body_no_comments, re.MULTILINE):
                 indent = len(m.group(1))
-                if indent > 20:
+                if indent > 2:
                     continue
                 if constructor_pos >= 0 and m.start() >= constructor_pos:
                     continue
@@ -239,9 +241,10 @@ def get_code_class_fields():
             
             # Pattern 3: Getters - "Type get fieldName =>" or "Type? get fieldName" with async/sync/block
             # Handle: Type get name =>, Type get name {, Type get name async {, Type get name async* {
+            # Only match indent <= 2 to exclude local getters in methods
             for m in re.finditer(r'^(\s*)(?:[\w<>?]+\??)\s+get\s+(\w+)\s*(?:async\*?\s*)?(?:\(|=>|\{)', body_no_comments, re.MULTILINE):
                 indent = len(m.group(1))
-                if indent > 20:
+                if indent > 2:
                     continue
                 field_name = m.group(2)
                 if field_name.startswith('_'):
@@ -250,9 +253,10 @@ def get_code_class_fields():
                     fields.add(field_name)
             
             # Pattern 4: Setter - "set fieldName(...)"
+            # Only match indent <= 2 to exclude local setters in methods
             for m in re.finditer(r'^(\s*)set\s+(\w+)\s*\(', body_no_comments, re.MULTILINE):
                 indent = len(m.group(1))
-                if indent > 20:
+                if indent > 2:
                     continue
                 field_name = m.group(2)
                 if field_name.startswith('_'):
@@ -421,14 +425,22 @@ def get_code_methods_with_signatures():
                 
                 # Skip if this is a static method (already caught above)
                 # Check if preceded by 'static' on same line
-                line_start = m.start()
-                line_end = body_no_comments.rfind('\n', 0, line_start) + 1
-                line_content = body_no_comments[line_end:line_start].strip()
+                match_pos = m.start()
+                line_start_pos = body_no_comments.rfind('\n', 0, match_pos) + 1
+                # Find end of line - look for newline AFTER the match
+                line_end_pos = body_no_comments.find('\n', match_pos + len(m.group(0)))
+                if line_end_pos == -1:
+                    line_end_pos = len(body_no_comments)
+                line_content = body_no_comments[line_start_pos:line_end_pos].strip()
                 if line_content == 'static':
                     continue
                 
                 # Skip if this is a factory constructor (already caught above)
                 if line_content == 'factory':
+                    continue
+                
+                # Skip return statements like "return await openDatabase("
+                if line_content.startswith('return '):
                     continue
                 
                 # Skip private methods
@@ -577,7 +589,9 @@ def extract_params_from_signature(sig):
         
         # Remove { and } if present (named parameter braces)
         # Also remove [] for optional positional parameters
-        p = p.strip('{}[]')
+        # Also remove trailing commas from parameter list
+        # Note: strip whitespace and brackets together because [ at start prevents whitespace strip
+        p = p.strip(' \t\n\r{}[] ,')
         
         # Split the last word as parameter name, rest as type
         words = p.split()
