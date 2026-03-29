@@ -137,7 +137,8 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 33, // Version 33: Add saf_scan_cache table for persistent SAF folder structure
+      version:
+          33, // Version 33: Add saf_scan_cache table for persistent SAF folder structure
       onCreate: _onCreate,
       onConfigure: (db) async {
         try {
@@ -840,9 +841,7 @@ class DatabaseHelper {
     }
     if (oldVersion < 33) {
       try {
-        hDebugPrint(
-          'Migration to version 33: Adding saf_scan_cache table',
-        );
+        hDebugPrint('Migration to version 33: Adding saf_scan_cache table');
         await db.execute('''
           CREATE TABLE IF NOT EXISTS saf_scan_cache (
             tree_uri TEXT PRIMARY KEY,
@@ -1424,8 +1423,6 @@ class DatabaseHelper {
     try {
       await db.execute("INSERT INTO word_index(word_index) VALUES('optimize')");
       await db.execute('VACUUM');
-
-      await db.execute('PRAGMA wal_checkpoint(TRUNCATE)');
 
       hDebugPrint('Database optimized and vacuumed successfully');
     } catch (e) {
@@ -2185,15 +2182,11 @@ class DatabaseHelper {
   Future<void> saveSafScanCache(String treeUri, String scanDataJson) async {
     final db = await database;
     try {
-      await db.insert(
-        'saf_scan_cache',
-        {
-          'tree_uri': treeUri,
-          'scan_data': scanDataJson,
-          'timestamp': DateTime.now().millisecondsSinceEpoch,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await db.insert('saf_scan_cache', {
+        'tree_uri': treeUri,
+        'scan_data': scanDataJson,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     } catch (e) {
       // Fallback in case user hot-restarted and _onUpgrade didn't fire
       if (e.toString().contains('no such table')) {
@@ -2204,15 +2197,11 @@ class DatabaseHelper {
             timestamp INTEGER NOT NULL
           )
         ''');
-        await db.insert(
-          'saf_scan_cache',
-          {
-            'tree_uri': treeUri,
-            'scan_data': scanDataJson,
-            'timestamp': DateTime.now().millisecondsSinceEpoch,
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
+        await db.insert('saf_scan_cache', {
+          'tree_uri': treeUri,
+          'scan_data': scanDataJson,
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
       } else {
         rethrow;
       }
