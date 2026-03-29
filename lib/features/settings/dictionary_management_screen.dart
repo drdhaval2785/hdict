@@ -403,9 +403,11 @@ class _DictionaryManagementScreenState
         'dict',
         'dz',
         'syn',
-        // New formats
         'mdx',
         'mdd',
+        'slob',
+        'css',
+        '7z',
         'index',
       ],
       uniformTypeIdentifiers: [
@@ -791,7 +793,10 @@ class _DictionaryManagementScreenState
                 ...progress.linkedEntries!.map(
                   (e) => Padding(
                     padding: const EdgeInsets.only(left: 8.0, bottom: 2.0),
-                    child: Text('• ${clean(e)}', style: const TextStyle(fontSize: 12)),
+                    child: Text(
+                      '• ${clean(e)}',
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -809,7 +814,10 @@ class _DictionaryManagementScreenState
                 ...progress.importedEntries!.map(
                   (e) => Padding(
                     padding: const EdgeInsets.only(left: 8.0, bottom: 2.0),
-                    child: Text('• ${clean(e)}', style: const TextStyle(fontSize: 12)),
+                    child: Text(
+                      '• ${clean(e)}',
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -827,7 +835,10 @@ class _DictionaryManagementScreenState
                 ...progress.alreadyExistsEntries!.map(
                   (e) => Padding(
                     padding: const EdgeInsets.only(left: 8.0, bottom: 2.0),
-                    child: Text('• ${clean(e)}', style: const TextStyle(fontSize: 12)),
+                    child: Text(
+                      '• ${clean(e)}',
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -845,7 +856,10 @@ class _DictionaryManagementScreenState
                 ...progress.incompleteEntries!.map(
                   (e) => Padding(
                     padding: const EdgeInsets.only(left: 8.0, bottom: 2.0),
-                    child: Text('• ${clean(e)}', style: const TextStyle(fontSize: 12)),
+                    child: Text(
+                      '• ${clean(e)}',
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ),
                 ),
               ],

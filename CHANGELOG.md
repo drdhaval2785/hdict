@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.11] - 2026-03-29
+
+### Added
+- **Search As You Type (Headword)**: Dynamic headword suggestions appear as you type in the headword search field. Shows up to 50 suggestions with 250ms debounce.
+- **Search As You Type (Definition)**: Dynamic definition keyword suggestions appear as you type in the definition search field. Uses FTS5 MATCH for efficient searching.
+- **Suggestion Settings**: Two new toggles in Settings:
+  - "Show Search Suggestions" (default ON) - Controls visibility of suggestion chips
+  - "Search As You Type" (default ON) - Controls automatic search on typing
+- **Definition Index Caching**: Caches dictionary IDs with indexed definitions for faster suggestion queries.
+
+### Fixed
+- **ListMode Entry Expansion**: Fixed bug where expanding entry 4 in one dictionary would also expand entry 4 in all other dictionaries. Now uses global index for unique identification.
+
 ## [1.5.10] - 2026-03-29
 
 ### Fixed
