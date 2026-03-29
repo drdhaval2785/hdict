@@ -286,6 +286,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _isLoadingDefinitionSuggestions = false;
   bool _showAllDefinitionSuggestions = false;
 
+  final Debouncer _quickSearchDebouncer = Debouncer(milliseconds: 150);
+
   bool _hasDictionaries = false;
   bool _checkingDicts = true;
 
@@ -990,6 +992,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _definitionFocusNode.dispose();
     _suggestionsDebouncer.dispose();
     _definitionSuggestionsDebouncer.dispose();
+    _quickSearchDebouncer.dispose();
     super.dispose();
   }
 
@@ -1407,10 +1410,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
               onChanged: (value) {
                 if (value.isNotEmpty) {
-                  _suggestionsDebouncer.run(() {
-                    _getSuggestions(value);
-                    _triggerLiveSearch();
-                  });
+                  if (settings.isShowSearchSuggestionsEnabled) {
+                    _suggestionsDebouncer.run(() {
+                      _getSuggestions(value);
+                    });
+                  }
+                  if (settings.isSearchAsYouTypeEnabled) {
+                    _quickSearchDebouncer.run(() {
+                      _triggerLiveSearch();
+                    });
+                  }
                 } else {
                   _suggestions.clear();
                 }
@@ -1448,10 +1457,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
               onChanged: (value) {
                 if (value.isNotEmpty) {
-                  _definitionSuggestionsDebouncer.run(() {
-                    _getDefinitionSuggestions(value);
-                    _triggerLiveSearch();
-                  });
+                  if (settings.isShowSearchSuggestionsEnabled) {
+                    _definitionSuggestionsDebouncer.run(() {
+                      _getDefinitionSuggestions(value);
+                    });
+                  }
+                  if (settings.isSearchAsYouTypeEnabled) {
+                    _quickSearchDebouncer.run(() {
+                      _triggerLiveSearch();
+                    });
+                  }
                 } else {
                   _definitionSuggestions.clear();
                 }
@@ -1473,6 +1488,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildSuggestionsRow() {
+    final settings = context.read<SettingsProvider>();
+    if (!settings.isShowSearchSuggestionsEnabled) {
+      return const SizedBox.shrink();
+    }
+
     final target = _getActiveSuggestionTarget();
     if (target == SuggestionTarget.none) {
       return const SizedBox.shrink();

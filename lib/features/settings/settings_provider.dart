@@ -57,6 +57,8 @@ class SettingsProvider with ChangeNotifier {
   static const String _keyReviewPromptCount = 'review_prompt_count';
   static const String _keyHasGivenReview = 'has_given_review';
   static const String _keyListMode = 'list_mode';
+  static const String _keyShowSearchSuggestions = 'show_search_suggestions';
+  static const String _keySearchAsYouType = 'search_as_you_type';
 
   AppThemeMode _appThemeMode = AppThemeMode.custom;
   String _fontFamily = 'Roboto';
@@ -81,6 +83,8 @@ class SettingsProvider with ChangeNotifier {
   bool _hasGivenReview = false;
   bool _reviewPromptedThisSession = false;
   bool _isListModeEnabled = false;
+  bool _isShowSearchSuggestionsEnabled = true;
+  bool _isSearchAsYouTypeEnabled = true;
 
   AppThemeMode get appThemeMode => _appThemeMode;
   String get fontFamily => _fontFamily;
@@ -105,6 +109,8 @@ class SettingsProvider with ChangeNotifier {
   bool get hasGivenReview => _hasGivenReview;
   bool get reviewPromptedThisSession => _reviewPromptedThisSession;
   bool get isListModeEnabled => _isListModeEnabled;
+  bool get isShowSearchSuggestionsEnabled => _isShowSearchSuggestionsEnabled;
+  bool get isSearchAsYouTypeEnabled => _isSearchAsYouTypeEnabled;
 
   /// Returns the background color, adapting to the theme if it's set to the default white.
   Color getEffectiveBackgroundColor(BuildContext context) {
@@ -187,6 +193,9 @@ class SettingsProvider with ChangeNotifier {
     _reviewPromptCount = prefs.getInt(_keyReviewPromptCount) ?? 0;
     _hasGivenReview = prefs.getBool(_keyHasGivenReview) ?? false;
     _isListModeEnabled = prefs.getBool(_keyListMode) ?? false;
+    _isShowSearchSuggestionsEnabled =
+        prefs.getBool(_keyShowSearchSuggestions) ?? true;
+    _isSearchAsYouTypeEnabled = prefs.getBool(_keySearchAsYouType) ?? true;
     notifyListeners();
   }
 
@@ -347,6 +356,20 @@ class SettingsProvider with ChangeNotifier {
     _isListModeEnabled = enabled;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyListMode, enabled);
+    notifyListeners();
+  }
+
+  Future<void> setShowSearchSuggestions(bool enabled) async {
+    _isShowSearchSuggestionsEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyShowSearchSuggestions, enabled);
+    notifyListeners();
+  }
+
+  Future<void> setSearchAsYouType(bool enabled) async {
+    _isSearchAsYouTypeEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keySearchAsYouType, enabled);
     notifyListeners();
   }
 }

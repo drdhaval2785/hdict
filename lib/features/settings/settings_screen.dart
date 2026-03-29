@@ -253,6 +253,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
               value: settings.isListModeEnabled,
               onChanged: (value) => settings.setListMode(value),
             ),
+            SwitchListTile(
+              title: const Text('Show Search Suggestions'),
+              subtitle: const Text('Show suggestion chips while typing'),
+              value: settings.isShowSearchSuggestionsEnabled,
+              onChanged: (value) => settings.setShowSearchSuggestions(value),
+            ),
+            SwitchListTile(
+              title: const Text('Search As You Type'),
+              subtitle: const Text('Auto-search as you type in search fields'),
+              value: settings.isSearchAsYouTypeEnabled,
+              onChanged: (value) => settings.setSearchAsYouType(value),
+            ),
             const Divider(),
             _buildSectionHeader(theme, 'Flash Cards'),
             ListTile(
