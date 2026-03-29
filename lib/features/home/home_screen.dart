@@ -491,6 +491,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _headwordController.text = suggestion;
     _suggestions.clear();
     _showAllSuggestions = false;
+    FocusScope.of(context).unfocus();
     _performSearch();
   }
 
@@ -1484,12 +1485,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _definitionController.text = suggestion;
     _definitionSuggestions.clear();
     _showAllDefinitionSuggestions = false;
+    FocusScope.of(context).unfocus();
     _performSearch();
   }
 
   Widget _buildSuggestionsRow() {
     final settings = context.read<SettingsProvider>();
     if (!settings.isShowSearchSuggestionsEnabled) {
+      return const SizedBox.shrink();
+    }
+
+    if (_isLoading) {
       return const SizedBox.shrink();
     }
 
@@ -1500,9 +1506,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     final isHeadword = target == SuggestionTarget.headword;
     final suggestions = isHeadword ? _suggestions : _definitionSuggestions;
-    final isLoading = isHeadword
-        ? _isLoadingSuggestions
-        : _isLoadingDefinitionSuggestions;
     final showAll = isHeadword
         ? _showAllSuggestions
         : _showAllDefinitionSuggestions;
@@ -1510,11 +1513,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ? _onSuggestionSelected
         : _onDefinitionSuggestionSelected;
 
-    final bool hasText = isHeadword
-        ? _headwordController.text.trim().isNotEmpty
-        : _definitionController.text.trim().isNotEmpty;
-
-    if (!hasText && suggestions.isEmpty && !isLoading) {
+    if (suggestions.isEmpty) {
       return const SizedBox.shrink();
     }
 
@@ -1527,55 +1526,50 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             height: 40,
             child: Stack(
               children: [
-                if (isLoading && suggestions.isEmpty)
-                  _buildShimmerRow()
-                else if (suggestions.isNotEmpty)
-                  ShaderMask(
-                    shaderCallback: (Rect bounds) {
-                      return const LinearGradient(
-                        colors: [
-                          Colors.transparent,
-                          Colors.white,
-                          Colors.white,
-                          Colors.transparent,
-                        ],
-                        stops: [0.0, 0.05, 0.95, 1.0],
-                      ).createShader(bounds);
-                    },
-                    blendMode: BlendMode.dstIn,
-                    child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: showAll
-                          ? suggestions.length
-                          : (suggestions.length > 5 ? 6 : suggestions.length),
-                      separatorBuilder: (context, index) =>
-                          const SizedBox(width: 8),
-                      itemBuilder: (context, index) {
-                        if (!showAll && index == 5) {
-                          return ActionChip(
-                            avatar: const Icon(Icons.more_horiz, size: 18),
-                            label: const Text('More'),
-                            onPressed: () {
-                              if (isHeadword) {
-                                setState(() => _showAllSuggestions = true);
-                              } else {
-                                setState(
-                                  () => _showAllDefinitionSuggestions = true,
-                                );
-                              }
-                            },
-                          );
-                        }
-                        final suggestion = suggestions[index];
+                ShaderMask(
+                  shaderCallback: (Rect bounds) {
+                    return const LinearGradient(
+                      colors: [
+                        Colors.transparent,
+                        Colors.white,
+                        Colors.white,
+                        Colors.transparent,
+                      ],
+                      stops: [0.0, 0.05, 0.95, 1.0],
+                    ).createShader(bounds);
+                  },
+                  blendMode: BlendMode.dstIn,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: showAll
+                        ? suggestions.length
+                        : (suggestions.length > 5 ? 6 : suggestions.length),
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(width: 8),
+                    itemBuilder: (context, index) {
+                      if (!showAll && index == 5) {
                         return ActionChip(
-                          label: Text(suggestion),
-                          onPressed: () => onSelected(suggestion),
+                          avatar: const Icon(Icons.more_horiz, size: 18),
+                          label: const Text('More'),
+                          onPressed: () {
+                            if (isHeadword) {
+                              setState(() => _showAllSuggestions = true);
+                            } else {
+                              setState(
+                                () => _showAllDefinitionSuggestions = true,
+                              );
+                            }
+                          },
                         );
-                      },
-                    ),
-                  )
-                else
-                  const SizedBox.shrink(),
+                      }
+                      final suggestion = suggestions[index];
+                      return ActionChip(
+                        label: Text(suggestion),
+                        onPressed: () => onSelected(suggestion),
+                      );
+                    },
+                  ),
+                ),
               ],
             ),
           ),
@@ -1598,23 +1592,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
         ],
       ),
-    );
-  }
-
-  Widget _buildShimmerRow() {
-    return ListView.separated(
-      scrollDirection: Axis.horizontal,
-      itemCount: 5,
-      separatorBuilder: (context, index) => const SizedBox(width: 8),
-      itemBuilder: (context, index) {
-        return Container(
-          width: 80 + (index * 15.0),
-          decoration: BoxDecoration(
-            color: Colors.grey[300],
-            borderRadius: BorderRadius.circular(16),
-          ),
-        );
-      },
     );
   }
 
