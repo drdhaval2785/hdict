@@ -258,7 +258,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int _searchOtherMs = 0;
   int _searchTotalMs = 0;
   int _searchResultCount = 0;
-  int _firstDictFetchMs = 0;
 
   // Search generation counter to prevent stale results from overwriting newer searches
   int _searchGeneration = 0;
@@ -421,7 +420,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _searchOtherMs = 0;
       _searchTotalMs = 0;
       _searchResultCount = 0;
-      _firstDictFetchMs = 0;
     });
 
     try {
@@ -540,7 +538,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       // Phase 1: Fully parallel definition fetching
       // All dictionaries are fetched in parallel from the start
       final fetchAllDictsWatch = HPerf.start('fetchAllDicts_Wall');
-      int firstDictFetchMs = 0;
 
       // Get display_order for each dict to sort by priority
       final Map<int, int> dictDisplayOrder = {};
@@ -560,7 +557,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       // This eliminates the sequential gap between first dict and others
       if (sortedEntries.isNotEmpty) {
         final allFetchesStopwatch = Stopwatch()..start();
-        final fetchStartTime = DateTime.now().millisecondsSinceEpoch;
 
         // 1. PRE-WARM metadata cache so we can use SYNC lookup inside the loops
         await _dbHelper.getDictionaries();
@@ -590,12 +586,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 .fetchDefinitionsBatchSync(dict, requests);
 
             // 4. FALLBACK TO ASYNC ONLY IF NECESSARY
-            if (batchContents == null) {
-              batchContents = await _dictManager.fetchDefinitionsBatch(
-                dict,
-                requests,
-              );
-            }
+            batchContents ??= await _dictManager.fetchDefinitionsBatch(
+              dict,
+              requests,
+            );
 
             fetchDictStopwatch.stop();
 
@@ -645,21 +639,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           );
         }
 
-        // Collect ALL results and track first dict completion time
-        final firstDictId = sortedEntries.first.key;
+        // Collect ALL results
         for (final fetchResult in allFetchResults) {
-          final dictId = fetchResult['dictId'] as int;
           final dict = fetchResult['dict'] as Map<String, dynamic>;
           final requests =
               fetchResult['requests'] as List<Map<String, dynamic>>;
           final originalIndices = fetchResult['originalIndices'] as List<int>;
           final batchContents = fetchResult['batchContents'] as List<String?>;
-
-          // Track first dict completion time
-          if (dictId == firstDictId && firstDictFetchMs == 0) {
-            firstDictFetchMs =
-                DateTime.now().millisecondsSinceEpoch - fetchStartTime;
-          }
 
           for (int i = 0; i < requests.length; i++) {
             final content = batchContents[i] ?? '';
@@ -789,7 +775,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           _searchSqliteMs = sqliteMs;
           _searchTotalMs = totalWatch?.elapsedMilliseconds ?? 0;
           _searchOtherMs = _searchTotalMs - _searchSqliteMs;
-          _firstDictFetchMs = firstDictFetchMs;
           _tabController?.dispose();
           if (consolidatedDefs.isNotEmpty) {
             _tabController = TabController(

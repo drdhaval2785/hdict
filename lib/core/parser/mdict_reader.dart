@@ -110,17 +110,14 @@ class MdictReader {
   }
 
   /// Internal constructor for creating from parser
-  MdictReader._fromParser(
-    dr.DictReader parser,
-    String path, {
-    String? mddPath,
-    this.name,
-  }) : mdxPath = path,
-       source = FileRandomAccessSource(path),
-       _mddPath = mddPath,
-       _mddSourceType = MdictSourceType.local,
-       _mddBookmark = null,
-       _parser = parser;
+  MdictReader._fromParser(dr.DictReader parser, String path, {String? mddPath})
+    : mdxPath = path,
+      name = null,
+      source = FileRandomAccessSource(path),
+      _mddPath = mddPath,
+      _mddSourceType = MdictSourceType.local,
+      _mddBookmark = null,
+      _parser = parser;
 
   Future<void> open() async {
     if (kIsWeb) throw UnsupportedError('MDict is not supported on Web.');

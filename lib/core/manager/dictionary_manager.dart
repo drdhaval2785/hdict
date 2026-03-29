@@ -471,7 +471,8 @@ Future<void> _indexEntry(_IndexArgs args) async {
     const int batchSize = 10000;
     const bool useBatching = true;
     int startId = await dbHelper.startBatchInsert();
-    bool populateFts5 = false; // Background indexing logic will be triggered at end if needed
+    bool populateFts5 =
+        false; // Background indexing logic will be triggered at end if needed
     final bool canLoadInMemory =
         args.indexDefinitions && dictFileSize < 50 * 1024 * 1024;
 
@@ -511,14 +512,14 @@ Future<void> _indexEntry(_IndexArgs args) async {
         dictReader = (isLinked && Platform.isAndroid && args.dictUri != null)
             ? await DictReader.fromUri(args.dictUri!)
             : (isLinked
-                ? await DictReader.fromLinkedSource(
-                    args.sourceBookmark!,
-                    targetPath: p.basename(args.dictPath),
-                    actualPath: args.dictPath,
-                  )
-                : await DictReader.fromPath(args.dictPath));
+                  ? await DictReader.fromLinkedSource(
+                      args.sourceBookmark!,
+                      targetPath: p.basename(args.dictPath),
+                      actualPath: args.dictPath,
+                    )
+                  : await DictReader.fromPath(args.dictPath));
       }
-      await dictReader!.open();
+      await dictReader.open();
 
       // Check file size for optimization decision
       // Memory loading now works for both .dict and .dict.dz files when < 50MB
@@ -528,7 +529,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
     }
 
     // Start batch insert optimization
-// ... (lines 510-542 skipped)
+    // ... (lines 510-542 skipped)
     // Optimization: Load entire .dict or .dict.dz file into memory for small files (<50MB)
     // For .dict.dz files, bytes are loaded before creating DictReader
     Uint8List? dictFileBytes;
@@ -686,9 +687,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
           }
           if (useBatching && synBatch.length >= batchSize) {
             final int batchIdx = headwordCount;
-            hDebugPrint(
-              'StarDict: Inserting synonym batch $batchIdx to DB',
-            );
+            hDebugPrint('StarDict: Inserting synonym batch $batchIdx to DB');
             final result = await dbHelper.batchInsertWords(
               args.dictId,
               synBatch,
@@ -2641,7 +2640,9 @@ class DictionaryManager {
         final cachedData = await dbHelper.getSafScanCache(folderPath);
 
         if (cachedData != null) {
-          hDebugPrint('[SAF] Cache Hit: Loading folder structure from DB for $folderPath');
+          hDebugPrint(
+            '[SAF] Cache Hit: Loading folder structure from DB for $folderPath',
+          );
           try {
             final map = jsonDecode(cachedData) as Map<String, dynamic>;
             scanResult = FolderScanResult.fromMap(map);
@@ -2776,7 +2777,10 @@ class DictionaryManager {
   }
 
   /// Specialized SAF folder scanner for Android.
-  Future<void> _syncSafFolderBackground(String treeUri, FolderScanResult cachedResult) async {
+  Future<void> _syncSafFolderBackground(
+    String treeUri,
+    FolderScanResult cachedResult,
+  ) async {
     hDebugPrint('[SAF] Background Sync started for $treeUri');
     try {
       final freshResult = await _scanSafFolder(treeUri);
@@ -2789,7 +2793,9 @@ class DictionaryManager {
       final missingPaths = cachedPaths.difference(freshPaths);
 
       if (newPaths.isNotEmpty || missingPaths.isNotEmpty) {
-        hDebugPrint('[SAF] Background Sync found changes: ${newPaths.length} new, ${missingPaths.length} missing.');
+        hDebugPrint(
+          '[SAF] Background Sync found changes: ${newPaths.length} new, ${missingPaths.length} missing.',
+        );
         // We could trigger an event here, but for now we just keep the cache up to date
         // so the next 'Link Folder' action picks up the changes instantly.
       } else {
@@ -2972,7 +2978,7 @@ class DictionaryManager {
     }
 
     await scan(dir);
-    
+
     final result = FolderScanResult(
       discovered: discovered,
       incomplete: incomplete,
@@ -3041,7 +3047,9 @@ class DictionaryManager {
         final cachedData = await dbHelper.getSafScanCache(folderPath);
 
         if (cachedData != null) {
-          hDebugPrint('[SAF] Cache Hit: Loading folder structure from DB for $folderPath');
+          hDebugPrint(
+            '[SAF] Cache Hit: Loading folder structure from DB for $folderPath',
+          );
           try {
             final map = jsonDecode(cachedData) as Map<String, dynamic>;
             scanResult = FolderScanResult.fromMap(map);
@@ -3050,7 +3058,10 @@ class DictionaryManager {
             _syncSafFolderBackground(folderPath, scanResult);
           } catch (e) {
             hDebugPrint('[SAF] Cache read failed, rescanning: $e');
-            yield ImportProgress(message: 'Scanning SAF folder...', value: 0.05);
+            yield ImportProgress(
+              message: 'Scanning SAF folder...',
+              value: 0.05,
+            );
             scanResult = await _scanSafFolder(folderPath);
           }
         } else {
@@ -4403,7 +4414,7 @@ class DictionaryManager {
   Future<void> preWarmReaders() async {
     // Wait a brief moment to let the UI finish its initial frame(s)
     await Future.delayed(const Duration(milliseconds: 200));
-    
+
     hDebugPrint('[PreWarm] Starting parallel dictionary reader pre-warming...');
     final stopwatch = Stopwatch()..start();
 
@@ -5122,7 +5133,6 @@ class DictionaryManager {
       // 1. Check LRU Cache (Sync)
       for (int i = 0; i < requests.length; i++) {
         final req = requests[i];
-        final String word = (req['word'] as String?) ?? '';
         final int offset = (req['offset'] as int?) ?? 0;
         final int length = (req['length'] as int?) ?? 0;
         final String cacheKey = '$dictId:$offset:$length';
@@ -5143,9 +5153,12 @@ class DictionaryManager {
 
       // 2. Sync Fetch for Missing Entries
       final entries = missingRequests
-          .map((req) => (offset: req['offset'] as int, length: req['length'] as int))
+          .map(
+            (req) =>
+                (offset: req['offset'] as int, length: req['length'] as int),
+          )
           .toList();
-      
+
       final batchResults = reader.readBulkSync(entries);
 
       // 3. Map back and update Cache (Sync)

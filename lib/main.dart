@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hdict/core/theme/app_theme.dart';
 import 'package:hdict/core/database/database_helper.dart';
-import 'package:hdict/core/manager/dictionary_manager.dart';
 import 'package:hdict/features/home/home_screen.dart';
 import 'package:hdict/features/settings/settings_provider.dart';
 import 'package:provider/provider.dart';
