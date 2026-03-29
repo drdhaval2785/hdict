@@ -25,5 +25,10 @@ linter:
     # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
     curly_braces_in_flow_control_structures: false
 
+analyzer:
+  exclude:
+    - tmp/**
+    - build/**
+
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options

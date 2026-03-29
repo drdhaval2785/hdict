@@ -1,4 +1,4 @@
-# Private API Reference (version 0.5.10)
+# Private API Reference (version 1.5.11)
 
 This document lists all private classes, functions, methods, and fields in the HDict codebase. These are implementation details not intended for external use.
 
@@ -112,6 +112,22 @@ static const String _keyListMode = 'list_mode';
 ```
 
 Key for storing list mode setting.
+
+##### `_keyShowSearchSuggestions`
+
+```dart
+static const String _keyShowSearchSuggestions = 'show_search_suggestions';
+```
+
+Key for storing search suggestions toggle setting.
+
+##### `_keySearchAsYouType`
+
+```dart
+static const String _keySearchAsYouType = 'search_as_you_type';
+```
+
+Key for storing Search As You Type toggle setting.
 
 ---
 
@@ -302,6 +318,30 @@ Static method to consolidate definitions.
 ###### `normalizeWhitespace`
 
 Static method to normalize whitespace.
+
+###### `_buildSuggestionsRow`
+
+Builds the suggestions row widget for autocomplete display.
+
+###### `_getSuggestions`
+
+Gets headword suggestions for autocomplete based on query.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `query` | `String` | The search query |
+
+**Returns:** `Future<List<String>>` - List of suggestion words.
+
+###### `_getDefinitionSuggestions`
+
+Gets definition-based suggestions for Search As You Type.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `query` | `String` | The search query |
+
+**Returns:** `Future<List<String>>` - List of matching headwords.
 
 ---
 

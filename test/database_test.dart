@@ -380,5 +380,21 @@ void main() {
       expect(d1['end_rowid']! - d1['start_rowid']! + 1, 100);
       expect(d2['end_rowid']! - d2['start_rowid']! + 1, 100);
     });
+
+    test('getDefinitionSuggestions returns empty for empty query', () async {
+      List<String> suggestions = await dbHelper.getDefinitionSuggestions('');
+      expect(suggestions.isEmpty, isTrue);
+
+      suggestions = await dbHelper.getDefinitionSuggestions('   ');
+      expect(suggestions.isEmpty, isTrue);
+    });
+
+    test(
+      'getDefinitionSuggestions returns empty when no indexed dictionaries exist',
+      () async {
+        final suggestions = await dbHelper.getDefinitionSuggestions('test');
+        expect(suggestions.isEmpty, isTrue);
+      },
+    );
   });
 }
