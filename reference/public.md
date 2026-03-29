@@ -143,9 +143,67 @@ Injects CSS content into HTML by inserting a style tag in the head or body.
 
 **Returns:** `String` - HTML with CSS injected.
 
+##### Method: `processHtmlWithInlineVideo`
+
+Processes HTML with inline video support. Converts sound links and adds video tap handlers for inline playback.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `html` | `String` | The HTML content to process |
+
+**Returns:** `Future<String>` - Processed HTML with inline video support.
+
+##### Method: `getAudioResource`
+
+Retrieves audio resource bytes from the MDD reader.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `key` | `String` | Resource key/path |
+
+**Returns:** `Future<Uint8List?>` - Audio bytes, or null if not found.
+
+##### Method: `getVideoResource`
+
+Retrieves video resource bytes from the MDD reader.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `key` | `String` | Resource key/path |
+
+**Returns:** `Future<Uint8List?>` - Video bytes, or null if not found.
+
 ---
 
-### 4. `lib/core/utils/anchor_id_extension.dart`
+### 4. `lib/core/utils/logger.dart`
+
+#### Global Variables
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `enableDebugLogs` | `bool` | Global flag to control debug logging |
+| `showHtmlProcessing` | `bool` | Enable verbose HTML processing logs |
+| `showMultimediaProcessing` | `bool` | Enable multimedia processing logs (images, audio, video) |
+| `showSorting` | `bool` | Enable sorting debug logs |
+
+#### Function: `hDebugPrint`
+
+A wrapper around `debugPrint` that checks the `enableDebugLogs` flag and adds timestamps.
+
+```dart
+void hDebugPrint(String? message, {int? wrapWidth})
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `message` | `String?` | The message to print |
+| `wrapWidth` | `int?` | Optional wrap width for output |
+
+**Returns:** `void` - Only prints if `enableDebugLogs` is true.
+
+---
+
+### 5. `lib/core/utils/anchor_id_extension.dart`
 
 #### Class: `AnchorIdExtension`
 
@@ -158,6 +216,106 @@ const AnchorIdExtension()
 ```
 
 This extension automatically wraps all HTML elements with an `id` attribute in a GestureDetector with an AnchorKey, enabling `flutter_html`'s built-in anchor scrolling to work bidirectionally.
+
+##### Method: `matches`
+
+Determines if this extension should process the given element.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `context` | `ExtensionContext` | The extension context |
+
+**Returns:** `bool` - True if the element has a non-empty id and is in the building step.
+
+---
+
+### 6. `lib/core/utils/folder_scanner.dart`
+
+#### Class: `DiscoveredDict`
+
+A validated, importable dictionary found during folder scanning.
+
+##### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `path` | `String` | Path to the primary anchor file |
+| `format` | `String` | Format: 'stardict', 'mdict', 'slob', or 'dictd' |
+| `companionPath` | `String?` | For DICTD: path to companion .dict file |
+| `parentFolderName` | `String?` | Name of immediate parent folder |
+| `safUris` | `Map<String, String>?` | Mapped URIs for SAF files |
+
+##### Constructor
+
+```dart
+const DiscoveredDict({required String path, required String format, String? companionPath, String? parentFolderName, Map<String, String>? safUris})
+```
+
+##### Static Method: `fromMap`
+
+Creates a DiscoveredDict from a Map.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `map` | `Map<String, dynamic>` | Map to convert |
+
+**Returns:** `DiscoveredDict`
+
+##### Method: `toMap`
+
+Converts the instance to a Map.
+
+**Returns:** `Map<String, dynamic>`
+
+#### Class: `IncompleteDict`
+
+A dictionary entry whose mandatory files are missing.
+
+##### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `String` | Stem name used as display name |
+| `format` | `String` | Format identifier |
+| `missingFiles` | `List<String>` | List of missing mandatory files |
+| `parentFolderName` | `String?` | Name of immediate parent folder |
+
+##### Constructor
+
+```dart
+const IncompleteDict({required String name, required String format, required List<String> missingFiles, String? parentFolderName})
+```
+
+##### Method: `toMap`
+
+Converts the instance to a Map.
+
+**Returns:** `Map<String, dynamic>`
+
+##### Static Method: `fromMap`
+
+Creates an IncompleteDict from a Map.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `map` | `Map<String, dynamic>` | Map to convert |
+
+**Returns:** `IncompleteDict`
+
+#### Function: `scanFolderForDictionaries`
+
+Recursively scans a directory for supported dictionary formats. Archives found are extracted into temporary sub-directories before scanning.
+
+```dart
+Future<FolderScanResult> scanFolderForDictionaries(String directoryPath, {bool extractArchives = true})
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `directoryPath` | `String` | Path to the directory to scan |
+| `extractArchives` | `bool` | Whether to extract archives (default: true) |
+
+**Returns:** `Future<FolderScanResult>` - Contains discovered dictionaries, incomplete ones, and found archives.
 
 ---
 
@@ -307,6 +465,73 @@ Reads the definition at the given offset and length. Automatically opens the rea
 
 ### 2. `lib/core/parser/mdict_reader.dart`
 
+#### Enum: `MdictSourceType`
+
+Specifies the source type for MDict dictionary files.
+
+| Value | Description |
+|-------|-------------|
+| `local` | Local file system source |
+| `saf` | Storage Access Framework source |
+| `bookmark` | Bookmark-based source |
+
+#### Enum: `SearchMode`
+
+Specifies the search mode for dictionary lookups.
+
+| Value | Description |
+|-------|-------------|
+| `prefix` | Prefix matching (default) |
+| `suffix` | Suffix matching |
+| `substring` | Substring matching |
+| `exact` | Exact match |
+
+##### Field: `label`
+
+```dart
+final String label
+```
+
+Human-readable label for the search mode.
+
+##### Static Method: `fromString`
+
+Creates a SearchMode from a string value.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `value` | `String` | String representation of the mode |
+
+**Returns:** `SearchMode` - The matching mode, or `prefix` if not found.
+
+#### Enum: `AppThemeMode`
+
+Specifies the app theme mode.
+
+| Value | Description |
+|-------|-------------|
+| `light` | Light theme |
+| `dark` | Dark theme |
+| `custom` | Custom theme with user-defined colors |
+
+##### Field: `label`
+
+```dart
+final String label
+```
+
+Human-readable label for the theme mode.
+
+##### Static Method: `fromString`
+
+Creates an AppThemeMode from a string value.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `value` | `String` | String representation of the mode |
+
+**Returns:** `AppThemeMode` - The matching mode, or `custom` if not found.
+
 #### Class: `MdictReader`
 
 Reads MDict dictionary files (.mdx, .mdd).
@@ -414,6 +639,24 @@ Gets a multimedia resource from the MDD file as Uint8List.
 | `key` | `String` | Resource key |
 
 **Returns:** `Future<Uint8List?>` - Resource data, or null if not found.
+
+##### Method: `prefixSearch`
+
+Performs a prefix search to find all words starting with a given prefix.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `prefix` | `String` | The prefix to search for |
+| `limit` | `int` | Maximum number of results to return |
+
+**Returns:** `Future<List<(String, int)>>` - List of tuples containing the word and its index.
+
+```dart
+final results = await reader.prefixSearch("app", limit: 100);
+for (final (word, index) in results) {
+  print("$word at index $index");
+}
+```
 
 ##### Property: `cssContent`
 
@@ -673,21 +916,26 @@ Returns the content of multiple blobs for given ids. Faster than calling getBlob
 
 **Returns:** `Future<List<String>>` - List of blob contents.
 
-##### Property: `bookName`
+##### Method: `getBlob`
 
-```dart
-String get bookName
-```
+Returns the internal blob for a given index. Primarily for internal use or bulk operations.
 
-Returns the dictionary label from tags, or filename if unavailable.
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `index` | `int` | Blob index |
 
-##### Property: `blobCount`
+**Returns:** `Future<SlobBlob?>` - The blob at the given index.
 
-```dart
-int get blobCount
-```
+##### Method: `getBlobsByRange`
 
-Returns total number of blobs.
+Fetches multiple blobs starting at a given index in a single batched call. Uses getBlobs() which decompresses each compressed bin exactly once and returns key + content together - the fastest way to sequentially iterate all blobs in a slob file.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `start` | `int` | Starting blob index |
+| `count` | `int` | Number of blobs to fetch |
+
+**Returns:** `Future<List<SlobBlob>>` - List of blobs in the range.
 
 ---
 
@@ -762,6 +1010,26 @@ Creates a DictdReader from a linked source.
 
 **Returns:** `Future<DictdReader>` - A new DictdReader instance.
 
+##### Method: `openSource`
+
+Opens a random access source for reading dictionary entries.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `source` | `RandomAccessSource` | The random access source to read from |
+
+**Returns:** `Future<void>`
+
+##### Method: `readEntries`
+
+Reads multiple dictionary entries in batch, sorted by offset for optimal disk seeking.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `entries` | `List<({int offset, int length})>` | List of entry offsets and lengths to read |
+
+**Returns:** `Future<List<String>>` - List of entry contents in the same order as input.
+
 ---
 
 ### 5. `lib/core/parser/ifo_parser.dart`
@@ -786,6 +1054,16 @@ Parses StarDict .ifo files (metadata/information).
 | `sameTypeSequence` | `String?` | Same-type sequence |
 | `idxOffsetBits` | `int` | Index offset bits (32 or 64) |
 | `synWordCount` | `int` | Synonym word count |
+
+##### Property: `metadata`
+
+```dart
+Map<String, String> get metadata
+```
+
+Returns all parsed metadata as a key-value map. This includes all fields defined in the IFO file such as version, bookName, wordCount, etc.
+
+---
 
 ##### Method: `parse`
 
@@ -1355,7 +1633,292 @@ bool get isSearchAsYouTypeEnabled
 
 Whether "Search As You Type" in definitions is enabled. Default: `true`.
 
-See [SettingsProvider API](private.md#1-libfeaturessettingssettings_providerdart) for additional public methods.
+##### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `appThemeMode` | `AppThemeMode` | Current app theme mode |
+| `backgroundColor` | `Color` | Custom background color |
+| `textColor` | `Color` | Custom text color |
+| `headwordColor` | `Color` | Custom headword color |
+| `fontSize` | `double` | Font size |
+| `previewLines` | `int` | Number of preview lines |
+| `headwordSearchMode` | `SearchMode` | Headword search mode |
+| `definitionSearchMode` | `SearchMode` | Definition search mode |
+| `isFuzzySearchEnabled` | `bool` | Whether fuzzy search is enabled |
+| `isTapOnMeaningEnabled` | `bool` | Whether tap on meaning is enabled |
+| `isOpenPopupOnTap` | `bool` | Whether to open popup on tap |
+| `isSearchInHeadwordsEnabled` | `bool` | Whether to search in headwords |
+| `isSearchInDefinitionsEnabled` | `bool` | Whether to search in definitions |
+| `historyRetentionDays` | `int` | Days to retain search history |
+| `searchResultLimit` | `int` | Maximum search results to return |
+| `flashCardWordCount` | `int` | Number of words per flash card session |
+| `appFirstLaunchDate` | `int` | Timestamp of first app launch |
+| `nextReviewPromptDate` | `int` | Timestamp for next review prompt |
+| `reviewPromptCount` | `int` | Number of times review has been prompted |
+| `hasGivenReview` | `bool` | Whether user has given a review |
+| `reviewPromptedThisSession` | `bool` | Whether review was prompted in current session |
+| `isListModeEnabled` | `bool` | Whether list view mode is enabled |
+
+##### Method: `getEffectiveBackgroundColor`
+
+Gets the effective background color based on current settings.
+
+**Returns:** `Color` - The effective background color.
+
+##### Method: `getEffectiveTextColor`
+
+Gets the effective text color based on current settings.
+
+**Returns:** `Color` - The effective text color.
+
+##### Method: `getEffectiveHeadwordColor`
+
+Gets the effective headword color based on current settings.
+
+**Returns:** `Color` - The effective headword color.
+
+##### Method: `setAppThemeMode`
+
+Sets the app theme mode.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `mode` | `AppThemeMode` | Theme mode to set |
+
+**Returns:** `Future<void>`
+
+##### Method: `setFontFamily`
+
+Sets the font family.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `family` | `String` | Font family name |
+
+**Returns:** `Future<void>`
+
+##### Method: `setFontSize`
+
+Sets the font size.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `size` | `double` | Font size |
+
+**Returns:** `Future<void>`
+
+##### Method: `setBackgroundColor`
+
+Sets the background color.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `color` | `Color` | Background color |
+
+**Returns:** `Future<void>`
+
+##### Method: `setTextColor`
+
+Sets the text color.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `color` | `Color` | Text color |
+
+**Returns:** `Future<void>`
+
+##### Method: `setHeadwordColor`
+
+Sets the headword color.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `color` | `Color` | Headword color |
+
+**Returns:** `Future<void>`
+
+##### Method: `setPreviewLines`
+
+Sets the number of preview lines.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `lines` | `int` | Number of preview lines |
+
+**Returns:** `Future<void>`
+
+##### Method: `setFuzzySearch`
+
+Sets whether fuzzy search is enabled.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `enabled` | `bool` | Enable or disable fuzzy search |
+
+**Returns:** `Future<void>`
+
+##### Method: `setTapOnMeaning`
+
+Sets whether tap on meaning is enabled.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `enabled` | `bool` | Enable or disable tap on meaning |
+
+**Returns:** `Future<void>`
+
+##### Method: `setOpenPopup`
+
+Sets whether to open popup on tap.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `enabled` | `bool` | Enable or disable open popup |
+
+**Returns:** `Future<void>`
+
+##### Method: `setShowSearchSuggestions`
+
+Sets whether search suggestions are shown.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `enabled` | `bool` | Enable or disable search suggestions |
+
+**Returns:** `Future<void>`
+
+##### Method: `setSearchAsYouType`
+
+Sets whether "Search As You Type" is enabled.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `enabled` | `bool` | Enable or disable search as you type |
+
+**Returns:** `Future<void>`
+
+##### Method: `setReviewPromptCount`
+
+Sets the review prompt count.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `count` | `int` | Review prompt count |
+
+**Returns:** `Future<void>`
+
+##### Method: `setHistoryRetentionDays`
+
+Sets the number of days to retain search history.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `days` | `int` | Number of days to retain history |
+
+**Returns:** `Future<void>`
+
+##### Method: `searchInHeadwords`
+
+Sets whether search results should include headwords.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `enabled` | `bool` | Enable or disable headword search |
+
+**Returns:** `Future<void>`
+
+##### Method: `searchInDefinitions`
+
+Sets whether search results should include definitions.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `enabled` | `bool` | Enable or disable definition search |
+
+**Returns:** `Future<void>`
+
+##### Method: `setHeadwordSearchMode`
+
+Sets the search mode for headword matching.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `mode` | `SearchMode` | Search mode to use |
+
+**Returns:** `Future<void>`
+
+##### Method: `setDefinitionSearchMode`
+
+Sets the search mode for definition matching.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `mode` | `SearchMode` | Search mode to use |
+
+**Returns:** `Future<void>`
+
+##### Method: `setSearchResultLimit`
+
+Sets the maximum number of search results to return.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `limit` | `int` | Maximum result count |
+
+**Returns:** `Future<void>`
+
+##### Method: `setFlashCardWordCount`
+
+Sets the number of words per flash card session.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `count` | `int` | Number of words per session |
+
+**Returns:** `Future<void>`
+
+##### Method: `initAppFirstLaunchDateIfNeeded`
+
+Initializes the first launch date if not already set. Sets both the launch date and schedules the first review prompt for 15 days later.
+
+**Returns:** `Future<void>`
+
+##### Method: `incrementReviewPromptCountAndSetNextDate`
+
+Increments the review prompt count and schedules the next prompt for 15 days from now.
+
+**Returns:** `Future<void>`
+
+##### Method: `setHasGivenReview`
+
+Sets whether the user has given a review.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `given` | `bool` | Whether review was given |
+
+**Returns:** `Future<void>`
+
+##### Method: `setReviewPromptedThisSession`
+
+Sets whether the review prompt was shown in the current session.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `prompted` | `bool` | Whether prompt was shown |
+
+**Returns:** `void` (synchronous, no SharedPreferences persistence)
+
+##### Method: `setListMode`
+
+Sets whether list view mode is enabled.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `enabled` | `bool` | Enable or disable list mode |
+
+**Returns:** `Future<void>`
 
 ---
 
@@ -1442,6 +2005,14 @@ Records a microsecond value.
 
 ### 1. `lib/main.dart`
 
+#### Function: `main`
+
+Entry point for the HDict application. Initializes the database and runs the Flutter app.
+
+```dart
+void main()
+```
+
 #### Class: `MyApp`
 
 The main application widget.
@@ -1465,6 +2036,26 @@ Gets a theme based on brightness and font family.
 
 **Returns:** `ThemeData` - The configured theme.
 
+##### Static Property: `lightTheme`
+
+```dart
+static ThemeData get lightTheme
+```
+
+Returns the light theme with Roboto font.
+
+**Returns:** `ThemeData` - Light theme configuration.
+
+##### Static Property: `darkTheme`
+
+```dart
+static ThemeData get darkTheme
+```
+
+Returns the dark theme with Roboto font.
+
+**Returns:** `ThemeData` - Dark theme configuration.
+
 
 
 ---
@@ -1476,6 +2067,17 @@ Gets a theme based on brightness and font family.
 #### Class: `HomeScreen`
 
 Main home screen with search functionality.
+
+#### Enum: `SuggestionTarget`
+
+Specifies where suggestion results should be displayed.
+
+##### Values
+
+| Value | Description |
+|-------|-------------|
+| `searchBar` | Show suggestions in the search bar dropdown |
+| `definitionArea` | Show suggestions in the definition area below |
 
 ##### Static Method: `normalizeWhitespace`
 
@@ -1555,6 +2157,20 @@ final String? typeSequence
 ```
 
 Optional type sequence.
+
+##### Method: `createState`
+
+Creates the mutable state for this widget.
+
+**Returns:** `_HomeScreenState` - The state instance.
+
+##### Field: `initialWord`
+
+```dart
+final String? initialWord
+```
+
+Optional initial word to search for when the screen opens.
 
 ---
 
@@ -1642,6 +2258,12 @@ Stops security-scoped access for a physical path.
 
 Flash cards screen for vocabulary learning.
 
+##### Method: `createState`
+
+Creates the mutable state for this widget.
+
+**Returns:** `_FlashCardsScreenState` - The state instance.
+
 ---
 
 ### 5. `lib/features/dictionary_management/dictionary_management_screen.dart`
@@ -1649,6 +2271,20 @@ Flash cards screen for vocabulary learning.
 #### Class: `DictionaryManagementScreen`
 
 Dictionary management screen.
+
+##### Method: `createState`
+
+Creates the mutable state for this widget.
+
+**Returns:** `_DictionaryManagementScreenState` - The state instance.
+
+##### Field: `triggerSelectByLanguage`
+
+```dart
+final VoidCallback? triggerSelectByLanguage
+```
+
+Callback to trigger dictionary selection by language.
 
 ---
 
@@ -1658,6 +2294,12 @@ Dictionary management screen.
 
 Dictionary groups management screen.
 
+##### Method: `createState`
+
+Creates the mutable state for this widget.
+
+**Returns:** `_DictionaryGroupsScreenState` - The state instance.
+
 ---
 
 ### 7. `lib/features/search_history/search_history_screen.dart`
@@ -1666,6 +2308,12 @@ Dictionary groups management screen.
 
 Search history screen.
 
+##### Method: `createState`
+
+Creates the mutable state for this widget.
+
+**Returns:** `_SearchHistoryScreenState` - The state instance.
+
 ---
 
 ### 8. `lib/features/score_history/score_history_screen.dart`
@@ -1673,6 +2321,12 @@ Search history screen.
 #### Class: `ScoreHistoryScreen`
 
 Score history screen.
+
+##### Method: `createState`
+
+Creates the mutable state for this widget.
+
+**Returns:** `_ScoreHistoryScreenState` - The state instance.
 
 ---
 
@@ -1822,7 +2476,19 @@ BookmarkRandomAccessSource(this._bookmark)
 
 #### Class: `SafRandomAccessSource`
 
-Random access source for Storage Access Framework.
+Random access source for Storage Access Framework. Provides efficient random access reading of files accessed through Android's Storage Access Framework.
+
+##### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `bufferSize` | `int` | Size of the internal read buffer |
+
+##### Constructor
+
+```dart
+SafRandomAccessSource(RandomAccessFile file, int length, {int bufferSize = 65536})
+```
 
 ##### Property: `length`
 
@@ -1831,6 +2497,36 @@ int get length
 ```
 
 Returns the length of the content.
+
+##### Property: `isFullFileInMemory`
+
+```dart
+bool get isFullFileInMemory
+```
+
+Returns true if the entire file is loaded in memory.
+
+##### Method: `read`
+
+Reads bytes from the source at the specified offset.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `offset` | `int` | Position to start reading from |
+| `length` | `int` | Number of bytes to read |
+
+**Returns:** `Future<Uint8List>` - The read bytes.
+
+##### Method: `readSync`
+
+Synchronously reads bytes from the source at the specified offset.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `offset` | `int` | Position to start reading from |
+| `length` | `int` | Number of bytes to read |
+
+**Returns:** `Uint8List` - The read bytes.
 
 ---
 
@@ -1859,6 +2555,286 @@ Closes a specific dictionary reader.
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `dictId` | `int` | Dictionary ID |
+
+##### Method: `getReader`
+
+Gets a dictionary reader by ID.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dictId` | `int` | Dictionary ID |
+
+**Returns:** `dynamic` - The dictionary reader instance.
+
+##### Method: `getMdictReader`
+
+Gets an MdictReader by ID, or null if the reader is not an MdictReader.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dictId` | `int` | Dictionary ID |
+
+**Returns:** `MdictReader?` - The MdictReader instance or null.
+
+##### Method: `isFastReader`
+
+Checks if the reader for a dictionary is a fast reader (supports direct offset-based lookup).
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dictId` | `int` | Dictionary ID |
+
+**Returns:** `bool` - True if the reader supports fast lookup.
+
+##### Method: `getOrphanedDictionaryFolders`
+
+Gets list of dictionary folders that exist on disk but are not registered in the database.
+
+**Returns:** `Future<List<String>>` - List of orphaned folder paths.
+
+##### Method: `deleteOrphanedFolders`
+
+Deletes orphaned dictionary folders from disk.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `folderNames` | `List<String>` | List of folder paths to delete |
+
+**Returns:** `Future<void>`
+
+##### Method: `preWarmReaders`
+
+Pre-warms dictionary readers for faster first search.
+
+**Returns:** `Future<void>`
+
+##### Method: `getDictionaries`
+
+Gets all dictionaries from the database.
+
+**Returns:** `Future<List<Map<String, dynamic>>>` - List of dictionary records.
+
+##### Method: `toggleDictionaryEnabled`
+
+Enables or disables a dictionary.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | `int` | Dictionary ID |
+| `isEnabled` | `bool` | Enable or disable |
+
+**Returns:** `Future<void>`
+
+##### Method: `deleteDictionaryStream`
+
+Deletes a dictionary with progress updates.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | `int` | Dictionary ID |
+
+**Returns:** `Stream<DeletionProgress>` - Progress stream.
+
+##### Method: `deleteDictionary`
+
+Deletes a dictionary synchronously.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | `int` | Dictionary ID |
+
+**Returns:** `Future<void>`
+
+##### Method: `reorderDictionaries`
+
+Updates the sort order of dictionaries.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `sortedIds` | `List<int>` | Dictionary IDs in new order |
+
+**Returns:** `Future<void>`
+
+##### Method: `importDictionaryStream`
+
+Imports a dictionary from an archive file with progress updates.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `archivePath` | `String` | Path to the archive file |
+| `indexDefinitions` | `bool` | Whether to index definitions (default: false) |
+
+**Returns:** `Stream<ImportProgress>` - Progress stream.
+
+##### Method: `importDictionaryWebStream`
+
+Imports a dictionary from web-downloaded bytes.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `fileName` | `String` | Original filename |
+| `bytes` | `Uint8List` | Archive file bytes |
+| `indexDefinitions` | `bool` | Whether to index definitions (default: false) |
+
+**Returns:** `Stream<ImportProgress>` - Progress stream.
+
+##### Method: `importMultipleFilesStream`
+
+Imports multiple dictionary files from paths.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `filePaths` | `List<String>` | List of file paths |
+| `indexDefinitions` | `bool` | Whether to index definitions (default: false) |
+
+**Returns:** `Stream<ImportProgress>` - Progress stream.
+
+##### Method: `importFolderStream`
+
+Imports dictionaries from a folder.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `folderPath` | `String` | Path to the folder |
+| `indexDefinitions` | `bool` | Whether to index definitions (default: false) |
+
+**Returns:** `Stream<ImportProgress>` - Progress stream.
+
+##### Method: `linkFolderStream`
+
+Links dictionaries from a folder (for SAF-linked dictionaries).
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `folderPath` | `String` | Path to the folder |
+| `indexDefinitions` | `bool` | Whether to index definitions (default: false) |
+
+**Returns:** `Stream<ImportProgress>` - Progress stream.
+
+##### Method: `addFolderStream`
+
+Adds dictionaries from a folder (alias for importFolderStream).
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `folderPath` | `String` | Path to the folder |
+| `indexDefinitions` | `bool` | Whether to index definitions (default: false) |
+
+**Returns:** `Stream<ImportProgress>` - Progress stream.
+
+##### Method: `importMultipleFilesWebStream`
+
+Imports multiple dictionary files from web bytes.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `files` | `List<({String name, Uint8List bytes})>` | List of file data |
+| `indexDefinitions` | `bool` | Whether to index definitions (default: false) |
+
+**Returns:** `Stream<ImportProgress>` - Progress stream.
+
+##### Method: `importMdictStream`
+
+Imports an MDict dictionary (MDX/MDD pair).
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `mdxPath` | `String` | Path to the MDX file |
+| `mddPath` | `String?` | Optional path to the MDD file |
+| `indexDefinitions` | `bool` | Whether to index definitions (default: false) |
+| `isLinked` | `bool` | Whether this is a linked source (default: false) |
+| `sourceBookmark` | `String?` | Source bookmark for linked dictionaries |
+
+**Returns:** `Stream<ImportProgress>` - Progress stream.
+
+##### Method: `importDictdStream`
+
+Imports a DICTD dictionary.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `indexPath` | `String` | Path to the index file |
+| `dictPath` | `String` | Path to the dictionary file |
+| `indexDefinitions` | `bool` | Whether to index definitions (default: false) |
+
+**Returns:** `Stream<ImportProgress>` - Progress stream.
+
+##### Method: `importSlobStream`
+
+Imports a Slob dictionary.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `slobPath` | `String` | Path to the Slob file |
+| `indexDefinitions` | `bool` | Whether to index definitions (default: false) |
+| `isLinked` | `bool` | Whether this is a linked source (default: false) |
+| `sourceBookmark` | `String?` | Source bookmark for linked dictionaries |
+
+**Returns:** `Stream<ImportProgress>` - Progress stream.
+
+##### Method: `fetchDefinition`
+
+Fetches a single definition from a dictionary.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dictRecord` | `Map<String, dynamic>` | Dictionary record |
+| `word` | `String` | Word to look up |
+| `offset` | `int` | Offset in the dictionary file |
+| `length` | `int` | Length of the entry |
+
+**Returns:** `Future<String?>` - The definition HTML, or null if not found.
+
+##### Method: `fetchDefinitionsBatchSync`
+
+Fetches multiple definitions synchronously from a dictionary.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dictRecord` | `Map<String, dynamic>` | Dictionary record |
+| `requests` | `List<Map<String, dynamic>>` | List of {word, offset, length} |
+
+**Returns:** `List<String?>?` - List of definitions.
+
+##### Method: `fetchDefinitionsBatch`
+
+Fetches multiple definitions asynchronously from a dictionary.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dictRecord` | `Map<String, dynamic>` | Dictionary record |
+| `requests` | `List<Map<String, dynamic>>` | List of {word, offset, length} |
+
+**Returns:** `Future<List<String?>>` - List of definitions.
+
+##### Method: `reIndexDictionariesStream`
+
+Re-indexes all dictionaries with definition indexing enabled.
+
+**Returns:** `Stream<ImportProgress>` - Progress stream.
+
+##### Method: `reindexDictionaryStream`
+
+Re-indexes a specific dictionary.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dictId` | `int` | Dictionary ID |
+| `indexDefinitions` | `bool` | Whether to index definitions (default: true) |
+
+**Returns:** `Stream<ImportProgress>` - Progress stream.
+
+##### Method: `downloadAndImportDictionaryStream`
+
+Downloads and imports a dictionary from a URL.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `url` | `String` | Download URL |
+| `indexDefinitions` | `bool` | Whether to index definitions (default: false) |
+| `sourceUrl` | `String?` | Original source URL for tracking |
+
+**Returns:** `Stream<ImportProgress>` - Progress stream.
 
 ---
 
@@ -1974,6 +2950,24 @@ Toggles a group's active state.
 #### Class: `StardictService`
 
 Service for StarDict dictionary operations.
+
+##### Method: `fetchDictionaries`
+
+Fetches available StarDict dictionaries from the remote server.
+
+**Returns:** `Future<List<Map<String, dynamic>>>` - List of available dictionaries.
+
+##### Method: `refreshDictionaries`
+
+Refreshes the dictionary list from the remote server.
+
+**Returns:** `Future<void>`
+
+##### Method: `getDownloadedUrls`
+
+Gets the list of downloaded dictionary URLs.
+
+**Returns:** `Future<Set<String>>` - Set of downloaded URLs.
 
 ---
 
@@ -2299,6 +3293,20 @@ Starts batch insert mode and returns the current maximum ID.
 
 **Returns:** `Future<int>` - Current maximum word_metadata ID.
 
+##### Method: `batchInsertWords`
+
+Inserts multiple words into the database within a transaction. Used during dictionary import for efficient batch insertion with optional FTS5 indexing.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dictId` | `int` | Dictionary ID |
+| `words` | `List<Map<String, dynamic>>` | List of words to insert |
+| `startId` | `int?` | Starting ID for insertion |
+| `populateFts5` | `bool` | Whether to populate FTS5 index (default: true) |
+| `dictName` | `String?` | Optional dictionary name for logging |
+
+**Returns:** `Future<({int startId, int duplicateCount})>` - Starting ID and count of duplicates.
+
 ##### Method: `updateDictionaryEnabled`
 
 Updates whether a dictionary is enabled.
@@ -2462,6 +3470,14 @@ Converts a search query to FTS5 format.
 
 Screen for displaying search results.
 
+##### Field: `peekCount`
+
+```dart
+final int peekCount
+```
+
+Number of items to peek ahead in the definition.
+
 ---
 
 ## Dialogs
@@ -2471,6 +3487,12 @@ Screen for displaying search results.
 #### Class: `StardictDownloadDialog`
 
 Dialog for downloading StarDict dictionaries.
+
+##### Method: `createState`
+
+Creates the mutable state for this widget.
+
+**Returns:** `_StardictDownloadDialogState` - The state instance.
 
 ---
 
