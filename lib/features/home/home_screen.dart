@@ -272,7 +272,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final Debouncer _suggestionsDebouncer = Debouncer(milliseconds: 250);
   List<String> _suggestions = [];
   bool _isLoadingSuggestions = false;
-  bool _showAllSuggestions = false;
 
   // Focus nodes to track which field is active
   final FocusNode _headwordFocusNode = FocusNode();
@@ -284,7 +283,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   );
   List<String> _definitionSuggestions = [];
   bool _isLoadingDefinitionSuggestions = false;
-  bool _showAllDefinitionSuggestions = false;
 
   final Debouncer _quickSearchDebouncer = Debouncer(milliseconds: 150);
 
@@ -424,7 +422,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     try {
       final suggestions = await _dbHelper.getPrefixSuggestions(
         query,
-        limit: 10,
+        limit: 50,
       );
 
       if (!mounted) return [];
@@ -458,7 +456,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     try {
       final suggestions = await _dbHelper.getDefinitionSuggestions(
         query,
-        limit: 10,
+        limit: 50,
       );
 
       if (!mounted) return [];
@@ -490,7 +488,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void _onSuggestionSelected(String suggestion) {
     _headwordController.text = suggestion;
     _suggestions.clear();
-    _showAllSuggestions = false;
     FocusScope.of(context).unfocus();
     _performSearch();
   }
@@ -1404,7 +1401,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         onPressed: () {
                           _headwordController.clear();
                           _suggestions.clear();
-                          _showAllSuggestions = false;
                           setState(() {});
                         },
                       ),
@@ -1451,7 +1447,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         onPressed: () {
                           _definitionController.clear();
                           _definitionSuggestions.clear();
-                          _showAllDefinitionSuggestions = false;
                           setState(() {});
                         },
                       ),
@@ -1484,7 +1479,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void _onDefinitionSuggestionSelected(String suggestion) {
     _definitionController.text = suggestion;
     _definitionSuggestions.clear();
-    _showAllDefinitionSuggestions = false;
     FocusScope.of(context).unfocus();
     _performSearch();
   }
@@ -1506,9 +1500,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     final isHeadword = target == SuggestionTarget.headword;
     final suggestions = isHeadword ? _suggestions : _definitionSuggestions;
-    final showAll = isHeadword
-        ? _showAllSuggestions
-        : _showAllDefinitionSuggestions;
     final onSelected = isHeadword
         ? _onSuggestionSelected
         : _onDefinitionSuggestionSelected;
@@ -1519,78 +1510,34 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            height: 40,
-            child: Stack(
-              children: [
-                ShaderMask(
-                  shaderCallback: (Rect bounds) {
-                    return const LinearGradient(
-                      colors: [
-                        Colors.transparent,
-                        Colors.white,
-                        Colors.white,
-                        Colors.transparent,
-                      ],
-                      stops: [0.0, 0.05, 0.95, 1.0],
-                    ).createShader(bounds);
-                  },
-                  blendMode: BlendMode.dstIn,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: showAll
-                        ? suggestions.length
-                        : (suggestions.length > 5 ? 6 : suggestions.length),
-                    separatorBuilder: (context, index) =>
-                        const SizedBox(width: 8),
-                    itemBuilder: (context, index) {
-                      if (!showAll && index == 5) {
-                        return ActionChip(
-                          avatar: const Icon(Icons.more_horiz, size: 18),
-                          label: const Text('More'),
-                          onPressed: () {
-                            if (isHeadword) {
-                              setState(() => _showAllSuggestions = true);
-                            } else {
-                              setState(
-                                () => _showAllDefinitionSuggestions = true,
-                              );
-                            }
-                          },
-                        );
-                      }
-                      final suggestion = suggestions[index];
-                      return ActionChip(
-                        label: Text(suggestion),
-                        onPressed: () => onSelected(suggestion),
-                      );
-                    },
-                  ),
-                ),
+      child: SizedBox(
+        height: 40,
+        child: ShaderMask(
+          shaderCallback: (Rect bounds) {
+            return const LinearGradient(
+              colors: [
+                Colors.transparent,
+                Colors.white,
+                Colors.white,
+                Colors.transparent,
               ],
-            ),
+              stops: [0.0, 0.05, 0.95, 1.0],
+            ).createShader(bounds);
+          },
+          blendMode: BlendMode.dstIn,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: suggestions.length,
+            separatorBuilder: (context, index) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final suggestion = suggestions[index];
+              return ActionChip(
+                label: Text(suggestion),
+                onPressed: () => onSelected(suggestion),
+              );
+            },
           ),
-          if (showAll && suggestions.length > 5)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: GestureDetector(
-                onTap: () {
-                  if (isHeadword) {
-                    setState(() => _showAllSuggestions = false);
-                  } else {
-                    setState(() => _showAllDefinitionSuggestions = false);
-                  }
-                },
-                child: Text(
-                  'Show less',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                ),
-              ),
-            ),
-        ],
+        ),
       ),
     );
   }

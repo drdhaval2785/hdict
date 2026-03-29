@@ -24,6 +24,13 @@ class DatabaseHelper {
   /// Whether the user just upgraded from version 16 and needs a notice.
   static bool needsMigrationAlert = false;
 
+  /// Cached list of dictionary IDs that have definition content indexed.
+  /// Populated on first access and refreshed when needed.
+  static Set<int>? _definitionIndexedDictIds;
+
+  /// Whether the definition index cache has been initialized.
+  static bool _definitionCacheInitialized = false;
+
   factory DatabaseHelper() {
     return _instance;
   }
@@ -1415,6 +1422,8 @@ class DatabaseHelper {
     hDebugPrint('DatabaseHelper: Deleting from files table');
     await db.delete('files', where: 'dict_id = ?', whereArgs: [id]);
 
+    await _refreshDefinitionIndexCache();
+
     hDebugPrint('DatabaseHelper: Dictionary delete complete for id=$id');
   }
 
@@ -1619,10 +1628,10 @@ class DatabaseHelper {
 
   Future<void> endBatchInsert() async {
     final db = await database;
-    // Restore synchronous to NORMAL after bulk insert
     await db.execute('PRAGMA synchronous = NORMAL');
     clearQueryCache();
     clearDictionaryCache();
+    await _refreshDefinitionIndexCache();
   }
 
   Future<void> enableBulkInsertMode() async {
@@ -2081,7 +2090,7 @@ class DatabaseHelper {
 
   Future<List<String>> getPrefixSuggestions(
     String prefix, {
-    int limit = 10,
+    int limit = 50,
     bool fuzzy = false,
   }) async {
     try {
@@ -2149,17 +2158,54 @@ class DatabaseHelper {
     }
   }
 
+  Future<void> _refreshDefinitionIndexCache() async {
+    try {
+      final db = await database;
+      final results = await db.rawQuery('''
+        SELECT DISTINCT m.dict_id 
+        FROM word_metadata m
+        INNER JOIN word_index i ON m.id = i.rowid
+        WHERE i.content IS NOT NULL AND i.content != ''
+      ''');
+      _definitionIndexedDictIds = results
+          .map((r) => r['dict_id'] as int)
+          .toSet();
+      _definitionCacheInitialized = true;
+      hDebugPrint(
+        'Definition index cache refreshed: ${_definitionIndexedDictIds!.length} dicts indexed',
+      );
+    } catch (e) {
+      hDebugPrint('Error refreshing definition index cache: $e');
+    }
+  }
+
   Future<List<String>> getDefinitionSuggestions(
     String query, {
-    int limit = 10,
+    int limit = 50,
   }) async {
     if (query.trim().isEmpty) return [];
+
+    if (!_definitionCacheInitialized) {
+      await _refreshDefinitionIndexCache();
+    }
+
+    if (_definitionIndexedDictIds == null ||
+        _definitionIndexedDictIds!.isEmpty) {
+      return [];
+    }
 
     try {
       final db = await database;
       final String cleanQuery = query.trim();
 
-      final List<Map<String, dynamic>> dicts = await getEnabledDictionaries();
+      final List<Map<String, dynamic>> allEnabledDicts =
+          await getEnabledDictionaries();
+      if (allEnabledDicts.isEmpty) return [];
+
+      final List<Map<String, dynamic>> dicts = allEnabledDicts
+          .where((d) => _definitionIndexedDictIds!.contains(d['id'] as int))
+          .toList();
+
       if (dicts.isEmpty) return [];
 
       final List<String> suggestions = [];
