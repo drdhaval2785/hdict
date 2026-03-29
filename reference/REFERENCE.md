@@ -5520,4 +5520,454 @@ Downloads and imports the dictionary.
 
 ---
 
+## Dependency Graph
+
+Below is a dependency list showing which modules depend on others (similar to `flutter pub deps`):
+
+```
+hdict
+├── lib/main.dart
+│   ├── flutter/material.dart
+│   ├── provider (package)
+│   ├── lib/core/theme/app_theme.dart
+│   ├── lib/core/database/database_helper.dart
+│   └── lib/features/home/home_screen.dart
+│
+├── lib/core/
+│   ├── constants/
+│   │   └── iso_639_2_languages.dart (standalone - no deps)
+│   │
+│   ├── database/
+│   │   └── database_helper.dart
+│   │       ├── dart:collection
+│   │       ├── dart:io
+│   │       ├── dart:math
+│   │       ├── flutter/foundation.dart
+│   │       ├── path (package)
+│   │       ├── path_provider (package)
+│   │       ├── sqflite (package)
+│   │       ├── sqflite_common_ffi (package)
+│   │       ├── sqflite_common_ffi_web (package)
+│   │       └── lib/core/utils/logger.dart
+│   │
+│   ├── manager/
+│   │   ├── dictionary_manager.dart
+│   │   │   ├── dart:collection
+│   │   │   ├── dart:convert
+│   │   │   ├── dart:io
+│   │   │   ├── dart:isolate
+│   │   │   ├── dart:async
+│   │   │   ├── flutter/foundation.dart
+│   │   │   ├── flutter/services.dart
+│   │   │   ├── archive (package)
+│   │   │   ├── archive_io (package)
+│   │   │   ├── path (package)
+│   │   │   ├── path_provider (package)
+│   │   │   ├── http (package)
+│   │   │   ├── crypto (package)
+│   │   │   ├── flutter_7zip (package)
+│   │   │   ├── docman (package)
+│   │   │   ├── lib/core/database/database_helper.dart
+│   │   │   ├── lib/core/parser/ifo_parser.dart
+│   │   │   ├── lib/core/parser/idx_parser.dart
+│   │   │   ├── lib/core/parser/syn_parser.dart
+│   │   │   ├── lib/core/parser/dict_reader.dart
+│   │   │   ├── lib/core/parser/mdict_reader.dart
+│   │   │   ├── lib/core/parser/slob_reader.dart
+│   │   │   ├── lib/core/parser/dictd_reader.dart
+│   │   │   ├── lib/core/parser/random_access_source.dart
+│   │   │   ├── lib/core/parser/bookmark_random_access_source.dart
+│   │   │   ├── lib/core/parser/saf_random_access_source.dart
+│   │   │   ├── lib/core/parser/bookmark_manager.dart
+│   │   │   ├── lib/core/utils/folder_scanner.dart
+│   │   │   ├── lib/core/utils/logger.dart
+│   │   │   └── lib/core/manager/dictionary_group_manager.dart
+│   │   │
+│   │   └── dictionary_group_manager.dart
+│   │       ├── dart:convert
+│   │       ├── shared_preferences (package)
+│   │       └── lib/core/manager/dictionary_manager.dart
+│   │
+│   ├── parser/
+│   │   ├── ifo_parser.dart
+│   │   │   ├── dart:convert
+│   │   │   ├── dart:io
+│   │   │   ├── flutter/foundation.dart
+│   │   │   └── lib/core/parser/random_access_source.dart
+│   │   │
+│   │   ├── idx_parser.dart
+│   │   │   ├── dart:typed_data
+│   │   │   ├── dart:convert
+│   │   │   ├── flutter/foundation.dart
+│   │   │   ├── lib/core/parser/random_access_source.dart
+│   │   │   └── lib/core/parser/ifo_parser.dart
+│   │   │
+│   │   ├── syn_parser.dart
+│   │   │   ├── dart:typed_data
+│   │   │   ├── dart:convert
+│   │   │   └── lib/core/parser/random_access_source.dart
+│   │   │
+│   │   ├── dict_reader.dart
+│   │   │   ├── flutter/foundation.dart
+│   │   │   ├── dart:io
+│   │   │   ├── dart:convert
+│   │   │   ├── dictzip_reader (package)
+│   │   │   ├── path (package)
+│   │   │   ├── lib/core/database/database_helper.dart
+│   │   │   ├── lib/core/parser/random_access_source.dart
+│   │   │   ├── lib/core/parser/saf_random_access_source.dart
+│   │   │   └── lib/core/parser/bookmark_random_access_source.dart
+│   │   │
+│   │   ├── mdict_reader.dart
+│   │   │   ├── flutter/foundation.dart
+│   │   │   ├── dart:io
+│   │   │   ├── dict_reader (package)
+│   │   │   ├── path (package)
+│   │   │   ├── lib/core/utils/logger.dart
+│   │   │   ├── lib/core/parser/random_access_source.dart
+│   │   │   ├── lib/core/parser/saf_random_access_source.dart
+│   │   │   ├── lib/core/parser/bookmark_random_access_source.dart
+│   │   │   └── lib/core/parser/mdd_reader.dart
+│   │   │
+│   │   ├── mdd_reader.dart
+│   │   │   ├── dart:typed_data
+│   │   │   └── dict_reader (package)
+│   │   │
+│   │   ├── slob_reader.dart
+│   │   │   ├── slob_reader (package)
+│   │   │   ├── flutter/foundation.dart
+│   │   │   ├── dart:io
+│   │   │   ├── dart:convert
+│   │   │   ├── path (package)
+│   │   │   ├── lib/core/parser/random_access_source.dart
+│   │   │   ├── lib/core/parser/saf_random_access_source.dart
+│   │   │   └── lib/core/parser/bookmark_random_access_source.dart
+│   │   │
+│   │   ├── dictd_reader.dart
+│   │   │   ├── dart:io
+│   │   │   ├── flutter/foundation.dart
+│   │   │   ├── path (package)
+│   │   │   ├── dictd_reader (package)
+│   │   │   ├── lib/core/parser/random_access_source.dart
+│   │   │   ├── lib/core/parser/saf_random_access_source.dart
+│   │   │   └── lib/core/parser/bookmark_random_access_source.dart
+│   │   │
+│   │   ├── random_access_source.dart (standalone - re-exports from dictzip_reader)
+│   │   │
+│   │   ├── bookmark_manager.dart
+│   │   │   ├── flutter/foundation.dart
+│   │   │   ├── flutter/services.dart
+│   │   │   └── dart:io
+│   │   │
+│   │   ├── bookmark_random_access_source.dart
+│   │   │   ├── dart:typed_data
+│   │   │   ├── dart:io
+│   │   │   ├── path (package)
+│   │   │   ├── lib/core/parser/random_access_source.dart
+│   │   │   └── lib/core/parser/bookmark_manager.dart
+│   │   │
+│   │   └── saf_random_access_source.dart
+│   │       ├── dart:async
+│   │       ├── dart:math
+│   │       ├── dart:typed_data
+│   │       ├── saf_stream (package)
+│   │       ├── docman (package)
+│   │       └── lib/core/parser/random_access_source.dart
+│   │
+│   ├── theme/
+│   │   └── app_theme.dart
+│   │       └── flutter/material.dart
+│   │
+│   └── utils/
+│       ├── anchor_id_extension.dart
+│       │   ├── flutter/widgets.dart
+│       │   └── flutter_html (package)
+│       │
+│       ├── benchmark_utils.dart
+│       │   ├── dart:async
+│       │   ├── lib/core/database/database_helper.dart
+│       │   ├── lib/core/manager/dictionary_manager.dart
+│       │   └── lib/core/utils/logger.dart
+│       │
+│       ├── folder_scanner.dart
+│       │   ├── dart:io
+│       │   ├── archive (package)
+│       │   ├── archive_io (package)
+│       │   ├── flutter_7zip (package)
+│       │   ├── path (package)
+│       │   └── lib/core/utils/logger.dart
+│       │
+│       ├── html_lookup_wrapper.dart
+│       │   └── lib/core/utils/logger.dart
+│       │
+│       ├── logger.dart
+│       │   └── flutter/foundation.dart
+│       │
+│       ├── multimedia_processor.dart
+│       │   ├── dart:convert
+│       │   ├── dart:typed_data
+│       │   ├── lib/core/parser/mdict_reader.dart
+│       │   └── lib/core/utils/logger.dart
+│       │
+│       └── word_boundary.dart (standalone - no deps)
+│
+└── lib/features/
+    ├── about/
+    │   └── about_screen.dart
+    │       ├── flutter/material.dart
+    │       ├── flutter/services.dart
+    │       ├── url_launcher (package)
+    │       └── lib/features/home/widgets/app_drawer.dart
+    │
+    ├── flash_cards/
+    │   ├── flash_cards_screen.dart
+    │   │   ├── flutter/material.dart
+    │   │   ├── flutter/rendering.dart
+    │   │   ├── dart:math
+    │   │   ├── flutter_html (package)
+    │   │   ├── provider (package)
+    │   │   ├── lib/core/database/database_helper.dart
+    │   │   ├── lib/core/manager/dictionary_manager.dart
+    │   │   ├── lib/core/utils/html_lookup_wrapper.dart
+    │   │   ├── lib/core/utils/word_boundary.dart
+    │   │   ├── lib/core/utils/logger.dart
+    │   │   ├── lib/features/home/widgets/app_drawer.dart
+    │   │   ├── lib/features/settings/settings_provider.dart
+    │   │   └── lib/features/flash_cards/result_screen.dart
+    │   │
+    │   ├── result_screen.dart (standalone)
+    │   │
+    │   └── score_history_screen.dart
+    │       ├── flutter/material.dart
+    │       ├── intl (package)
+    │       ├── lib/core/database/database_helper.dart
+    │       └── lib/features/home/widgets/app_drawer.dart
+    │
+    ├── help/
+    │   └── manual_screen.dart
+    │       ├── flutter/material.dart
+    │       ├── flutter/services.dart
+    │       ├── flutter_markdown_plus (package)
+    │       └── lib/features/home/widgets/app_drawer.dart
+    │
+    ├── home/
+    │   ├── home_screen.dart
+    │   │   ├── flutter/material.dart
+    │   │   ├── flutter/services.dart
+    │   │   ├── flutter/rendering.dart
+    │   │   ├── flutter/foundation.dart
+    │   │   ├── url_launcher (package)
+    │   │   ├── flutter_html (package)
+    │   │   ├── just_audio (package)
+    │   │   ├── video_player (package)
+    │   │   ├── chewie (package)
+    │   │   ├── in_app_review (package)
+    │   │   ├── provider (package)
+    │   │   ├── path_provider (package)
+    │   │   ├── lib/core/utils/logger.dart
+    │   │   ├── lib/core/database/database_helper.dart
+    │   │   ├── lib/core/manager/dictionary_manager.dart
+    │   │   ├── lib/core/utils/html_lookup_wrapper.dart
+    │   │   ├── lib/core/utils/multimedia_processor.dart
+    │   │   ├── lib/core/utils/anchor_id_extension.dart
+    │   │   ├── lib/core/utils/word_boundary.dart
+    │   │   ├── lib/features/settings/settings_provider.dart
+    │   │   ├── lib/features/home/widgets/app_drawer.dart
+    │   │   └── lib/features/settings/dictionary_management_screen.dart
+    │   │
+    │   └── widgets/
+    │       └── app_drawer.dart
+    │           ├── flutter/material.dart
+    │           ├── lib/features/about/about_screen.dart
+    │           ├── lib/features/flash_cards/flash_cards_screen.dart
+    │           ├── lib/features/flash_cards/score_history_screen.dart
+    │           ├── lib/features/help/manual_screen.dart
+    │           ├── lib/features/home/home_screen.dart
+    │           ├── lib/features/settings/dictionary_management_screen.dart
+    │           ├── lib/features/settings/search_history_screen.dart
+    │           ├── lib/features/settings/settings_screen.dart
+    │           ├── lib/features/support/support_screen.dart
+    │           └── lib/features/settings/dictionary_groups_screen.dart
+    │
+    ├── settings/
+    │   ├── settings_screen.dart
+    │   │   ├── flutter/material.dart
+    │   │   ├── flutter_colorpicker (package)
+    │   │   ├── provider (package)
+    │   │   ├── lib/features/settings/settings_provider.dart
+    │   │   ├── lib/features/home/widgets/app_drawer.dart
+    │   │   └── lib/core/database/database_helper.dart
+    │   │
+    │   ├── settings_provider.dart
+    │   │   ├── flutter/material.dart
+    │   │   └── shared_preferences (package)
+    │   │
+    │   ├── dictionary_management_screen.dart
+    │   │   ├── flutter/material.dart
+    │   │   ├── dart:io
+    │   │   ├── flutter/foundation.dart
+    │   │   ├── file_selector (package)
+    │   │   ├── file_picker (package)
+    │   │   ├── lib/core/manager/dictionary_manager.dart
+    │   │   ├── lib/core/manager/dictionary_group_manager.dart
+    │   │   ├── lib/core/parser/bookmark_manager.dart
+    │   │   ├── lib/features/home/widgets/app_drawer.dart
+    │   │   └── lib/features/settings/widgets/stardict_download_dialog.dart
+    │   │
+    │   ├── dictionary_groups_screen.dart
+    │   │   ├── flutter/material.dart
+    │   │   ├── lib/core/manager/dictionary_manager.dart
+    │   │   ├── lib/core/manager/dictionary_group_manager.dart
+    │   │   └── lib/features/home/widgets/app_drawer.dart
+    │   │
+    │   ├── search_history_screen.dart
+    │   │   ├── flutter/material.dart
+    │   │   ├── intl (package)
+    │   │   ├── lib/core/database/database_helper.dart
+    │   │   └── lib/features/home/widgets/app_drawer.dart
+    │   │
+    │   ├── services/
+    │   │   └── stardict_service.dart
+    │   │       ├── dart:convert
+    │   │       ├── http (package)
+    │   │       ├── lib/core/database/database_helper.dart
+    │   │       ├── lib/core/constants/iso_639_2_languages.dart
+    │   │       └── lib/core/utils/logger.dart
+    │   │
+    │   └── widgets/
+    │       └── stardict_download_dialog.dart
+    │           ├── flutter/material.dart
+    │           ├── lib/core/constants/iso_639_2_languages.dart
+    │           └── lib/features/settings/services/stardict_service.dart
+    │
+    └── support/
+        └── support_screen.dart
+            ├── flutter/material.dart
+            ├── flutter/services.dart
+            ├── url_launcher (package)
+            └── lib/features/home/widgets/app_drawer.dart
+```
+
+---
+
+## Function-Level Dependencies
+
+```
+HomeScreen._performSearch
+├── DatabaseHelper.searchWords
+│   ├── DatabaseHelper._ensureDictionaryMapCache
+│   └── sqflite FTS5 queries
+├── DictionaryManager.fetchDefinitionsBatch
+│   ├── DictionaryManager._getReader
+│   │   ├── MdictReader.fromPath / .fromLinkedSource / .fromUri
+│   │   ├── SlobReader.fromPath / .fromLinkedSource / .fromUri
+│   │   ├── DictReader.fromPath / .fromLinkedSource / .fromUri
+│   │   └── DictdReader.fromPath / .fromLinkedSource / .fromUri
+│   └── DictReader/MdictReader/SlobReader/DictdReader.readAtIndex/readBulk
+├── HomeScreen.consolidateDefinitions
+│   └── DatabaseHelper.getDictionaryById
+└── HtmlLookupWrapper.processRecord
+
+DictionaryManager.importDictionaryStream
+├── _extractToWorkspace
+│   └── _extractToWorkspaceSync
+│       └── GZipDecoder / BZip2Decoder / XZDecoder / SZArchive.extract
+├── scanFolderForDictionaries
+│   └── FolderScanner._extractArchiveToDir
+└── _processDictionaryFiles
+    ├── IfoParser
+    ├── IdxParser
+    ├── SynParser
+    └── DatabaseHelper.batchInsertWords
+        └── DatabaseHelper.startBatchInsert / .endBatchInsert
+
+DictionaryManager.fetchDefinition
+├── DictionaryManager._getReader
+│   ├── MdictReader (for .mdx)
+│   │   └── MddReader (for .mdd multimedia)
+│   ├── SlobReader (for .slob)
+│   ├── DictReader (for StarDict .dict)
+│   └── DictdReader (for DICTD)
+└── DictionaryManager._definitionCache (LRU)
+
+DatabaseHelper.searchWords
+├── DatabaseHelper._ensureDictionaryMapCache
+├── sqflite database queries (FTS5 or fallback)
+└── DatabaseHelper._queryCache (LRU)
+
+HtmlLookupWrapper.processRecord
+└── logger.hDebugPrint (showHtmlProcessing check)
+
+MultimediaProcessor.processHtmlWithMedia
+├── MddReader.getMddResourceBytes
+├── MultimediaProcessor._replaceImgSrcWithDataUris
+└── MultimediaProcessor._addMediaTapHandlers
+    └── MultimediaProcessor.injectCss
+
+FlashCardsScreen._startQuiz
+├── DatabaseHelper.getBatchSampleWords
+│   ├── DatabaseHelper._ensureDictionaryMapCache
+│   └── Random.sample
+└── DictionaryManager.instance.fetchDefinition
+
+StardictService.refreshDictionaries
+├── http.get (package)
+├── DatabaseHelper.insertFreedictDictionaries
+└── StardictDictionary.fromTsvRow
+
+DictionaryGroupManager.autoGenerateGroupsFromDownloaded
+├── StardictService.fetchDictionaries
+│   └── DatabaseHelper.getFreedictDictionaries
+└── StardictService.refreshDictionaries
+```
+
+---
+
+## Private Function-Level Dependencies
+
+```
+DictionaryManager._getReader
+├── MdictReader._openMdict
+│   ├── IfoParser.parseContent / .parseSource
+│   └── MddReader._openMdd
+├── SlobReader._openSlob
+│   └── SlobReader.blobs
+├── DictReader._openDict
+│   ├── IfoParser.parseContent / .parseSource
+│   ├── IdxParser (for .idx)
+│   └── SynParser (for .syn)
+└── DictdReader._connect
+
+DictionaryManager._extractToWorkspace
+├── GZipDecoder (dart:io)
+├── BZip2Decoder (archive)
+├── XZDecoder (archive)
+├── SZArchive.extract (flutter_7zip)
+└── FolderScanner._extractArchiveToDir
+
+DatabaseHelper._ensureDictionaryMapCache
+├── DatabaseHelper.database
+└── sqflite queries
+
+HtmlLookupWrapper._tagRegExp (private regex)
+└── logger.hDebugPrint (showHtmlProcessing check)
+
+MultimediaProcessor._replaceImgSrcWithDataUris
+├── MddReader.getMddResourceBytes
+└── MultimediaProcessor._base64EncodeImage
+
+MultimediaProcessor._addMediaTapHandlers
+├── MddReader.getCssContent
+└── MultimediaProcessor._createMediaWidget
+
+StardictService._fetchDictionariesFromUrl
+├── http.get (package)
+└── StardictDictionary.fromTsvRow
+
+DictionaryGroupManager._saveGroups
+└── SharedPreferences
+```
+
+---
+
 *Last updated: March 2026*
