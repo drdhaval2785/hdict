@@ -1743,7 +1743,7 @@ class DatabaseHelper {
 
     const batchSize = 50000;
     for (int i = 0; i < words.length; i += batchSize) {
-      final end = (i + batchSize < words.length) ? words.length : i + batchSize;
+      final end = min(i + batchSize, words.length);
       final batch = words.sublist(i, end);
 
       final idxBatch = db.batch();
