@@ -1,52 +1,87 @@
 # API Reference (version 1.5.11)
 
-This document lists all public and private classes, functions, and methods in the HDict codebase. Each entry includes the file location, description, parameters, return types, and usage examples where applicable.
+This document lists all classes, functions, and methods in the HDict codebase. Each entry includes the file location, description, parameters, return types, and usage examples where applicable.
+
+For each class, public members are listed first followed by private members.
 
 ---
 
 ## Table of Contents
 
-1. [Public API](#public-api)
-   - [Core Services](#core-services)
-   - [Dictionary Readers](#dictionary-readers)
-   - [Models](#models)
-   - [Providers](#providers)
-   - [Main App](#main-app)
-   - [Screens](#screens)
-   - [Utils](#utils)
-2. [Private API](#private-api)
-   - [Settings](#settings)
-   - [Home Screen](#home-screen)
-   - [Dictionary Management](#dictionary-management)
-   - [Flash Cards](#flash-cards)
-   - [Search History](#search-history)
-   - [Score History](#score-history)
-   - [Bookmark Management](#bookmark-management)
-   - [Media Players](#media-players)
-   - [Video Widgets](#video-widgets)
-   - [Helper Classes](#helper-classes)
+### Core Services
+1. [`lib/core/utils/word_boundary.dart`](#libcoreutilsword_boundary-dart)
+2. [`lib/core/utils/html_lookup_wrapper.dart`](#libcoreutilshtml_lookup_wrapper-dart)
+3. [`lib/core/utils/multimedia_processor.dart`](#libcoreutilsmultimedia_processor-dart)
+4. [`lib/core/utils/logger.dart`](#libcoreutilslogger-dart)
+5. [`lib/core/utils/anchor_id_extension.dart`](#libcoreutilsanchor_id_extension-dart)
+6. [`lib/core/utils/folder_scanner.dart`](#libcoreutilsfolder_scanner-dart)
+7. [`lib/core/utils/debouncer.dart`](#libcoreutilsdebouncer-dart)
+
+### Dictionary Readers
+1. [`lib/core/parser/dict_reader.dart`](#libcoreparserdict_reader-dart)
+2. [`lib/core/parser/mdict_reader.dart`](#libcoreparsermdict_reader-dart)
+3. [`lib/core/parser/mdd_reader.dart`](#libcoreparsermdd_reader-dart)
+4. [`lib/core/parser/slob_reader.dart`](#libcoreparserslob_reader-dart)
+5. [`lib/core/parser/dictd_reader.dart`](#libcoreparsersdictd_reader-dart)
+6. [`lib/core/parser/ifo_parser.dart`](#libcoreparserifo_parser-dart)
+7. [`lib/core/parser/idx_parser.dart`](#libcoreparseridx_parser-dart)
+8. [`lib/core/parser/syn_parser.dart`](#libcoreparsersyn_parser-dart)
+
+### Database
+1. [`lib/core/database/database_helper.dart`](#libcoredatabasedatabase_helper-dart)
+
+### Managers
+1. [`lib/core/manager/dictionary_manager.dart`](#libcoremanagerdictionary_manager-dart)
+2. [`lib/core/manager/dictionary_group_manager.dart`](#libcoremanagerdictionary_group_manager-dart)
+
+### Models
+1. [`lib/core/models/stardict_dictionary.dart`](#libcoremodelsstardict_dictionary-dart)
+2. [`lib/core/models/stardict_release.dart`](#libcoremodelsstardict_release-dart)
+3. [`lib/core/models/discovered_dict.dart`](#libcoremodelsdiscovered_dict-dart)
+4. [`lib/core/models/incomplete_dict.dart`](#libcoremodelsincomplete_dict-dart)
+5. [`lib/core/models/dictionary_group.dart`](#libcoremodelsdictionary_group-dart)
+6. [`lib/core/models/deletion_progress.dart`](#libcoremodelsdeletion_progress-dart)
+7. [`lib/core/models/import_progress.dart`](#libcoremodelsimport_progress-dart)
+8. [`lib/core/models/folder_scan_result.dart`](#libcoremodelsfolder_scan_result-dart)
+
+### Providers
+1. [`lib/features/settings/settings_provider.dart`](#libfeaturessettingssettings_provider-dart)
+2. [`lib/core/benchmark.dart`](#libcorebenchmark-dart)
+3. [`lib/core/hperf.dart`](#libcorehperf-dart)
+
+### Services
+1. [`lib/features/settings/services/stardict_service.dart`](#libfeaturessettingsservicesstardict_service-dart)
+
+### Main App
+1. [`lib/main.dart`](#libmain-dart)
+2. [`lib/core/theme/app_theme.dart`](#libcorethemeapp_theme-dart)
+
+### Screens
+1. [`lib/features/home/home_screen.dart`](#libfeatureshomehome_screen-dart)
+2. [`lib/features/settings/settings_screen.dart`](#libfeaturessettingssettings_screen-dart)
+3. [`lib/features/bookmarks/bookmarks_screen.dart`](#libfeaturesbookmarksbookmarks_screen-dart)
+4. [`lib/features/flash_cards/flash_cards_screen.dart`](#libfeaturesflash_cardsflash_cards_screen-dart)
+5. [`lib/features/dictionary_management/dictionary_management_screen.dart`](#libfeaturesdictionary_managementdictionary_management_screen-dart)
+6. [`lib/features/dictionary_groups/dictionary_groups_screen.dart`](#libfeaturesdictionary_groupsdictionary_groups_screen-dart)
+7. [`lib/features/search_history/search_history_screen.dart`](#libfeaturessearch_historysearch_history_screen-dart)
+8. [`lib/features/score_history/score_history_screen.dart`](#libfeaturesscore_historyscore_history_screen-dart)
+9. [`lib/features/about/about_screen.dart`](#libfeaturesaboutabout_screen-dart)
+10. [`lib/features/help/manual_screen.dart`](#libfeatureshelphelp_manual-dart)
+11. [`lib/features/support/support_screen.dart`](#libfeaturessupportsupport_screen-dart)
+12. [`lib/features/home/widgets/app_drawer.dart`](#libfeatureshomewidgetsapp_drawer-dart)
+
+### Bookmarks
+1. [`lib/core/bookmark_manager.dart`](#libcorebookmark_manager-dart)
 
 ---
 
-# Public API
-
-## Table of Contents
-
-1. [Core Services](#core-services)
-2. [Dictionary Readers](#dictionary-readers)
-3. [Models](#models)
-4. [Providers](#providers)
-5. [Main App](#main-app)
-6. [Screens](#screens)
-7. [Utils](#utils)
+# Core Services
 
 ---
 
-## Core Services
+## `lib/core/utils/word_boundary.dart` {#libcoreutilsword_boundary-dart}
 
-### 1. `lib/core/utils/word_boundary.dart`
-
-#### Class: `WordBoundary`
+### Class: `WordBoundary`
 
 A utility to find word boundaries in text based on Unicode character properties.
 
@@ -68,9 +103,9 @@ final word = WordBoundary.wordAt("Hello world", 6); // Returns "world"
 
 ---
 
-### 2. `lib/core/utils/html_lookup_wrapper.dart`
+## `lib/core/utils/html_lookup_wrapper.dart` {#libcoreutilshtml_lookup_wrapper-dart}
 
-#### Class: `HtmlLookupWrapper`
+### Class: `HtmlLookupWrapper`
 
 A utility to process dictionary record HTML. Combines whitespace normalization, highlighting, and underlining.
 
@@ -124,9 +159,9 @@ Process record for underlining.
 
 ---
 
-### 3. `lib/core/utils/multimedia_processor.dart`
+## `lib/core/utils/multimedia_processor.dart` {#libcoreutilsmultimedia_processor-dart}
 
-#### Class: `MultimediaProcessor`
+### Class: `MultimediaProcessor`
 
 Processes HTML to embed multimedia content (audio, video, images) from MDD resources.
 
@@ -201,9 +236,9 @@ Retrieves video resource bytes from the MDD reader.
 
 ---
 
-### 4. `lib/core/utils/logger.dart`
+## `lib/core/utils/logger.dart` {#libcoreutilslogger-dart}
 
-#### Global Variables
+### Global Variables
 
 | Variable | Type | Description |
 |----------|------|-------------|
@@ -212,7 +247,7 @@ Retrieves video resource bytes from the MDD reader.
 | `showMultimediaProcessing` | `bool` | Enable multimedia processing logs (images, audio, video) |
 | `showSorting` | `bool` | Enable sorting debug logs |
 
-#### Function: `hDebugPrint`
+##### Function: `hDebugPrint`
 
 A wrapper around `debugPrint` that checks the `enableDebugLogs` flag and adds timestamps.
 
@@ -225,112 +260,312 @@ void hDebugPrint(String? message, {int? wrapWidth})
 | `message` | `String?` | The message to print |
 | `wrapWidth` | `int?` | Optional wrap width for output |
 
-**Returns:** `void` - Only prints if `enableDebugLogs` is true.
+### Class: `HPerf`
+
+Lightweight call-count + timing profiler, active only in debug mode.
+
+##### Static Method: `start`
+
+Returns a started `Stopwatch` - call `end` with the same `name` when done. Returns null (no-op) in release mode.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | `String` | Operation name for grouping |
+
+**Returns:** `Stopwatch?` - A started stopwatch, or null in release mode.
+
+```dart
+final t = HPerf.start('fetchDef[stardict]');
+// ... do work ...
+HPerf.end(t, 'fetchDef[stardict]');
+```
+
+##### Static Method: `end`
+
+Records the elapsed time from `sw` under `name`. Safe to call with a null `sw` (produced by `start` in release mode).
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `sw` | `Stopwatch?` | The stopwatch from `start` |
+| `name` | `String` | Operation name |
+
+##### Static Method: `record`
+
+One-liner shortcut: records a known `ms` value under `name`.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | `String` | Operation name |
+| `ms` | `int` | Duration in milliseconds |
+
+##### Static Method: `recordUs`
+
+Records a known `us` value under `name`.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | `String` | Operation name |
+| `us` | `int` | Duration in microseconds |
+
+##### Static Method: `dump`
+
+Dumps a formatted summary of all recorded operations to the debug log.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `prefix` | `String` | Prefix for output (default: '--- PERF') |
+
+##### Static Method: `reset`
+
+Clears all accumulated samples.
 
 ---
 
-### 5. `lib/core/utils/anchor_id_extension.dart`
+## `lib/core/utils/benchmark_utils.dart` {#libcoreutilsbenchmark_utils-dart}
 
-#### Class: `AnchorIdExtension`
+### Class: `HBenchmark`
 
-Custom HtmlExtension for flutter_html that registers AnchorKey for elements with id attributes. Enables bidirectional navigation between cross-references and footnotes.
+Utility for measuring and reporting dictionary lookup performance.
 
-##### Constructor
+##### Static Method: `runLookupBenchmark`
 
-```dart
-const AnchorIdExtension()
-```
-
-This extension automatically wraps all HTML elements with an `id` attribute in a GestureDetector with an AnchorKey, enabling `flutter_html`'s built-in anchor scrolling to work bidirectionally.
-
-##### Method: `matches`
-
-Determines if this extension should process the given element.
+Runs a comprehensive benchmark of dictionary lookups.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `context` | `ExtensionContext` | The extension context |
+| `wordsPerDict` | `int` | Number of words to lookup per dictionary (default: 20) |
 
-**Returns:** `bool` - True if the element has a non-empty id and is in the building step.
+**Returns:** `Future<String>` - A formatted benchmark report.
+
+The benchmark:
+1. Finds the first 3 enabled dictionaries
+2. Fetches 20 random words from each
+3. Performs lookups and reports timings via `HPerf`
 
 ---
 
-### 6. `lib/core/utils/folder_scanner.dart`
+## `lib/core/utils/anchor_id_extension.dart` {#libcoreutilsanchor_id_extension-dart}
 
-#### Class: `DiscoveredDict`
+### Class: `AnchorIdExtension`
 
-A validated, importable dictionary found during folder scanning.
+Provides extension methods for handling HTML anchor IDs and links.
 
-##### Fields
+##### Static Property: `supportedTags`
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `path` | `String` | Path to the primary anchor file |
-| `format` | `String` | Format: 'stardict', 'mdict', 'slob', or 'dictd' |
-| `companionPath` | `String?` | For DICTD: path to companion .dict file |
-| `parentFolderName` | `String?` | Name of immediate parent folder |
-| `safUris` | `Map<String, String>?` | Mapped URIs for SAF files |
+```dart
+static const Set<String> get supportedTags
+```
+
+Returns the set of HTML tags that support anchor IDs.
+
+##### Static Method: `extractAnchorId`
+
+Extracts the anchor ID from an HTML element.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `element` | `Element` | The HTML element |
+| `tagName` | `String` | The tag name |
+
+**Returns:** `String?` - The anchor ID or null if not found.
+
+##### Static Method: `toHtmlAnchor`
+
+Converts an element to an anchor tag.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `element` | `Element` | The HTML element |
+
+**Returns:** `AnchorElement` - The converted anchor element.
+
+---
+
+## `lib/core/utils/folder_scanner.dart` {#libcoreutilsfolder_scanner-dart}
+
+### Class: `DiscoveredDict`
+
+Represents a dictionary discovered during folder scanning.
 
 ##### Constructor
 
 ```dart
-const DiscoveredDict({required String path, required String format, String? companionPath, String? parentFolderName, Map<String, String>? safUris})
+DiscoveredDict({
+  required this.path,
+  required this.name,
+  required this.format,
+  this.mddPath,
+})
 ```
-
-##### Static Method: `fromMap`
-
-Creates a DiscoveredDict from a Map.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `map` | `Map<String, dynamic>` | Map to convert |
+| `path` | `String` | Path to the dictionary |
+| `name` | `String` | Dictionary name |
+| `format` | `String` | Dictionary format |
+| `mddPath` | `String?` | Optional path to MDD file |
 
-**Returns:** `DiscoveredDict`
+##### Property: `path`
 
-##### Method: `toMap`
+```dart
+final String path
+```
 
-Converts the instance to a Map.
+The path to the dictionary.
 
-**Returns:** `Map<String, dynamic>`
+##### Property: `name`
 
-#### Class: `IncompleteDict`
+```dart
+final String name
+```
 
-A dictionary entry whose mandatory files are missing.
+The dictionary name.
 
-##### Fields
+##### Property: `format`
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | `String` | Stem name used as display name |
-| `format` | `String` | Format identifier |
-| `missingFiles` | `List<String>` | List of missing mandatory files |
-| `parentFolderName` | `String?` | Name of immediate parent folder |
+```dart
+final String format
+```
+
+The dictionary format (stardict, mdict, etc.).
+
+##### Property: `mddPath`
+
+```dart
+final String? mddPath
+```
+
+Optional path to MDD file for multimedia resources.
+
+##### Method: `toJson`
+
+Converts to JSON representation.
+
+**Returns:** `Map<String, dynamic>` - JSON representation.
+
+##### Method: `toString`
+
+Returns a string representation.
+
+**Returns:** `String`
+
+---
+
+### Class: `IncompleteDict`
+
+Represents an incomplete or corrupted dictionary discovered during scanning.
 
 ##### Constructor
 
 ```dart
-const IncompleteDict({required String name, required String format, required List<String> missingFiles, String? parentFolderName})
+IncompleteDict({
+  required this.path,
+  required this.reason,
+  this.fileSize,
+})
 ```
-
-##### Method: `toMap`
-
-Converts the instance to a Map.
-
-**Returns:** `Map<String, dynamic>`
-
-##### Static Method: `fromMap`
-
-Creates an IncompleteDict from a Map.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `map` | `Map<String, dynamic>` | Map to convert |
+| `path` | `String` | Path to the incomplete dictionary |
+| `reason` | `String` | Reason why the dictionary is incomplete |
+| `fileSize` | `int?` | Optional file size |
 
-**Returns:** `IncompleteDict`
+##### Property: `path`
 
-#### Function: `scanFolderForDictionaries`
+```dart
+final String path
+```
 
-Recursively scans a directory for supported dictionary formats. Archives found are extracted into temporary sub-directories before scanning.
+The path to the incomplete dictionary.
+
+##### Property: `reason`
+
+```dart
+final String reason
+```
+
+The reason why the dictionary is incomplete.
+
+##### Property: `fileSize`
+
+```dart
+final int? fileSize
+```
+
+Optional file size in bytes.
+
+---
+
+### Class: `FolderScanResult`
+
+Result of a folder scan operation.
+
+##### Constructor
+
+```dart
+FolderScanResult({
+  required this.dictionaries,
+  required this.incomplete,
+  this.errors,
+})
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dictionaries` | `List<DiscoveredDict>` | List of discovered dictionaries |
+| `incomplete` | `List<IncompleteDict>` | List of incomplete dictionaries |
+| `errors` | `List<String>?` | Optional list of errors encountered |
+
+##### Property: `dictionaries`
+
+```dart
+final List<DiscoveredDict> dictionaries
+```
+
+The list of discovered dictionaries.
+
+##### Property: `incomplete`
+
+```dart
+final List<IncompleteDict> incomplete
+```
+
+The list of incomplete dictionaries.
+
+##### Property: `errors`
+
+```dart
+final List<String>? errors
+```
+
+Optional list of errors encountered during scanning.
+
+##### Method: `totalCount`
+
+Returns the total number of dictionaries (complete + incomplete).
+
+**Returns:** `int`
+
+##### Method: `isEmpty`
+
+Returns true if no dictionaries were found.
+
+**Returns:** `bool`
+
+##### Method: `toJson`
+
+Converts to JSON representation.
+
+**Returns:** `Map<String, dynamic>` - JSON representation.
+
+---
+
+### Functions
+
+##### Function: `scanFolderForDictionaries`
+
+Scans a directory for dictionary files.
 
 ```dart
 Future<FolderScanResult> scanFolderForDictionaries(String directoryPath, {bool extractArchives = true})
@@ -338,18 +573,136 @@ Future<FolderScanResult> scanFolderForDictionaries(String directoryPath, {bool e
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `directoryPath` | `String` | Path to the directory to scan |
-| `extractArchives` | `bool` | Whether to extract archives (default: true) |
+| `directoryPath` | `String` | The directory path to scan |
+| `extractArchives` | `bool` | Whether to extract archive files (default: true) |
 
-**Returns:** `Future<FolderScanResult>` - Contains discovered dictionaries, incomplete ones, and found archives.
+**Returns:** `Future<FolderScanResult>` - The scan result containing discovered dictionaries.
 
 ---
 
-## Dictionary Readers
+## `lib/core/utils/debouncer.dart` {#libcoreutilsdebouncer-dart}
 
-### 1. `lib/core/parser/dict_reader.dart`
+### Class: `Debouncer`
 
-#### Class: `DictReader`
+A utility to debounce function calls.
+
+##### Constructor
+
+```dart
+Debouncer({required Duration delay})
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `delay` | `Duration` | The delay before executing the callback |
+
+##### Field: `milliseconds`
+
+```dart
+final int milliseconds
+```
+
+The delay duration in milliseconds before executing the callback.
+
+##### Property: `isActive`
+
+```dart
+bool get isActive
+```
+
+Returns true if the debouncer is currently active (has a pending callback).
+
+##### Method: `run`
+
+Runs the callback after the delay, canceling any previous pending callback.
+
+```dart
+void run(void Function() callback)
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `callback` | `void Function()` | The callback to run |
+
+##### Method: `cancel`
+
+Cancels any pending callback.
+
+```dart
+void cancel()
+```
+
+##### Method: `dispose`
+
+Disposes the debouncer and cancels any pending callbacks.
+
+```dart
+void dispose()
+```
+
+---
+
+## `lib/core/utils/folder_scanner.dart` {#libcoreutilsfolder_scanner-dart}
+
+### Private Functions
+
+##### `_isArchive`
+
+```dart
+bool _isArchive(String lowerPath)
+```
+
+Checks if the given path (in lowercase) is a supported archive format.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `lowerPath` | `String` | Lowercase path to check |
+
+**Returns:** `bool` - True if the path ends with a supported archive extension (.zip, .tar.gz, .tgz, .tar, .tar.bz2, .tbz2, .tar.xz, .txz, .7z).
+
+##### `_extractArchiveToDir`
+
+```dart
+Future<void> _extractArchiveToDir(String filePath, String destDir)
+```
+
+Extracts an archive file into the specified destination directory.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `filePath` | `String` | Path to the archive file |
+| `destDir` | `String` | Destination directory for extraction |
+
+**Returns:** `Future<void>`
+
+Supports: `.zip`, `.tar.gz`, `.tgz`, `.tar`, `.tar.bz2`, `.tbz2`, `.tar.xz`, `.txz`, `.7z`.
+
+##### `_findFile`
+
+```dart
+String? _findFile(String base, List<String> suffixes)
+```
+
+Finds a file with any of the given suffixes.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `base` | `String` | Base path |
+| `suffixes` | `List<String>` | List of possible suffixes |
+
+**Returns:** `String?` - The matching file path or null if not found.
+
+---
+
+*Last updated: March 2026*
+
+# Dictionary Readers
+
+---
+
+## `lib/core/parser/dict_reader.dart` {#libcoreparserdict_reader-dart}
+
+### Class: `DictReader`
 
 Reads definitions from a StarDict .dict or .dict.dz file at specified offsets and lengths.
 
@@ -489,9 +842,9 @@ Reads the definition at the given offset and length. Automatically opens the rea
 
 ---
 
-### 2. `lib/core/parser/mdict_reader.dart`
+## `lib/core/parser/mdict_reader.dart` {#libcoreparsermdict_reader-dart}
 
-#### Enum: `MdictSourceType`
+### Enum: `MdictSourceType`
 
 Specifies the source type for MDict dictionary files.
 
@@ -501,7 +854,7 @@ Specifies the source type for MDict dictionary files.
 | `saf` | Storage Access Framework source |
 | `bookmark` | Bookmark-based source |
 
-#### Enum: `SearchMode`
+### Enum: `SearchMode`
 
 Specifies the search mode for dictionary lookups.
 
@@ -530,7 +883,7 @@ Creates a SearchMode from a string value.
 
 **Returns:** `SearchMode` - The matching mode, or `prefix` if not found.
 
-#### Enum: `AppThemeMode`
+### Enum: `AppThemeMode`
 
 Specifies the app theme mode.
 
@@ -558,7 +911,7 @@ Creates an AppThemeMode from a string value.
 
 **Returns:** `AppThemeMode` - The matching mode, or `custom` if not found.
 
-#### Class: `MdictReader`
+### Class: `MdictReader`
 
 Reads MDict dictionary files (.mdx, .mdd).
 
@@ -710,9 +1063,9 @@ Returns the path to the MDX file.
 
 ---
 
-### 2. `lib/core/parser/mdd_reader.dart`
+## `lib/core/parser/mdd_reader.dart` {#libcoreparsermdd_reader-dart}
 
-#### Class: `MddReader`
+### Class: `MddReader`
 
 Reads MDict multimedia files (.mdd).
 
@@ -791,11 +1144,21 @@ bool get isInitialized
 
 Returns whether the reader is initialized.
 
+##### Private Static Fields
+
+###### `_maxCacheEntries`
+
+```dart
+static const int _maxCacheEntries = 100;
+```
+
+Maximum number of resource cache entries.
+
 ---
 
-### 3. `lib/core/parser/slob_reader.dart`
+## `lib/core/parser/slob_reader.dart` {#libcoreparserslob_reader-dart}
 
-#### Class: `SlobReader`
+### Class: `SlobReader`
 
 Reads SLOB (Sorted List of Blobs) dictionary files.
 
@@ -965,9 +1328,9 @@ Fetches multiple blobs starting at a given index in a single batched call. Uses 
 
 ---
 
-### 4. `lib/core/parser/dictd_reader.dart`
+## `lib/core/parser/dictd_reader.dart` {#libcoreparsersdictd_reader-dart}
 
-#### Class: `DictdReader`
+### Class: `DictdReader`
 
 Reads Dictd dictionary files.
 
@@ -1058,9 +1421,9 @@ Reads multiple dictionary entries in batch, sorted by offset for optimal disk se
 
 ---
 
-### 5. `lib/core/parser/ifo_parser.dart`
+## `lib/core/parser/ifo_parser.dart` {#libcoreparserifo_parser-dart}
 
-#### Class: `IfoParser`
+### Class: `IfoParser`
 
 Parses StarDict .ifo files (metadata/information).
 
@@ -1089,8 +1452,6 @@ Map<String, String> get metadata
 
 Returns all parsed metadata as a key-value map. This includes all fields defined in the IFO file such as version, bookName, wordCount, etc.
 
----
-
 ##### Method: `parse`
 
 Parses an IFO file.
@@ -1117,9 +1478,9 @@ Parses from content string.
 
 ---
 
-### 6. `lib/core/parser/idx_parser.dart`
+## `lib/core/parser/idx_parser.dart` {#libcoreparseridx_parser-dart}
 
-#### Class: `IdxParser`
+### Class: `IdxParser`
 
 Parses StarDict .idx files.
 
@@ -1151,9 +1512,9 @@ Parses from raw bytes.
 
 ---
 
-### 7. `lib/core/parser/syn_parser.dart`
+## `lib/core/parser/syn_parser.dart` {#libcoreparsersyn_parser-dart}
 
-#### Class: `SynParser`
+### Class: `SynParser`
 
 Parses StarDict .syn files.
 
@@ -1179,11 +1540,15 @@ Parses a SYN file from raw bytes.
 
 ---
 
-## Models
+*Last updated: March 2026*
 
-### 1. `lib/core/models/stardict_dictionary.dart`
+# Models
 
-#### Class: `StardictDictionary`
+---
+
+## `lib/core/models/stardict_dictionary.dart` {#libcoremodelsstardict_dictionary-dart}
+
+### Class: `StardictDictionary`
 
 Represents a StarDict dictionary available for download.
 
@@ -1242,9 +1607,9 @@ Converts the dictionary to a database row.
 
 ---
 
-### 2. `lib/core/models/stardict_release.dart`
+## `lib/core/models/stardict_release.dart` {#libcoremodelsstardict_release-dart}
 
-#### Class: `StardictRelease`
+### Class: `StardictRelease`
 
 Represents a StarDict dictionary release.
 
@@ -1276,9 +1641,9 @@ Creates a StardictRelease from a TSV row.
 
 ---
 
-### 3. `lib/core/models/discovered_dict.dart`
+## `lib/core/models/discovered_dict.dart` {#libcoremodelsdiscovered_dict-dart}
 
-#### Class: `DiscoveredDict`
+### Class: `DiscoveredDict`
 
 Represents a dictionary discovered during scanning.
 
@@ -1316,9 +1681,9 @@ Converts the instance to a Map.
 
 ---
 
-### 4. `lib/core/models/incomplete_dict.dart`
+## `lib/core/models/incomplete_dict.dart` {#libcoremodelsincomplete_dict-dart}
 
-#### Class: `IncompleteDict`
+### Class: `IncompleteDict`
 
 Represents an incomplete or corrupted dictionary.
 
@@ -1355,9 +1720,9 @@ Converts the instance to a Map.
 
 ---
 
-### 5. `lib/core/models/dictionary_group.dart`
+## `lib/core/models/dictionary_group.dart` {#libcoremodelsdictionary_group-dart}
 
-#### Class: `DictionaryGroup`
+### Class: `DictionaryGroup`
 
 Represents a group of dictionaries.
 
@@ -1393,9 +1758,9 @@ Creates a DictionaryGroup from a JSON Map.
 
 ---
 
-### 6. `lib/core/models/deletion_progress.dart`
+## `lib/core/models/deletion_progress.dart` {#libcoremodelsdeletion_progress-dart}
 
-#### Class: `DeletionProgress`
+### Class: `DeletionProgress`
 
 Represents the progress of dictionary deletion.
 
@@ -1439,9 +1804,9 @@ Error message if any.
 
 ---
 
-### 7. `lib/core/models/import_progress.dart`
+## `lib/core/models/import_progress.dart` {#libcoremodelsimport_progress-dart}
 
-#### Class: `ImportProgress`
+### Class: `ImportProgress`
 
 Represents the progress of dictionary import.
 
@@ -1597,9 +1962,9 @@ Creates a copy with modified fields.
 
 ---
 
-### 8. `lib/core/models/folder_scan_result.dart`
+## `lib/core/models/folder_scan_result.dart` {#libcoremodelsfolder_scan_result-dart}
 
-#### Class: `FolderScanResult`
+### Class: `FolderScanResult`
 
 Represents the result of scanning a folder for dictionaries.
 
@@ -1635,31 +2000,74 @@ Converts the instance to a Map.
 
 ---
 
-## Providers
+# Providers
 
-### 1. `lib/features/settings/settings_provider.dart`
+---
 
-#### Class: `SettingsProvider`
+## `lib/features/settings/settings_provider.dart` {#libfeaturessettingssettings_provider-dart}
+
+### Enum: `SearchMode`
+
+Specifies the search mode for dictionary lookups.
+
+| Value | Description |
+|-------|-------------|
+| `prefix` | Prefix matching (default) |
+| `suffix` | Suffix matching |
+| `substring` | Substring matching |
+| `exact` | Exact match |
+
+##### Field: `label`
+
+```dart
+final String label
+```
+
+Human-readable label for the search mode.
+
+##### Static Method: `fromString`
+
+Creates a SearchMode from a string value.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `value` | `String` | String representation of the mode |
+
+**Returns:** `SearchMode` - The matching mode, or `prefix` if not found.
+
+### Enum: `AppThemeMode`
+
+Specifies the app theme mode.
+
+| Value | Description |
+|-------|-------------|
+| `light` | Light theme |
+| `dark` | Dark theme |
+| `custom` | Custom theme with user-defined colors |
+
+##### Field: `label`
+
+```dart
+final String label
+```
+
+Human-readable label for the theme mode.
+
+##### Static Method: `fromString`
+
+Creates an AppThemeMode from a string value.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `value` | `String` | String representation of the mode |
+
+**Returns:** `AppThemeMode` - The matching mode, or `custom` if not found.
+
+### Class: `SettingsProvider`
 
 Manages application settings using SharedPreferences.
 
-##### Property: `isShowSearchSuggestionsEnabled`
-
-```dart
-bool get isShowSearchSuggestionsEnabled
-```
-
-Whether search suggestions (autocomplete) are enabled. Default: `true`.
-
-##### Property: `isSearchAsYouTypeEnabled`
-
-```dart
-bool get isSearchAsYouTypeEnabled
-```
-
-Whether "Search As You Type" in definitions is enabled. Default: `true`.
-
-##### Properties
+##### Properties (Public)
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -1685,6 +2093,10 @@ Whether "Search As You Type" in definitions is enabled. Default: `true`.
 | `hasGivenReview` | `bool` | Whether user has given a review |
 | `reviewPromptedThisSession` | `bool` | Whether review was prompted in current session |
 | `isListModeEnabled` | `bool` | Whether list view mode is enabled |
+| `isShowSearchSuggestionsEnabled` | `bool` | Whether search suggestions are enabled |
+| `isSearchAsYouTypeEnabled` | `bool` | Whether "Search As You Type" is enabled |
+
+##### Methods (Public)
 
 ##### Method: `getEffectiveBackgroundColor`
 
@@ -1946,92 +2358,212 @@ Sets whether list view mode is enabled.
 
 **Returns:** `Future<void>`
 
+##### Private Static Fields
+
+###### `_keyHeadwordColor`
+
+```dart
+static const String _keyHeadwordColor = 'headword_color';
+```
+
+Key for storing headword color preference.
+
+###### `_keyTextColor`
+
+```dart
+static const String _keyTextColor = 'text_color';
+```
+
+Key for storing text color preference.
+
+###### `_keyBackgroundColor`
+
+```dart
+static const String _keyBackgroundColor = 'background_color';
+```
+
+Key for storing background color preference.
+
+###### `_keyFontSize`
+
+```dart
+static const String _keyFontSize = 'font_size';
+```
+
+Key for storing font size preference.
+
+###### `_keyThemeMode`
+
+```dart
+static const String _keyThemeMode = 'theme_mode';
+```
+
+Key for storing theme mode preference.
+
+###### `_keyHeadwordSearchMode`
+
+```dart
+static const String _keyHeadwordSearchMode = 'headword_search_mode';
+```
+
+Key for storing headword search mode preference.
+
+###### `_keyTapOnMeaningEnabled`
+
+```dart
+static const String _keyTapOnMeaningEnabled = 'tap_on_meaning_enabled';
+```
+
+Key for storing tap on meaning setting.
+
+###### `_keyOpenPopupOnTap`
+
+```dart
+static const String _keyOpenPopupOnTap = 'open_popup_on_tap';
+```
+
+Key for storing open popup on tap setting.
+
+###### `_keyReviewPromptCount`
+
+```dart
+static const String _keyReviewPromptCount = 'review_prompt_count';
+```
+
+Key for storing review prompt count.
+
+###### `_keyHasGivenReview`
+
+```dart
+static const String _keyHasGivenReview = 'has_given_review';
+```
+
+Key for storing whether user has given review.
+
+###### `_keyListMode`
+
+```dart
+static const String _keyListMode = 'list_mode';
+```
+
+Key for storing list mode setting.
+
+###### `_keyShowSearchSuggestions`
+
+```dart
+static const String _keyShowSearchSuggestions = 'show_search_suggestions';
+```
+
+Key for storing search suggestions toggle setting.
+
+###### `_keySearchAsYouType`
+
+```dart
+static const String _keySearchAsYouType = 'search_as_you_type';
+```
+
+Key for storing Search As You Type toggle setting.
+
 ---
 
-### 2. `lib/core/benchmark.dart`
-
-#### Class: `HBenchmark`
-
-Performance benchmarking utility.
-
-##### Static Method: `runLookupBenchmark`
-
-Runs a lookup benchmark.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `wordsPerDict` | `int` | Number of words to lookup per dictionary (default: 20) |
-
-**Returns:** `Future<String>` - Benchmark report string.
+# Services
 
 ---
 
-### 3. `lib/core/hperf.dart`
+## `lib/features/settings/services/stardict_service.dart` {#libfeaturessettingsservicesstardict_service-dart}
 
-#### Class: `HPerf`
+### Class: `StardictDictionary`
 
-Performance measurement utility.
+Represents a StarDict dictionary available for download.
 
-##### Static Method: `start`
+##### Constructor
 
-Starts a performance timer.
+```dart
+StardictDictionary({required String sourceLanguageCode, required String targetLanguageCode, required String name, required String url, required String headwords, required String version, required String date, required List<StardictRelease> releases})
+```
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `name` | `String` | Timer name |
+##### Properties
 
-**Returns:** `Stopwatch?` - A stopwatch for the timer.
+| Property | Type | Description |
+|----------|------|-------------|
+| `name` | `String` | Dictionary name |
+| `url` | `String` | Download URL |
+| `headwords` | `String` | Number of headwords |
+| `version` | `String` | Version string |
+| `date` | `String` | Release date |
+| `releases` | `List<StardictRelease>` | Available releases |
+| `sourceLanguageCode` | `String` | ISO 639-2 source language code |
+| `sourceLanguageName` | `String` | Source language name |
+| `targetLanguageCode` | `String` | ISO 639-2 target language code |
+| `targetLanguageName` | `String` | Target language name |
 
-##### Static Method: `end`
+##### Method: `getPreferredRelease`
 
-Ends a performance timer.
+Gets the preferred (first) release from the releases list.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sw` | `Stopwatch?` | The stopwatch from start() |
-| `name` | `String` | Timer name |
+**Returns:** `StardictRelease?` - The preferred release, or null if no releases available.
 
-**Returns:** `void`
+### Class: `StardictRelease`
 
-##### Static Method: `reset`
+Represents a StarDict dictionary release.
 
-Resets all performance data.
+##### Constructor
 
-##### Static Method: `dump`
+```dart
+StardictRelease({required String url, required String format, required String size, required String version, required String date})
+```
 
-Prints all performance data to console.
+##### Properties
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `prefix` | `String` | Prefix for output |
+| Property | Type | Description |
+|----------|------|-------------|
+| `url` | `String` | Download URL |
+| `format` | `String` | Dictionary format |
+| `size` | `String` | File size |
+| `version` | `String` | Version string |
+| `date` | `String` | Release date |
 
-**Returns:** `void`
+### Class: `StardictService`
 
-##### Static Method: `record`
+Service for StarDict dictionary operations.
 
-Records a value.
+##### Method: `fetchDictionaries`
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `name` | `String` | Metric name |
-| `ms` | `int` | Milliseconds value |
+Fetches available StarDict dictionaries from the remote server.
 
-##### Static Method: `recordUs`
+**Returns:** `Future<List<Map<String, dynamic>>>` - List of available dictionaries.
 
-Records a microsecond value.
+##### Method: `refreshDictionaries`
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `name` | `String` | Metric name |
-| `us` | `int` | Microseconds value |
+Refreshes the dictionary list from the remote server.
+
+**Returns:** `Future<void>`
+
+##### Method: `getDownloadedUrls`
+
+Gets the list of downloaded dictionary URLs.
+
+**Returns:** `Future<Set<String>>` - Set of downloaded URLs.
+
+##### Private Static Fields
+
+###### `_tsvUrl`
+
+```dart
+static const String _tsvUrl = '...';
+```
+
+URL for the StarDict dictionary TSV file.
 
 ---
 
-## Main App
+# Main App
 
-### 1. `lib/main.dart`
+---
 
-#### Function: `main`
+## `lib/main.dart` {#libmain-dart}
+
+### Function: `main`
 
 Entry point for the HDict application. Initializes the database and runs the Flutter app.
 
@@ -2039,15 +2571,15 @@ Entry point for the HDict application. Initializes the database and runs the Flu
 void main()
 ```
 
-#### Class: `MyApp`
+### Class: `MyApp`
 
 The main application widget.
 
 ---
 
-### 2. `lib/core/utils/app_theme.dart`
+## `lib/core/theme/app_theme.dart` {#libcorethemeapp_theme-dart}
 
-#### Class: `AppTheme`
+### Class: `AppTheme`
 
 Theme configuration utility.
 
@@ -2082,53 +2614,24 @@ Returns the dark theme with Roboto font.
 
 **Returns:** `ThemeData` - Dark theme configuration.
 
+---
 
+# Screens
 
 ---
 
-## Screens
+## `lib/features/home/home_screen.dart` {#libfeatureshomehome_screen-dart}
 
-### 1. `lib/features/home/home_screen.dart`
-
-#### Class: `HomeScreen`
-
-Main home screen with search functionality.
-
-#### Enum: `SuggestionTarget`
+### Enum: `SuggestionTarget`
 
 Specifies where suggestion results should be displayed.
-
-##### Values
 
 | Value | Description |
 |-------|-------------|
 | `searchBar` | Show suggestions in the search bar dropdown |
 | `definitionArea` | Show suggestions in the definition area below |
 
-##### Static Method: `normalizeWhitespace`
-
-Normalizes whitespace in HTML content.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `text` | `String` | Input text |
-| `format` | `String?` | Dictionary format (stardict, html, mdict) |
-| `typeSequence` | `String?` | Optional type sequence |
-
-**Returns:** `String` - Normalized string.
-
-##### Static Method: `consolidateDefinitions`
-
-Consolidates definitions from multiple dictionaries.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `groupedResults` | `List<MapEntry<int, Map<String, List<Map<String, dynamic>>>>>` | Grouped results |
-| `dictMap` | `Map<int, Map<String, dynamic>>?` | Optional dictionary metadata map |
-
-**Returns:** `Future<List<Map<String, dynamic>>>` - Consolidated definitions grouped by dictionary.
-
-##### Class: `EntryToProcess`
+### Class: `EntryToProcess`
 
 Represents an entry to be processed with its content and metadata.
 
@@ -2184,11 +2687,32 @@ final String? typeSequence
 
 Optional type sequence.
 
-##### Method: `createState`
+### Class: `HomeScreen`
 
-Creates the mutable state for this widget.
+Main home screen with search functionality.
 
-**Returns:** `_HomeScreenState` - The state instance.
+##### Static Method: `normalizeWhitespace`
+
+Normalizes whitespace in HTML content.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `text` | `String` | Input text |
+| `format` | `String?` | Dictionary format (stardict, html, mdict) |
+| `typeSequence` | `String?` | Optional type sequence |
+
+**Returns:** `String` - Normalized string.
+
+##### Static Method: `consolidateDefinitions`
+
+Consolidates definitions from multiple dictionaries.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `groupedResults` | `List<MapEntry<int, Map<String, List<Map<String, dynamic>>>>>` | Grouped results |
+| `dictMap` | `Map<int, Map<String, dynamic>>?` | Optional dictionary metadata map |
+
+**Returns:** `Future<List<Map<String, dynamic>>>` - Consolidated definitions grouped by dictionary.
 
 ##### Field: `initialWord`
 
@@ -2198,19 +2722,843 @@ final String? initialWord
 
 Optional initial word to search for when the screen opens.
 
+### Class: `MddVideoHtmlExtension`
+
+Custom HtmlExtension for flutter_html that renders MDD video resources. Handles `<video>` tags with `mdd-video:` source protocol.
+
+##### Constructor
+
+```dart
+MddVideoHtmlExtension({required int dictId})
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dictId` | `int` | Dictionary ID for resource lookup |
+
+##### Property: `supportedTags`
+
+```dart
+Set<String> get supportedTags => {'video'}
+```
+
+Returns the set of supported HTML tags.
+
+##### Property: `supportedTags`
+
+```dart
+static const Set<String> get supportedTags
+```
+
+Returns the set of HTML tags that support anchor IDs.
+
+##### Method: `matches`
+
+Determines if this extension should process the given element.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `context` | `ExtensionContext` | The extension context |
+
+**Returns:** `bool` - True if the element has a non-empty id and is in the building step.
+
+##### Method: `build`
+
+Builds an InlineSpan for video elements.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `context` | `ExtensionContext` | HTML extension context |
+
+**Returns:** `dynamic` - WidgetSpan containing video player or Container.
+
+#### Private Instance Fields
+
+##### `_dictId`
+
+```dart
+final int _dictId
+```
+
+The dictionary ID used for resource lookup.
+
+##### Private Instance Methods
+
+###### `build`
+
+```dart
+Widget build(ExtensionContext context)
+```
+
+Builds an InlineSpan for video elements. Handles `mdd-video:` source protocol by extracting the resource key and creating an `_InlineVideoWidget`.
+
+**Returns:** `WidgetSpan` containing video player or empty `Container` on error.
+
 ---
 
-### 2. `lib/features/settings/settings_screen.dart`
+### Class: `_HomeScreenState`
 
-#### Class: `SettingsScreen`
+The state class for HomeScreen.
+
+##### Private Instance Fields
+
+###### `_selectedWord`
+
+```dart
+String? _selectedWord
+```
+
+The currently selected word.
+
+###### `_currentDefinitions`
+
+```dart
+List<Map<String, dynamic>> _currentDefinitions = []
+```
+
+The current search results.
+
+###### `_isLoading`
+
+```dart
+bool _isLoading = false
+```
+
+Whether a search is in progress.
+
+###### `_hasDictionaries`
+
+```dart
+bool _hasDictionaries = false
+```
+
+Whether any dictionaries are installed.
+
+###### `_checkingDicts`
+
+```dart
+bool _checkingDicts = true
+```
+
+Whether dictionary check is in progress.
+
+###### `_tabController`
+
+```dart
+TabController? _tabController
+```
+
+Controller for the dictionary tab bar.
+
+###### `_headwordController`
+
+```dart
+TextEditingController _headwordController = TextEditingController()
+```
+
+Controller for headword search input.
+
+###### `_defController`
+
+```dart
+TextEditingController _defController = TextEditingController()
+```
+
+Controller for definition search input.
+
+###### `_searchSqliteMs`
+
+```dart
+int? _searchSqliteMs
+```
+
+SQLite query time in milliseconds.
+
+###### `_searchOtherMs`
+
+```dart
+int? _searchOtherMs
+```
+
+Other processing time in milliseconds.
+
+###### `_searchTotalMs`
+
+```dart
+int? _searchTotalMs
+```
+
+Total search time in milliseconds.
+
+###### `_searchResultCount`
+
+```dart
+int? _searchResultCount
+```
+
+Number of search results.
+
+###### `_lastHeadwordQuery`
+
+```dart
+String? _lastHeadwordQuery
+```
+
+Last headword search query.
+
+###### `_lastDefinitionQuery`
+
+```dart
+String? _lastDefinitionQuery
+```
+
+Last definition search query.
+
+###### `_isPopupOpen`
+
+```dart
+bool _isPopupOpen = false
+```
+
+Whether a popup is currently open.
+
+##### Private Instance Methods
+
+###### `initState`
+
+```dart
+void initState()
+```
+
+Called when this object is inserted into the tree. Initializes the home screen, checks for dictionaries, and sets up search controllers.
+
+###### `dispose`
+
+```dart
+void dispose()
+```
+
+Called when this object is removed from the tree permanently. Disposes of controllers and cleans up resources.
+
+###### `build`
+
+```dart
+Widget build(BuildContext context)
+```
+
+Builds the home screen UI with search bars, dictionary tabs, and results view.
+
+###### `_performSearch`
+
+Performs the dictionary search.
+
+###### `_onWordSelected`
+
+Handles word selection from history.
+
+###### `_onDefinitionSelected`
+
+Handles definition selection.
+
+###### `_showWordPopup`
+
+Shows the word lookup popup.
+
+###### `_checkDictionaries`
+
+Checks for installed dictionaries.
+
+###### `_buildSearchBars`
+
+Builds the search input UI.
+
+###### `_buildDefaultContent`
+
+Builds the default home content.
+
+###### `_buildResultsView`
+
+Builds the search results view.
+
+###### `_buildDefinitionContent`
+
+Builds the definition content widget.
+
+###### `_buildDefinitionContentSync`
+
+Builds definition content synchronously.
+
+###### `_extractTextFromHtml`
+
+Extracts plain text from HTML.
+
+###### `_buildAccordionItem`
+
+Builds an accordion item for list mode.
+
+###### `_buildSuggestionsRow`
+
+Builds the suggestions row widget for autocomplete display.
+
+###### `_getSuggestions`
+
+Gets headword suggestions for autocomplete based on query.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `query` | `String` | The search query |
+
+**Returns:** `Future<List<String>>` - List of suggestion words.
+
+###### `_getDefinitionSuggestions`
+
+Gets definition-based suggestions for Search As You Type.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `query` | `String` | The search query |
+
+**Returns:** `Future<List<String>>` - List of matching headwords.
+
+---
+
+### Class: `_MdictDefinitionContent`
+
+Widget for MDict definition content.
+
+##### Private Instance Fields
+
+###### `defMap`
+
+```dart
+final Map<String, dynamic> defMap
+```
+
+Map containing definition data from dictionary lookup.
+
+###### `theme`
+
+```dart
+final ThemeData? theme
+```
+
+Theme data for styling the content.
+
+###### `highlightHeadword`
+
+```dart
+final String? highlightHeadword
+```
+
+Headword to highlight in the definition.
+
+###### `highlightDefinition`
+
+```dart
+final String? highlightDefinition
+```
+
+Definition text to highlight.
+
+###### `searchSqliteMs`
+
+```dart
+final int? searchSqliteMs
+```
+
+Time taken for SQLite query in milliseconds.
+
+###### `searchOtherMs`
+
+```dart
+final int? searchOtherMs
+```
+
+Time taken for other processing in milliseconds.
+
+###### `searchTotalMs`
+
+```dart
+final int? searchTotalMs
+```
+
+Total search time in milliseconds.
+
+###### `searchResultCount`
+
+```dart
+final int? searchResultCount
+```
+
+Number of search results.
+
+###### `startIndex`
+
+```dart
+final int? startIndex
+```
+
+Starting index for paginated results.
+
+###### `forceDefaultMode`
+
+```dart
+final bool forceDefaultMode
+```
+
+Whether to force default view mode.
+
+##### Private Constructor
+
+```dart
+_MdictDefinitionContent({
+  Key? key,
+  required this.defMap,
+  this.theme,
+  this.highlightHeadword,
+  this.highlightDefinition,
+  this.searchSqliteMs,
+  this.searchOtherMs,
+  this.searchTotalMs,
+  this.searchResultCount,
+  this.startIndex,
+  this.forceDefaultMode = false,
+});
+```
+
+Creates a definition content widget with the specified parameters.
+
+##### Private Instance Methods
+
+###### `createState`
+
+```dart
+State<StatefulWidget> createState()
+```
+
+Creates the mutable state for this widget.
+
+**Returns:** `_MdictDefinitionContentState`
+
+###### `_processMultimedia`
+
+Processes multimedia content.
+
+###### `_buildAccordionItem`
+
+Builds an accordion item for list mode.
+
+###### `_buildDefinitionContentSync`
+
+Builds definition content synchronously.
+
+---
+
+### Class: `_MdictDefinitionContentState`
+
+State class for `_MdictDefinitionContent` widget.
+
+##### Private Instance Fields
+
+###### `_isProcessing`
+
+```dart
+bool _isProcessing = false
+```
+
+Whether multimedia is being processed.
+
+###### `_rawDefinitions`
+
+```dart
+late List<Map<String, dynamic>> _rawDefinitions
+```
+
+Raw definitions data.
+
+##### Private Instance Methods
+
+###### `initState`
+
+```dart
+void initState()
+```
+
+Called when this object is inserted into the tree. Initializes the definition content state.
+
+###### `build`
+
+```dart
+Widget build(BuildContext context)
+```
+
+Builds the definition content UI.
+
+###### `_processMultimedia`
+
+Processes multimedia content including video from MDD resources.
+
+---
+
+### Class: `_MediaPlayerDialog`
+
+Dialog for playing audio/video media.
+
+##### Private Instance Fields
+
+###### `data`
+
+```dart
+final String data
+```
+
+Base64-encoded media data or resource key.
+
+###### `mediaType`
+
+```dart
+final String mediaType
+```
+
+Type of media ('audio' or 'video').
+
+###### `filename`
+
+```dart
+final String filename
+```
+
+Original filename of the media.
+
+##### Private Constructor
+
+```dart
+_MediaPlayerDialog({
+  Key? key,
+  required this.data,
+  required this.mediaType,
+  required this.filename,
+});
+```
+
+Creates a media player dialog with the specified media data and type.
+
+##### Private Instance Methods
+
+###### `createState`
+
+```dart
+State<StatefulWidget> createState()
+```
+
+Creates the mutable state for this widget.
+
+**Returns:** `_MediaPlayerDialogState`
+
+###### `_initPlayer`
+
+Initializes the media player.
+
+###### `_formatDuration`
+
+Formats duration for display.
+
+---
+
+### Class: `_MediaPlayerDialogState`
+
+State class for `_MediaPlayerDialog`.
+
+##### Private Instance Fields
+
+###### `_audioPlayer`
+
+```dart
+AudioPlayer? _audioPlayer
+```
+
+Audio player instance.
+
+###### `_videoController`
+
+```dart
+VideoPlayerController? _videoController
+```
+
+Video player controller.
+
+##### Private Instance Methods
+
+###### `initState`
+
+```dart
+void initState()
+```
+
+Called when this object is inserted into the tree. Initializes the media player.
+
+###### `dispose`
+
+```dart
+void dispose()
+```
+
+Called when this object is removed from the tree. Disposes of player controllers.
+
+###### `build`
+
+```dart
+Widget build(BuildContext context)
+```
+
+Builds the media player dialog UI with playback controls.
+
+---
+
+### Class: `_MddVideoWidget`
+
+Widget for playing MDD video resources in a dialog with full playback controls.
+
+##### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `resourceKey` | `String` | MDD resource key identifying the video file |
+| `dictId` | `int` | Dictionary ID for looking up the MDD reader |
+| `width` | `double?` | Optional video width constraint |
+| `height` | `double?` | Optional video height constraint |
+| `controls` | `bool` | Whether to show playback controls (default: true) |
+| `autoplay` | `bool` | Whether to auto-play video (default: false) |
+| `loop` | `bool` | Whether to loop video (default: false) |
+
+##### Private Constructor
+
+```dart
+const _MddVideoWidget({
+  required this.resourceKey,
+  required this.dictId,
+  this.width,
+  this.height,
+  this.controls = true,
+  this.autoplay = false,
+  this.loop = false,
+});
+```
+
+Creates a `_MddVideoWidget` with the specified resource and playback options.
+
+##### Methods
+
+###### `createState`
+
+```dart
+State<_MddVideoWidget> createState()
+```
+
+Creates the mutable state for this widget.
+
+**Returns:** `_MddVideoWidgetState`
+
+---
+
+### Class: `_MddVideoWidgetState`
+
+State class for `_MddVideoWidget`.
+
+##### Private Instance Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `_videoController` | `VideoPlayerController?` | Video player controller |
+| `_chewieController` | `ChewieController?` | Chewie controller |
+| `_isLoading` | `bool` | Loading state |
+| `_error` | `String?` | Error message |
+| `_tempFilePath` | `String?` | Temporary file path |
+
+##### Private Instance Methods
+
+###### `initState`
+
+```dart
+void initState()
+```
+
+Called when this object is inserted into the tree. Calls `super.initState()` and initiates video loading via `_loadVideo()`.
+
+###### `_loadVideo`
+
+```dart
+Future<void> _loadVideo()
+```
+
+Asynchronously loads video from MDD resource. Retrieves bytes from the dictionary's MDD reader, writes them to a temporary file, and initializes the video player controller with Chewie for playback controls.
+
+**Operations:**
+1. Gets the MDict reader for the dictionary ID
+2. Retrieves resource bytes using `getMddResourceBytes`
+3. Writes bytes to a temporary file
+4. Initializes `VideoPlayerController` with the file
+5. Creates a `ChewieController` with playback settings (autoplay, looping, controls)
+
+**Error Handling:** Sets `_error` message and `_isLoading = false` on failure.
+
+###### `dispose`
+
+```dart
+void dispose()
+```
+
+Called when this object is removed from the tree permanently. Disposes both Chewie and video controllers, and deletes the temporary video file.
+
+###### `build`
+
+```dart
+Widget build(BuildContext context)
+```
+
+Builds the video player UI.
+
+**Returns:**
+- Loading indicator when `_isLoading` is true
+- Error display with icon and message when `_error` is set
+- `AspectRatio` widget with Chewie player when ready
+
+---
+
+### Class: `_InlineVideoWidget`
+
+Widget for playing inline video from MDD resources.
+
+##### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `resourceKey` | `String` | MDD resource key identifying the video file |
+| `dictId` | `int` | Dictionary ID for looking up the MDD reader |
+
+##### Private Constructor
+
+```dart
+const _InlineVideoWidget({required this.resourceKey, required this.dictId})
+```
+
+Creates an `_InlineVideoWidget` with the specified resource.
+
+##### Methods
+
+###### `createState`
+
+```dart
+State<_InlineVideoWidget> createState()
+```
+
+Creates the mutable state for this widget.
+
+**Returns:** `_InlineVideoWidgetState`
+
+---
+
+### Class: `_InlineVideoWidgetState`
+
+State class for `_InlineVideoWidget`.
+
+##### Private Instance Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `_controller` | `VideoPlayerController?` | Video player controller |
+| `_isLoading` | `bool` | Loading state |
+| `_error` | `String?` | Error message |
+| `_tempFilePath` | `String?` | Temporary file path |
+
+##### Private Instance Methods
+
+###### `initState`
+
+```dart
+void initState()
+```
+
+Called when this object is inserted into the tree. Calls `super.initState()` and initiates video loading via `_loadVideo()`.
+
+###### `_loadVideo`
+
+```dart
+Future<void> _loadVideo()
+```
+
+Asynchronously loads video from MDD resource for inline playback. Retrieves bytes from the dictionary's MDD reader, writes them to a temporary file, and initializes the video player controller.
+
+**Operations:**
+1. Gets the MDict reader for the dictionary ID
+2. Retrieves resource bytes using `getMddResourceBytes`
+3. Writes bytes to a temporary file with `inline_video_` prefix
+4. Initializes `VideoPlayerController` with the file
+
+**Error Handling:** Sets `_error` message and `_isLoading = false` on failure.
+
+###### `dispose`
+
+```dart
+void dispose()
+```
+
+Called when this object is removed from the tree permanently. Disposes the video controller and deletes the temporary video file.
+
+###### `build`
+
+```dart
+Widget build(BuildContext context)
+```
+
+Builds the inline video player UI.
+
+**Returns:**
+- Loading indicator when `_isLoading` is true
+- Error display with icon and message when `_error` is set
+- Video player with controls when ready
+
+---
+
+### Class: `_VideoControls`
+
+Stateless widget for video playback controls.
+
+##### Private Instance Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `controller` | `VideoPlayerController` | Video player controller |
+
+##### Private Instance Methods
+
+###### `_formatDuration`
+
+Formats duration for display.
+
+---
+
+## `lib/features/settings/settings_screen.dart` {#libfeaturessettingssettings_screen-dart}
+
+### Class: `SettingsScreen`
 
 Settings screen for configuring the app.
 
+### Class: `_SettingsScreenState`
+
+The state class for SettingsScreen.
+
+##### Private Instance Methods
+
+###### `_getPreviewTheme`
+
+Gets preview theme for settings.
+
 ---
 
-### 3. `lib/features/bookmarks/bookmarks_screen.dart`
+## `lib/features/bookmarks/bookmarks_screen.dart` {#libfeaturesbookmarksbookmarks_screen-dart}
 
-#### Class: `BookmarkManager`
+### Class: `BookmarkManager`
 
 Manages platform-specific persistent file access. Handles security-scoped bookmarks on iOS/macOS and SAF on Android.
 
@@ -2278,9 +3626,9 @@ Stops security-scoped access for a physical path.
 
 ---
 
-### 4. `lib/features/flash_cards/flash_cards_screen.dart`
+## `lib/features/flash_cards/flash_cards_screen.dart` {#libfeaturesflash_cardsflash_cards_screen-dart}
 
-#### Class: `FlashCardsScreen`
+### Class: `FlashCardsScreen`
 
 Flash cards screen for vocabulary learning.
 
@@ -2290,11 +3638,63 @@ Creates the mutable state for this widget.
 
 **Returns:** `_FlashCardsScreenState` - The state instance.
 
+### Class: `_FlashCardsScreenState`
+
+The state class for FlashCardsScreen.
+
+##### Private Instance Fields
+
+###### `_score`
+
+```dart
+int _score = 0
+```
+
+Current score.
+
+###### `_index`
+
+```dart
+int _index = 0
+```
+
+Current card index.
+
+##### Private Instance Methods
+
+###### `initState`
+
+```dart
+void initState()
+```
+
+Called when this object is inserted into the tree. Initializes the flash card state and loads cards.
+
+###### `dispose`
+
+```dart
+void dispose()
+```
+
+Called when this object is removed from the tree permanently. Cleans up resources like audio player.
+
+###### `build`
+
+```dart
+Widget build(BuildContext context)
+```
+
+Builds the flash card UI with score display and card content.
+
+###### `_loadCards`
+
+Loads flash cards.
+
 ---
 
-### 5. `lib/features/dictionary_management/dictionary_management_screen.dart`
+## `lib/features/dictionary_management/dictionary_management_screen.dart` {#libfeaturesdictionary_managementdictionary_management_screen-dart}
 
-#### Class: `DictionaryManagementScreen`
+### Class: `DictionaryManagementScreen`
 
 Dictionary management screen.
 
@@ -2312,11 +3712,57 @@ final VoidCallback? triggerSelectByLanguage
 
 Callback to trigger dictionary selection by language.
 
+### Class: `_DictionaryManagementScreenState`
+
+The state class for DictionaryManagementScreen.
+
+##### Private Instance Methods
+
+###### `_scanForDictionaries`
+
+Scans for dictionaries in the app directory.
+
+###### `_importDictionaries`
+
+Imports selected dictionaries.
+
+###### `_showImportDialog`
+
+Shows the import dialog.
+
+###### `_showDeleteDialog`
+
+Shows the delete confirmation dialog.
+
+### Class: `_ImportArgs`
+
+Arguments passed to import isolate for processing archives.
+
+##### Private Constructor
+
+```dart
+_ImportArgs(
+  this.archivePath,
+  this.tempDirPath,
+  this.sendPort,
+  this.rootIsolateToken,
+)
+```
+
+##### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `archivePath` | `String` | Path to the archive file being imported |
+| `tempDirPath` | `String` | Temporary directory for extraction |
+| `sendPort` | `SendPort` | Port for communication with main isolate |
+| `rootIsolateToken` | `RootIsolateToken` | Token for initializing background isolate |
+
 ---
 
-### 6. `lib/features/dictionary_groups/dictionary_groups_screen.dart`
+## `lib/features/dictionary_groups/dictionary_groups_screen.dart` {#libfeaturesdictionary_groupsdictionary_groups_screen-dart}
 
-#### Class: `DictionaryGroupsScreen`
+### Class: `DictionaryGroupsScreen`
 
 Dictionary groups management screen.
 
@@ -2326,11 +3772,21 @@ Creates the mutable state for this widget.
 
 **Returns:** `_DictionaryGroupsScreenState` - The state instance.
 
+### Class: `_DictionaryGroupsScreenState`
+
+The state class for DictionaryGroupsScreen.
+
+##### Private Instance Methods
+
+###### `_loadGroups`
+
+Loads dictionary groups from storage.
+
 ---
 
-### 7. `lib/features/search_history/search_history_screen.dart`
+## `lib/features/search_history/search_history_screen.dart` {#libfeaturessearch_historysearch_history_screen-dart}
 
-#### Class: `SearchHistoryScreen`
+### Class: `SearchHistoryScreen`
 
 Search history screen.
 
@@ -2340,11 +3796,41 @@ Creates the mutable state for this widget.
 
 **Returns:** `_SearchHistoryScreenState` - The state instance.
 
+### Class: `_SearchHistoryScreenState`
+
+The state class for SearchHistoryScreen.
+
+##### Private Instance Methods
+
+###### `initState`
+
+```dart
+void initState()
+```
+
+Called when this object is inserted into the tree. Initializes the search history screen.
+
+###### `build`
+
+```dart
+Widget build(BuildContext context)
+```
+
+Builds the search history list UI.
+
+###### `_loadHistory`
+
+Loads search history from database.
+
+###### `_clearHistory`
+
+Clears all search history.
+
 ---
 
-### 8. `lib/features/score_history/score_history_screen.dart`
+## `lib/features/score_history/score_history_screen.dart` {#libfeaturesscore_historyscore_history_screen-dart}
 
-#### Class: `ScoreHistoryScreen`
+### Class: `ScoreHistoryScreen`
 
 Score history screen.
 
@@ -2354,131 +3840,69 @@ Creates the mutable state for this widget.
 
 **Returns:** `_ScoreHistoryScreenState` - The state instance.
 
+### Class: `_ScoreHistoryScreenState`
+
+The state class for ScoreHistoryScreen.
+
+##### Private Instance Methods
+
+###### `initState`
+
+```dart
+void initState()
+```
+
+Called when this object is inserted into the tree. Initializes the score history screen.
+
+###### `build`
+
+```dart
+Widget build(BuildContext context)
+```
+
+Builds the score history list UI with chart visualization.
+
+###### `_loadScores`
+
+Loads score history from database.
+
 ---
 
-### 9. `lib/features/drawer/about_screen.dart`
+## `lib/features/about/about_screen.dart` {#libfeaturesaboutabout_screen-dart}
 
-#### Class: `AboutScreen`
+### Class: `AboutScreen`
 
 About app screen.
 
 ---
 
-### 10. `lib/features/drawer/manual_screen.dart`
+## `lib/features/help/manual_screen.dart` {#libfeatureshelphelp_manual-dart}
 
-#### Class: `ManualScreen`
+### Class: `ManualScreen`
 
 User manual screen.
 
 ---
 
-### 11. `lib/features/drawer/support_screen.dart`
+## `lib/features/support/support_screen.dart` {#libfeaturessupportsupport_screen-dart}
 
-#### Class: `SupportScreen`
+### Class: `SupportScreen`
 
 Support/help screen.
 
 ---
 
-### 12. `lib/features/drawer/app_drawer.dart`
+## `lib/features/home/widgets/app_drawer.dart` {#libfeatureshomewidgetsapp_drawer-dart}
 
-#### Class: `AppDrawer`
+### Class: `AppDrawer`
 
 Navigation drawer widget.
 
 ---
 
-### 13. `lib/features/home/home_screen.dart`
+## `lib/core/bookmark_manager.dart` {#libcorebookmark_manager-dart}
 
-#### Class: `MddVideoHtmlExtension`
-
-Custom HtmlExtension for flutter_html that renders MDD video resources. Handles `<video>` tags with `mdd-video:` source protocol.
-
-##### Constructor
-
-```dart
-MddVideoHtmlExtension({required int dictId})
-```
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `dictId` | `int` | Dictionary ID for resource lookup |
-
-##### Property: `supportedTags`
-
-```dart
-Set<String> get supportedTags => {'video'}
-```
-
-Returns the set of supported HTML tags.
-
-##### Method: `build`
-
-Builds an InlineSpan for video elements.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `context` | `ExtensionContext` | HTML extension context |
-
-**Returns:** `dynamic` - WidgetSpan containing video player or Container.
-
----
-
-### 14. `lib/core/utils/debouncer.dart`
-
-#### Class: `Debouncer`
-
-A utility class for debouncing function calls.
-
-##### Constructor
-
-```dart
-Debouncer({int milliseconds = 250})
-```
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `milliseconds` | `int` | Debounce delay in milliseconds (default: 250) |
-
-##### Property: `isActive`
-
-```dart
-bool get isActive
-```
-
-Returns true if the debouncer has an active timer.
-
-##### Property: `milliseconds`
-
-```dart
-int get milliseconds
-```
-
-Returns the debounce delay in milliseconds.
-
-##### Method: `run`
-
-Runs the action after the debounce delay.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `action` | `void Function()` | The action to run |
-
-##### Method: `cancel`
-
-Cancels the pending action.
-
-##### Method: `dispose`
-
-Disposes the debouncer and cancels any pending action.
-
----
-
-## Utils
-
-### 1. `lib/core/bookmark_manager.dart`
-
-#### Class: `BookmarkRandomAccessSource`
+### Class: `BookmarkRandomAccessSource`
 
 Random access source for bookmarks.
 
@@ -2498,9 +3922,9 @@ BookmarkRandomAccessSource(this._bookmark)
 
 ---
 
-### 2. `lib/core/saf_random_access_source.dart`
+## `lib/core/saf_random_access_source.dart` {#libcoresaf_random_access_source-dart}
 
-#### Class: `SafRandomAccessSource`
+### Class: `SafRandomAccessSource`
 
 Random access source for Storage Access Framework. Provides efficient random access reading of files accessed through Android's Storage Access Framework.
 
@@ -2556,9 +3980,9 @@ Synchronously reads bytes from the source at the specified offset.
 
 ---
 
-### 3. `lib/core/dictionary_manager.dart`
+## `lib/core/manager/dictionary_manager.dart` {#libcoremanagerdictionary_manager-dart}
 
-#### Class: `DictionaryManager`
+### Class: `DictionaryManager`
 
 Manages dictionary readers.
 
@@ -2862,2388 +4286,216 @@ Downloads and imports a dictionary from a URL.
 
 **Returns:** `Stream<ImportProgress>` - Progress stream.
 
----
+##### Private Static Fields
 
-### 4. `lib/core/dictionary_group_manager.dart`
-
-#### Class: `DictionaryGroupManager`
-
-Manages dictionary groups stored in SharedPreferences.
-
-##### Static Method: `addDictionaryToGroup`
-
-Adds a dictionary to a group.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `groupName` | `String` | Group name |
-| `dictId` | `int` | Dictionary ID |
-
-**Returns:** `Future<void>`
-
-##### Static Method: `autoGenerateGroupsFromDownloaded`
-
-Auto-generates groups from downloaded dictionaries.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `installedDicts` | `List<Map<String, dynamic>>` | List of installed dictionaries |
-
-**Returns:** `Future<void>`
-
-##### Static Method: `createCustomGroup`
-
-Creates a custom group.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `groupName` | `String` | Group name |
-
-**Returns:** `Future<void>`
-
-##### Static Method: `deleteGroup`
-
-Deletes a group.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `groupId` | `String` | Group ID |
-
-**Returns:** `Future<void>`
-
-##### Static Method: `getGroups`
-
-Gets all groups.
-
-**Returns:** `Future<List<DictionaryGroup>>` - List of groups.
-
-##### Static Method: `isGroupActive`
-
-Checks if a group is active.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `groupId` | `String` | Group ID |
-
-**Returns:** `Future<bool>` - True if the group is active.
-
-##### Static Method: `removeDictionaryFromAllGroups`
-
-Removes a dictionary from all groups.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `dictId` | `int` | Dictionary ID |
-
-**Returns:** `Future<void>`
-
-##### Static Method: `removeDictionaryFromGroup`
-
-Removes a dictionary from a group.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `groupId` | `String` | Group ID |
-| `dictId` | `int` | Dictionary ID |
-
-**Returns:** `Future<void>`
-
-##### Static Method: `saveGroups`
-
-Saves groups to storage.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `groups` | `List<DictionaryGroup>` | List of groups to save |
-
-**Returns:** `Future<void>`
-
-##### Static Method: `toggleGroup`
-
-Toggles a group's active state.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `groupId` | `String` | Group ID |
-| `enable` | `bool` | Enable or disable |
-
-**Returns:** `Future<void>`
-
----
-
-### 5. `lib/core/stardict_service.dart`
-
-#### Class: `StardictService`
-
-Service for StarDict dictionary operations.
-
-##### Method: `fetchDictionaries`
-
-Fetches available StarDict dictionaries from the remote server.
-
-**Returns:** `Future<List<Map<String, dynamic>>>` - List of available dictionaries.
-
-##### Method: `refreshDictionaries`
-
-Refreshes the dictionary list from the remote server.
-
-**Returns:** `Future<void>`
-
-##### Method: `getDownloadedUrls`
-
-Gets the list of downloaded dictionary URLs.
-
-**Returns:** `Future<Set<String>>` - Set of downloaded URLs.
-
----
-
-## Database
-
-### 1. `lib/core/database_helper.dart`
-
-#### Class: `DatabaseHelper`
-
-Database helper for SQLite operations.
-
-##### Property: `database`
+###### `_maxCacheEntries`
 
 ```dart
-Database get database
+static const int _maxCacheEntries = 50;
 ```
 
-Returns the database instance.
+Maximum number of reader cache entries.
 
-##### Property: `needsMigrationAlert`
+##### Private Standalone Functions
+
+###### `_decompressGzip`
 
 ```dart
-bool get needsMigrationAlert
+List<int> _decompressGzip(List<int> bytes)
 ```
 
-Returns true if a migration alert is needed.
+Decompresses gzip-encoded byte data using Dart's built-in GZipDecoder.
 
-##### Static Method: `initializeDatabaseFactory`
+**Parameters:**
+- `bytes` - The gzip-compressed byte data
 
-Initializes the database factory for the current platform.
+**Returns:** Decompressed byte list
 
-**Returns:** `Future<void>`
-
-##### Method: `setDatabase`
-
-Sets the database instance.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `db` | `Database` | Database instance |
-
-##### Method: `getPrefixSuggestions`
-
-Gets prefix-based word suggestions from enabled dictionaries for autocomplete.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `prefix` | `String` | The search prefix |
-| `limit` | `int` | Maximum number of suggestions (default: 50) |
-| `fuzzy` | `bool` | Enable fuzzy matching (default: false) |
-
-**Returns:** `Future<List<String>>` - List of matching word suggestions.
-
-##### Method: `getDefinitionSuggestions`
-
-Gets definition-based word suggestions from indexed dictionaries for "Search As You Type" in definitions.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `query` | `String` | The search query |
-| `limit` | `int` | Maximum number of suggestions (default: 50) |
-
-**Returns:** `Future<List<String>>` - List of matching headwords.
-
-##### Method: `addFlashCardScore`
-
-Adds a flash card score to the database.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `score` | `int` | The score achieved |
-| `total` | `int` | Total possible points |
-| `dictIds` | `String` | Comma-separated dictionary IDs used |
-
-**Returns:** `Future<void>`
-
-##### Method: `addSearchHistory`
-
-Adds a search term to the search history.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `word` | `String` | The search word |
-| `searchType` | `String` | Search type (default: 'Headword Search') |
-
-**Returns:** `Future<void>`
-
-##### Method: `clearDictionaryCache`
-
-Clears the in-memory dictionary metadata cache.
-
-**Returns:** `void`
-
-##### Method: `clearFreedictDictionaries`
-
-Clears all FreeDict dictionaries from the cache.
-
-**Returns:** `Future<void>`
-
-##### Method: `clearQueryCache`
-
-Clears the query result cache.
-
-**Returns:** `void`
-
-##### Method: `clearSearchHistory`
-
-Clears all search history.
-
-**Returns:** `Future<void>`
-
-##### Method: `deleteDictionary`
-
-Deletes a dictionary and all associated data from the database.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `id` | `int` | Dictionary ID to delete |
-
-**Returns:** `Future<void>`
-
-##### Method: `deleteOldSearchHistory`
-
-Deletes search history older than specified days.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `days` | `int` | Number of days to keep |
-
-**Returns:** `Future<void>`
-
-##### Method: `deleteWordsByDictionaryId`
-
-Deletes all words for a specific dictionary.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `dictId` | `int` | Dictionary ID |
-
-**Returns:** `Future<void>`
-
-##### Method: `enableBulkInsertMode`
-
-Enables bulk insert mode by setting PRAGMA synchronous to OFF and increasing cache size for faster batch inserts.
-
-**Returns:** `Future<void>`
-
-##### Method: `endBatchInsert`
-
-Ends batch insert mode and restores normal PRAGMA settings.
-
-**Returns:** `Future<void>`
-
-##### Method: `getDatabaseSize`
-
-Gets the total size of the database files.
-
-**Returns:** `Future<int>` - Database size in bytes.
-
-##### Method: `getEnabledDictionaries`
-
-Gets all enabled dictionaries.
-
-**Returns:** `Future<List<Map<String, dynamic>>>` - List of enabled dictionaries.
-
-##### Method: `getFile`
-
-Gets a file from the virtual filesystem.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `dictId` | `int` | Dictionary ID |
-| `fileName` | `String` | File name |
-
-**Returns:** `Future<Uint8List?>` - File bytes, or null if not found.
-
-##### Method: `getFilePart`
-
-Gets a segment of a file from the virtual filesystem.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `dictId` | `int` | Dictionary ID |
-| `fileName` | `String` | File name |
-| `offset` | `int` | Byte offset |
-| `length` | `int` | Number of bytes to read |
-
-**Returns:** `Future<Uint8List?>` - File segment, or null if not found.
-
-##### Method: `getSafScanCache`
-
-Gets cached SAF scan data for a tree URI.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `treeUri` | `String` | Tree URI |
-
-**Returns:** `Future<String?>` - Cached scan data as JSON, or null if not found.
-
-##### Method: `getSampleWords`
-
-Gets random sample words from a dictionary.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `dictId` | `int` | Dictionary ID |
-| `limit` | `int` | Maximum number of words (default: 5) |
-
-**Returns:** `Future<List<Map<String, dynamic>>>` - List of sample word entries.
-
-##### Method: `getWordCountForDict`
-
-Gets the word count for a specific dictionary.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `dictId` | `int` | Dictionary ID |
-
-**Returns:** `Future<int>` - Word count.
-
-##### Method: `insertDictionary`
-
-Inserts a new dictionary into the database.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `name` | `String` | Dictionary name |
-| `path` | `String` | Dictionary path |
-| `indexDefinitions` | `bool` | Whether to index definitions |
-| `format` | `String` | Dictionary format (default: 'stardict') |
-| `typeSequence` | `String?` | Optional type sequence |
-| `checksum` | `String?` | Optional checksum |
-| `sourceUrl` | `String?` | Optional source URL |
-| `sourceType` | `String` | Source type (default: 'managed') |
-| `sourceBookmark` | `String?` | Optional source bookmark |
-| `companionUri` | `String?` | Optional companion file URI |
-| `mddPath` | `String?` | Optional MDD file path |
-
-**Returns:** `Future<int>` - Inserted dictionary ID.
-
-##### Method: `insertFreedictDictionaries`
-
-Inserts FreeDict dictionaries into the cache.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `dictionaries` | `List<Map<String, dynamic>>` | List of dictionaries to insert |
-
-**Returns:** `Future<void>`
-
-##### Method: `isDictionaryUrlDownloaded`
-
-Checks if a dictionary URL has already been downloaded.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `url` | `String` | Source URL to check |
-
-**Returns:** `Future<bool>` - True if already downloaded.
-
-##### Method: `optimizeDatabase`
-
-Optimizes the database by running VACUUM and FTS5 optimize.
-
-**Returns:** `Future<void>`
-
-##### Method: `rebuildFts5IndexForDict`
-
-Rebuilds the FTS5 index for a specific dictionary.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `dictId` | `int` | Dictionary ID |
-
-**Returns:** `Future<void>`
-
-##### Method: `reorderDictionaries`
-
-Reorders dictionaries based on the provided list of IDs.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `sortedIds` | `List<int>` | List of dictionary IDs in new order |
-
-**Returns:** `Future<void>`
-
-##### Method: `resolvePath`
-
-Resolves a stored path to an absolute path.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `storedPath` | `String` | Stored relative or absolute path |
-
-**Returns:** `Future<String>` - Absolute path.
-
-##### Method: `saveFile`
-
-Saves a file to the virtual filesystem.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `dictId` | `int` | Dictionary ID |
-| `fileName` | `String` | File name |
-| `bytes` | `Uint8List` | File content |
-
-**Returns:** `Future<void>`
-
-##### Method: `saveSafScanCache`
-
-Saves SAF scan data to the cache.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `treeUri` | `String` | Tree URI |
-| `scanDataJson` | `String` | Scan data as JSON |
-
-**Returns:** `Future<void>`
-
-##### Method: `startBatchInsert`
-
-Starts batch insert mode and returns the current maximum ID.
-
-**Returns:** `Future<int>` - Current maximum word_metadata ID.
-
-##### Method: `batchInsertWords`
-
-Inserts multiple words into the database within a transaction. Used during dictionary import for efficient batch insertion with optional FTS5 indexing.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `dictId` | `int` | Dictionary ID |
-| `words` | `List<Map<String, dynamic>>` | List of words to insert |
-| `startId` | `int?` | Starting ID for insertion |
-| `populateFts5` | `bool` | Whether to populate FTS5 index (default: true) |
-| `dictName` | `String?` | Optional dictionary name for logging |
-
-**Returns:** `Future<({int startId, int duplicateCount})>` - Starting ID and count of duplicates.
-
-##### Method: `updateDictionaryEnabled`
-
-Updates whether a dictionary is enabled.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `id` | `int` | Dictionary ID |
-| `isEnabled` | `bool` | Enable or disable |
-
-**Returns:** `Future<void>`
-
-##### Method: `updateDictionaryIndexDefinitions`
-
-Updates whether a dictionary has definitions indexed.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `id` | `int` | Dictionary ID |
-| `indexDefinitions` | `bool` | Enable or disable definition indexing |
-
-**Returns:** `Future<void>`
-
-##### Method: `updateDictionaryRowIdRange`
-
-Updates the rowid range for a dictionary.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `id` | `int` | Dictionary ID |
-| `start` | `int` | Start rowid |
-| `end` | `int` | End rowid |
-
-**Returns:** `Future<void>`
-
-##### Method: `updateDictionaryWordCount`
-
-Updates the word count for a dictionary.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `id` | `int` | Dictionary ID |
-| `wordCount` | `int` | Number of words |
-| `definitionWordCount` | `int?` | Optional definition word count |
-
-**Returns:** `Future<void>`
-
-##### Method: `clearSafScanCache`
-
-Clears the SAF scan cache.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `treeUri` | `String` | Tree URI to clear cache for |
-
-**Returns:** `Future<void>`
-
-##### Method: `getBatchSampleWords`
-
-Gets a batch of random sample words from enabled dictionaries for flash cards.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `totalCount` | `int` | Total number of words to retrieve |
-| `dictIds` | `List<int>` | List of dictionary IDs to sample from |
-
-**Returns:** `Future<List<Map<String, dynamic>>>`
-
-##### Method: `getDictionaries`
-
-Gets all dictionaries.
-
-**Returns:** `Future<List<Map<String, dynamic>>>` - List of all dictionaries.
-
-##### Method: `getDictionaryByChecksum`
-
-Gets a dictionary by its checksum.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `checksum` | `String` | Dictionary checksum |
-
-**Returns:** `Future<Map<String, dynamic>?>` - Dictionary data or null.
-
-##### Method: `getDictionaryById`
-
-Gets a dictionary by its ID.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `id` | `int` | Dictionary ID |
-
-**Returns:** `Future<Map<String, dynamic>?>` - Dictionary data or null.
-
-##### Method: `getDictionaryByIdSync`
-
-Synchronously gets a dictionary by its ID from the cache.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `id` | `int` | Dictionary ID |
-
-**Returns:** `Map<String, dynamic>?` - Dictionary data or null.
-
-##### Method: `getFlashCardScores`
-
-Gets flash card scores from the database.
-
-**Returns:** `Future<List<Map<String, dynamic>>>`
-
-##### Method: `getFreedictDictionaries`
-
-Gets cached FreeDict dictionaries.
-
-**Returns:** `Future<List<Map<String, dynamic>>>` - List of FreeDict dictionaries.
-
-##### Method: `getSearchHistory`
-
-Gets search history from the database.
-
-**Returns:** `Future<List<Map<String, dynamic>>>`
-
-##### Method: `searchWords`
-
-Searches for words in enabled dictionaries.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `headwordQuery` | `String?` | Headword search query |
-| `headwordMode` | `SearchMode` | Headword search mode (default: prefix) |
-| `definitionQuery` | `String?` | Definition search query |
-| `definitionMode` | `SearchMode` | Definition search mode (default: substring) |
-| `dictId` | `int?` | Optional dictionary ID to search |
-| `limit` | `int` | Maximum results (default: 50) |
-
-**Returns:** `Future<List<Map<String, dynamic>>>`
-
-##### Static Method: `sqfliteFfiInit`
-
-Initializes the sqflite_common_ffi database factory for desktop platforms.
-
-**Returns:** `void`
-
-##### Method: `toFts5Query`
-
-Converts a search query to FTS5 format.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `query` | `String` | Search query |
-| `isPrefix` | `bool` | Whether this is a prefix search |
-
-**Returns:** `String` - FTS5 formatted query.
-
----
-
-## Screens
-
-### 1. `lib/features/result/result_screen.dart`
-
-#### Class: `ResultScreen`
-
-Screen for displaying search results.
-
-##### Field: `peekCount`
-
+**Example:**
 ```dart
-final int peekCount
-```
-
-Number of items to peek ahead in the definition.
-
----
-
-## Dialogs
-
-### 1. `lib/features/dictionary_management/stardict_download_dialog.dart`
-
-#### Class: `StardictDownloadDialog`
-
-Dialog for downloading StarDict dictionaries.
-
-##### Method: `createState`
-
-Creates the mutable state for this widget.
-
-**Returns:** `_StardictDownloadDialogState` - The state instance.
-
----
-
-## Dependency Graph
-
-Below is a dependency list showing which modules depend on others (similar to `flutter pub deps`):
-
-```
-hdict
-├── lib/main.dart
-│   ├── flutter/material.dart
-│   ├── provider (package)
-│   ├── lib/core/theme/app_theme.dart
-│   ├── lib/core/database/database_helper.dart
-│   └── lib/features/home/home_screen.dart
-│
-├── lib/core/
-│   ├── constants/
-│   │   └── iso_639_2_languages.dart (standalone - no deps)
-│   │
-│   ├── database/
-│   │   └── database_helper.dart
-│   │       ├── dart:collection
-│   │       ├── dart:io
-│   │       ├── dart:math
-│   │       ├── flutter/foundation.dart
-│   │       ├── path (package)
-│   │       ├── path_provider (package)
-│   │       ├── sqflite (package)
-│   │       ├── sqflite_common_ffi (package)
-│   │       ├── sqflite_common_ffi_web (package)
-│   │       └── lib/core/utils/logger.dart
-│   │
-│   ├── manager/
-│   │   ├── dictionary_manager.dart
-│   │   │   ├── dart:collection
-│   │   │   ├── dart:convert
-│   │   │   ├── dart:io
-│   │   │   ├── dart:isolate
-│   │   │   ├── dart:async
-│   │   │   ├── flutter/foundation.dart
-│   │   │   ├── flutter/services.dart
-│   │   │   ├── archive (package)
-│   │   │   ├── archive_io (package)
-│   │   │   ├── path (package)
-│   │   │   ├── path_provider (package)
-│   │   │   ├── http (package)
-│   │   │   ├── crypto (package)
-│   │   │   ├── flutter_7zip (package)
-│   │   │   ├── docman (package)
-│   │   │   ├── lib/core/database/database_helper.dart
-│   │   │   ├── lib/core/parser/ifo_parser.dart
-│   │   │   ├── lib/core/parser/idx_parser.dart
-│   │   │   ├── lib/core/parser/syn_parser.dart
-│   │   │   ├── lib/core/parser/dict_reader.dart
-│   │   │   ├── lib/core/parser/mdict_reader.dart
-│   │   │   ├── lib/core/parser/slob_reader.dart
-│   │   │   ├── lib/core/parser/dictd_reader.dart
-│   │   │   ├── lib/core/parser/random_access_source.dart
-│   │   │   ├── lib/core/parser/bookmark_random_access_source.dart
-│   │   │   ├── lib/core/parser/saf_random_access_source.dart
-│   │   │   ├── lib/core/parser/bookmark_manager.dart
-│   │   │   ├── lib/core/utils/folder_scanner.dart
-│   │   │   ├── lib/core/utils/logger.dart
-│   │   │   └── lib/core/manager/dictionary_group_manager.dart
-│   │   │
-│   │   └── dictionary_group_manager.dart
-│   │       ├── dart:convert
-│   │       ├── shared_preferences (package)
-│   │       └── lib/core/manager/dictionary_manager.dart
-│   │
-│   ├── parser/
-│   │   ├── ifo_parser.dart
-│   │   │   ├── dart:convert
-│   │   │   ├── dart:io
-│   │   │   ├── flutter/foundation.dart
-│   │   │   └── lib/core/parser/random_access_source.dart
-│   │   │
-│   │   ├── idx_parser.dart
-│   │   │   ├── dart:typed_data
-│   │   │   ├── dart:convert
-│   │   │   ├── flutter/foundation.dart
-│   │   │   ├── lib/core/parser/random_access_source.dart
-│   │   │   └── lib/core/parser/ifo_parser.dart
-│   │   │
-│   │   ├── syn_parser.dart
-│   │   │   ├── dart:typed_data
-│   │   │   ├── dart:convert
-│   │   │   └── lib/core/parser/random_access_source.dart
-│   │   │
-│   │   ├── dict_reader.dart
-│   │   │   ├── flutter/foundation.dart
-│   │   │   ├── dart:io
-│   │   │   ├── dart:convert
-│   │   │   ├── dictzip_reader (package)
-│   │   │   ├── path (package)
-│   │   │   ├── lib/core/database/database_helper.dart
-│   │   │   ├── lib/core/parser/random_access_source.dart
-│   │   │   ├── lib/core/parser/saf_random_access_source.dart
-│   │   │   └── lib/core/parser/bookmark_random_access_source.dart
-│   │   │
-│   │   ├── mdict_reader.dart
-│   │   │   ├── flutter/foundation.dart
-│   │   │   ├── dart:io
-│   │   │   ├── dict_reader (package)
-│   │   │   ├── path (package)
-│   │   │   ├── lib/core/utils/logger.dart
-│   │   │   ├── lib/core/parser/random_access_source.dart
-│   │   │   ├── lib/core/parser/saf_random_access_source.dart
-│   │   │   ├── lib/core/parser/bookmark_random_access_source.dart
-│   │   │   └── lib/core/parser/mdd_reader.dart
-│   │   │
-│   │   ├── mdd_reader.dart
-│   │   │   ├── dart:typed_data
-│   │   │   └── dict_reader (package)
-│   │   │
-│   │   ├── slob_reader.dart
-│   │   │   ├── slob_reader (package)
-│   │   │   ├── flutter/foundation.dart
-│   │   │   ├── dart:io
-│   │   │   ├── dart:convert
-│   │   │   ├── path (package)
-│   │   │   ├── lib/core/parser/random_access_source.dart
-│   │   │   ├── lib/core/parser/saf_random_access_source.dart
-│   │   │   └── lib/core/parser/bookmark_random_access_source.dart
-│   │   │
-│   │   ├── dictd_reader.dart
-│   │   │   ├── dart:io
-│   │   │   ├── flutter/foundation.dart
-│   │   │   ├── path (package)
-│   │   │   ├── dictd_reader (package)
-│   │   │   ├── lib/core/parser/random_access_source.dart
-│   │   │   ├── lib/core/parser/saf_random_access_source.dart
-│   │   │   └── lib/core/parser/bookmark_random_access_source.dart
-│   │   │
-│   │   ├── random_access_source.dart (standalone - re-exports from dictzip_reader)
-│   │   │
-│   │   ├── bookmark_manager.dart
-│   │   │   ├── flutter/foundation.dart
-│   │   │   ├── flutter/services.dart
-│   │   │   └── dart:io
-│   │   │
-│   │   ├── bookmark_random_access_source.dart
-│   │   │   ├── dart:typed_data
-│   │   │   ├── dart:io
-│   │   │   ├── path (package)
-│   │   │   ├── lib/core/parser/random_access_source.dart
-│   │   │   └── lib/core/parser/bookmark_manager.dart
-│   │   │
-│   │   └── saf_random_access_source.dart
-│   │       ├── dart:async
-│   │       ├── dart:math
-│   │       ├── dart:typed_data
-│   │       ├── saf_stream (package)
-│   │       ├── docman (package)
-│   │       └── lib/core/parser/random_access_source.dart
-│   │
-│   ├── theme/
-│   │   └── app_theme.dart
-│   │       └── flutter/material.dart
-│   │
-│   └── utils/
-│       ├── anchor_id_extension.dart
-│       │   ├── flutter/widgets.dart
-│       │   └── flutter_html (package)
-│       │
-│       ├── benchmark_utils.dart
-│       │   ├── dart:async
-│       │   ├── lib/core/database/database_helper.dart
-│       │   ├── lib/core/manager/dictionary_manager.dart
-│       │   └── lib/core/utils/logger.dart
-│       │
-│       ├── folder_scanner.dart
-│       │   ├── dart:io
-│       │   ├── archive (package)
-│       │   ├── archive_io (package)
-│       │   ├── flutter_7zip (package)
-│       │   ├── path (package)
-│       │   └── lib/core/utils/logger.dart
-│       │
-│       ├── html_lookup_wrapper.dart
-│       │   └── lib/core/utils/logger.dart
-│       │
-│       ├── logger.dart
-│       │   └── flutter/foundation.dart
-│       │
-│       ├── multimedia_processor.dart
-│       │   ├── dart:convert
-│       │   ├── dart:typed_data
-│       │   ├── lib/core/parser/mdict_reader.dart
-│       │   └── lib/core/utils/logger.dart
-│       │
-│       └── word_boundary.dart (standalone - no deps)
-│
-└── lib/features/
-    ├── about/
-    │   └── about_screen.dart
-    │       ├── flutter/material.dart
-    │       ├── flutter/services.dart
-    │       ├── url_launcher (package)
-    │       └── lib/features/home/widgets/app_drawer.dart
-    │
-    ├── flash_cards/
-    │   ├── flash_cards_screen.dart
-    │   │   ├── flutter/material.dart
-    │   │   ├── flutter/rendering.dart
-    │   │   ├── dart:math
-    │   │   ├── flutter_html (package)
-    │   │   ├── provider (package)
-    │   │   ├── lib/core/database/database_helper.dart
-    │   │   ├── lib/core/manager/dictionary_manager.dart
-    │   │   ├── lib/core/utils/html_lookup_wrapper.dart
-    │   │   ├── lib/core/utils/word_boundary.dart
-    │   │   ├── lib/core/utils/logger.dart
-    │   │   ├── lib/features/home/widgets/app_drawer.dart
-    │   │   ├── lib/features/settings/settings_provider.dart
-    │   │   └── lib/features/flash_cards/result_screen.dart
-    │   │
-    │   ├── result_screen.dart (standalone)
-    │   │
-    │   └── score_history_screen.dart
-    │       ├── flutter/material.dart
-    │       ├── intl (package)
-    │       ├── lib/core/database/database_helper.dart
-    │       └── lib/features/home/widgets/app_drawer.dart
-    │
-    ├── help/
-    │   └── manual_screen.dart
-    │       ├── flutter/material.dart
-    │       ├── flutter/services.dart
-    │       ├── flutter_markdown_plus (package)
-    │       └── lib/features/home/widgets/app_drawer.dart
-    │
-    ├── home/
-    │   ├── home_screen.dart
-    │   │   ├── flutter/material.dart
-    │   │   ├── flutter/services.dart
-    │   │   ├── flutter/rendering.dart
-    │   │   ├── flutter/foundation.dart
-    │   │   ├── url_launcher (package)
-    │   │   ├── flutter_html (package)
-    │   │   ├── just_audio (package)
-    │   │   ├── video_player (package)
-    │   │   ├── chewie (package)
-    │   │   ├── in_app_review (package)
-    │   │   ├── provider (package)
-    │   │   ├── path_provider (package)
-    │   │   ├── lib/core/utils/logger.dart
-    │   │   ├── lib/core/database/database_helper.dart
-    │   │   ├── lib/core/manager/dictionary_manager.dart
-    │   │   ├── lib/core/utils/html_lookup_wrapper.dart
-    │   │   ├── lib/core/utils/multimedia_processor.dart
-    │   │   ├── lib/core/utils/anchor_id_extension.dart
-    │   │   ├── lib/core/utils/word_boundary.dart
-    │   │   ├── lib/features/settings/settings_provider.dart
-    │   │   ├── lib/features/home/widgets/app_drawer.dart
-    │   │   └── lib/features/settings/dictionary_management_screen.dart
-    │   │
-    │   └── widgets/
-    │       └── app_drawer.dart
-    │           ├── flutter/material.dart
-    │           ├── lib/features/about/about_screen.dart
-    │           ├── lib/features/flash_cards/flash_cards_screen.dart
-    │           ├── lib/features/flash_cards/score_history_screen.dart
-    │           ├── lib/features/help/manual_screen.dart
-    │           ├── lib/features/home/home_screen.dart
-    │           ├── lib/features/settings/dictionary_management_screen.dart
-    │           ├── lib/features/settings/search_history_screen.dart
-    │           ├── lib/features/settings/settings_screen.dart
-    │           ├── lib/features/support/support_screen.dart
-    │           └── lib/features/settings/dictionary_groups_screen.dart
-    │
-    ├── settings/
-    │   ├── settings_screen.dart
-    │   │   ├── flutter/material.dart
-    │   │   ├── flutter_colorpicker (package)
-    │   │   ├── provider (package)
-    │   │   ├── lib/features/settings/settings_provider.dart
-    │   │   ├── lib/features/home/widgets/app_drawer.dart
-    │   │   └── lib/core/database/database_helper.dart
-    │   │
-    │   ├── settings_provider.dart
-    │   │   ├── flutter/material.dart
-    │   │   └── shared_preferences (package)
-    │   │
-    │   ├── dictionary_management_screen.dart
-    │   │   ├── flutter/material.dart
-    │   │   ├── dart:io
-    │   │   ├── flutter/foundation.dart
-    │   │   ├── file_selector (package)
-    │   │   ├── file_picker (package)
-    │   │   ├── lib/core/manager/dictionary_manager.dart
-    │   │   ├── lib/core/manager/dictionary_group_manager.dart
-    │   │   ├── lib/core/parser/bookmark_manager.dart
-    │   │   ├── lib/features/home/widgets/app_drawer.dart
-    │   │   └── lib/features/settings/widgets/stardict_download_dialog.dart
-    │   │
-    │   ├── dictionary_groups_screen.dart
-    │   │   ├── flutter/material.dart
-    │   │   ├── lib/core/manager/dictionary_manager.dart
-    │   │   ├── lib/core/manager/dictionary_group_manager.dart
-    │   │   └── lib/features/home/widgets/app_drawer.dart
-    │   │
-    │   ├── search_history_screen.dart
-    │   │   ├── flutter/material.dart
-    │   │   ├── intl (package)
-    │   │   ├── lib/core/database/database_helper.dart
-    │   │   └── lib/features/home/widgets/app_drawer.dart
-    │   │
-    │   ├── services/
-    │   │   └── stardict_service.dart
-    │   │       ├── dart:convert
-    │   │       ├── http (package)
-    │   │       ├── lib/core/database/database_helper.dart
-    │   │       ├── lib/core/constants/iso_639_2_languages.dart
-    │   │       └── lib/core/utils/logger.dart
-    │   │
-    │   └── widgets/
-    │       └── stardict_download_dialog.dart
-    │           ├── flutter/material.dart
-    │           ├── lib/core/constants/iso_639_2_languages.dart
-    │           └── lib/features/settings/services/stardict_service.dart
-    │
-    └── support/
-        └── support_screen.dart
-            ├── flutter/material.dart
-            ├── flutter/services.dart
-            ├── url_launcher (package)
-            └── lib/features/home/widgets/app_drawer.dart
+final decompressed = _decompressGzip(gzipBytes);
 ```
 
 ---
 
-## Function-Level Dependencies
+###### `_decompressBZip2`
 
+```dart
+List<int> _decompressBZip2(List<int> bytes)
 ```
-HomeScreen._performSearch
-├── DatabaseHelper.searchWords
-│   ├── DatabaseHelper._ensureDictionaryMapCache
-│   └── sqflite FTS5 queries
-├── DictionaryManager.fetchDefinitionsBatch
-│   ├── DictionaryManager._getReader
-│   │   ├── MdictReader.fromPath / .fromLinkedSource / .fromUri
-│   │   ├── SlobReader.fromPath / .fromLinkedSource / .fromUri
-│   │   ├── DictReader.fromPath / .fromLinkedSource / .fromUri
-│   │   └── DictdReader.fromPath / .fromLinkedSource / .fromUri
-│   └── DictReader/MdictReader/SlobReader/DictdReader.readAtIndex/readBulk
-├── HomeScreen.consolidateDefinitions
-│   └── DatabaseHelper.getDictionaryById
-└── HtmlLookupWrapper.processRecord
 
-DictionaryManager.importDictionaryStream
-├── _extractToWorkspace
-│   └── _extractToWorkspaceSync
-│       └── GZipDecoder / BZip2Decoder / XZDecoder / SZArchive.extract
-├── scanFolderForDictionaries
-│   └── FolderScanner._extractArchiveToDir
-└── _processDictionaryFiles
-    ├── IfoParser
-    ├── IdxParser
-    ├── SynParser
-    └── DatabaseHelper.batchInsertWords
-        └── DatabaseHelper.startBatchInsert / .endBatchInsert
+Decompresses BZip2-encoded byte data using the archive package.
 
-DictionaryManager.fetchDefinition
-├── DictionaryManager._getReader
-│   ├── MdictReader (for .mdx)
-│   │   └── MddReader (for .mdd multimedia)
-│   ├── SlobReader (for .slob)
-│   ├── DictReader (for StarDict .dict)
-│   └── DictdReader (for DICTD)
-└── DictionaryManager._definitionCache (LRU)
+**Parameters:**
+- `bytes` - The BZip2-compressed byte data
 
-DatabaseHelper.searchWords
-├── DatabaseHelper._ensureDictionaryMapCache
-├── sqflite database queries (FTS5 or fallback)
-└── DatabaseHelper._queryCache (LRU)
-
-HtmlLookupWrapper.processRecord
-└── logger.hDebugPrint (showHtmlProcessing check)
-
-MultimediaProcessor.processHtmlWithMedia
-├── MddReader.getMddResourceBytes
-├── MultimediaProcessor._replaceImgSrcWithDataUris
-└── MultimediaProcessor._addMediaTapHandlers
-    └── MultimediaProcessor.injectCss
-
-FlashCardsScreen._startQuiz
-├── DatabaseHelper.getBatchSampleWords
-│   ├── DatabaseHelper._ensureDictionaryMapCache
-│   └── Random.sample
-└── DictionaryManager.instance.fetchDefinition
-
-StardictService.refreshDictionaries
-├── http.get (package)
-├── DatabaseHelper.insertFreedictDictionaries
-└── StardictDictionary.fromTsvRow
-
-DictionaryGroupManager.autoGenerateGroupsFromDownloaded
-├── StardictService.fetchDictionaries
-│   └── DatabaseHelper.getFreedictDictionaries
-└── StardictService.refreshDictionaries
-```
+**Returns:** Decompressed byte list
 
 ---
 
-*Last updated: March 2026*
+###### `_decompressXZ`
+
+```dart
+List<int> _decompressXZ(List<int> bytes)
+```
+
+Decompresses XZ-encoded byte data using the archive package.
+
+**Parameters:**
+- `bytes` - The XZ-compressed byte data
+
+**Returns:** Decompressed byte list
 
 ---
 
-# Private API
-
-
-
-## Settings
-
-### 1. `lib/features/settings/settings_provider.dart`
-
-#### Private Static Fields
-
-##### `_keyHeadwordColor`
+###### `_dictPathIsDz`
 
 ```dart
-static const String _keyHeadwordColor = 'headword_color';
+bool _dictPathIsDz(String dictPath)
 ```
 
-Key for storing headword color preference.
+Checks if a dictionary path points to a gzip-compressed .dz file.
 
-##### `_keyTextColor`
+**Parameters:**
+- `dictPath` - The dictionary file path to check
 
-```dart
-static const String _keyTextColor = 'text_color';
-```
-
-Key for storing text color preference.
-
-##### `_keyBackgroundColor`
-
-```dart
-static const String _keyBackgroundColor = 'background_color';
-```
-
-Key for storing background color preference.
-
-##### `_keyFontSize`
-
-```dart
-static const String _keyFontSize = 'font_size';
-```
-
-Key for storing font size preference.
-
-##### `_keyThemeMode`
-
-```dart
-static const String _keyThemeMode = 'theme_mode';
-```
-
-Key for storing theme mode preference.
-
-##### `_keyHeadwordSearchMode`
-
-```dart
-static const String _keyHeadwordSearchMode = 'headword_search_mode';
-```
-
-Key for storing headword search mode preference.
-
-##### `_keyTapOnMeaningEnabled`
-
-```dart
-static const String _keyTapOnMeaningEnabled = 'tap_on_meaning_enabled';
-```
-
-Key for storing tap on meaning setting.
-
-##### `_keyOpenPopupOnTap`
-
-```dart
-static const String _keyOpenPopupOnTap = 'open_popup_on_tap';
-```
-
-Key for storing open popup on tap setting.
-
-##### `_keyReviewPromptCount`
-
-```dart
-static const String _keyReviewPromptCount = 'review_prompt_count';
-```
-
-Key for storing review prompt count.
-
-##### `_keyHasGivenReview`
-
-```dart
-static const String _keyHasGivenReview = 'has_given_review';
-```
-
-Key for storing whether user has given review.
-
-##### `_keyListMode`
-
-```dart
-static const String _keyListMode = 'list_mode';
-```
-
-Key for storing list mode setting.
-
-##### `_keyShowSearchSuggestions`
-
-```dart
-static const String _keyShowSearchSuggestions = 'show_search_suggestions';
-```
-
-Key for storing search suggestions toggle setting.
-
-##### `_keySearchAsYouType`
-
-```dart
-static const String _keySearchAsYouType = 'search_as_you_type';
-```
-
-Key for storing Search As You Type toggle setting.
+**Returns:** `true` if the path ends with `.dz` (case-insensitive)
 
 ---
 
-## Home Screen
-
-### 1. `lib/features/home/home_screen.dart`
-
-#### Class: `_HomeScreenState`
-
-The state class for HomeScreen.
-
-##### Private Instance Fields
-
-###### `_selectedWord`
+###### `_getDictFileSize`
 
 ```dart
-String? _selectedWord;
-```
-
-The currently selected word.
-
-###### `_currentDefinitions`
-
-```dart
-List<Map<String, dynamic>> _currentDefinitions = [];
-```
-
-The current search results.
-
-###### `_isLoading`
-
-```dart
-bool _isLoading = false;
-```
-
-Whether a search is in progress.
-
-###### `_hasDictionaries`
-
-```dart
-bool _hasDictionaries = false;
-```
-
-Whether any dictionaries are installed.
-
-###### `_checkingDicts`
-
-```dart
-bool _checkingDicts = true;
-```
-
-Whether dictionary check is in progress.
-
-###### `_tabController`
-
-```dart
-TabController? _tabController;
-```
-
-Controller for the dictionary tab bar.
-
-###### `_headwordController`
-
-```dart
-TextEditingController _headwordController = TextEditingController();
-```
-
-Controller for headword search input.
-
-###### `_defController`
-
-```dart
-TextEditingController _defController = TextEditingController();
-```
-
-Controller for definition search input.
-
-###### `_searchSqliteMs`
-
-```dart
-int? _searchSqliteMs;
-```
-
-SQLite query time in milliseconds.
-
-###### `_searchOtherMs`
-
-```dart
-int? _searchOtherMs;
-```
-
-Other processing time in milliseconds.
-
-###### `_searchTotalMs`
-
-```dart
-int? _searchTotalMs;
-```
-
-Total search time in milliseconds.
-
-###### `_searchResultCount`
-
-```dart
-int? _searchResultCount;
-```
-
-Number of search results.
-
-###### `_lastHeadwordQuery`
-
-```dart
-String? _lastHeadwordQuery;
-```
-
-Last headword search query.
-
-###### `_lastDefinitionQuery`
-
-```dart
-String? _lastDefinitionQuery;
-```
-
-Last definition search query.
-
-###### `_isPopupOpen`
-
-```dart
-bool _isPopupOpen = false;
-```
-
-Whether a popup is currently open.
-
-##### Private Instance Methods
-
-###### `initState`
-
-```dart
-void initState()
-```
-
-Called when this object is inserted into the tree. Initializes the home screen, checks for dictionaries, and sets up search controllers.
-
-###### `dispose`
-
-```dart
-void dispose()
-```
-
-Called when this object is removed from the tree permanently. Disposes of controllers and cleans up resources.
-
-###### `build`
-
-```dart
-Widget build(BuildContext context)
-```
-
-Builds the home screen UI with search bars, dictionary tabs, and results view.
-
-###### `_performSearch`
-
-Performs the dictionary search.
-
-###### `_onWordSelected`
-
-Handles word selection from history.
-
-###### `_onDefinitionSelected`
-
-Handles definition selection.
-
-###### `_showWordPopup`
-
-Shows the word lookup popup.
-
-###### `_checkDictionaries`
-
-Checks for installed dictionaries.
-
-###### `_buildSearchBars`
-
-Builds the search input UI.
-
-###### `_buildDefaultContent`
-
-Builds the default home content.
-
-###### `_buildResultsView`
-
-Builds the search results view.
-
-###### `_buildDefinitionContent`
-
-Builds the definition content widget.
-
-###### `_buildDefinitionContentSync`
-
-Builds definition content synchronously.
-
-###### `_extractTextFromHtml`
-
-Extracts plain text from HTML.
-
-###### `_buildAccordionItem`
-
-Builds an accordion item for list mode.
-
-###### `consolidateDefinitions`
-
-Static method to consolidate definitions.
-
-###### `normalizeWhitespace`
-
-Static method to normalize whitespace.
-
-###### `_buildSuggestionsRow`
-
-Builds the suggestions row widget for autocomplete display.
-
-###### `_getSuggestions`
-
-Gets headword suggestions for autocomplete based on query.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `query` | `String` | The search query |
-
-**Returns:** `Future<List<String>>` - List of suggestion words.
-
-###### `_getDefinitionSuggestions`
-
-Gets definition-based suggestions for Search As You Type.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `query` | `String` | The search query |
-
-**Returns:** `Future<List<String>>` - List of matching headwords.
-
----
-
-#### Class: `_MdictDefinitionContent`
-
-Widget for MDict definition content.
-
-##### Private Instance Fields
-
-###### `defMap`
-
-```dart
-final Map<String, dynamic> defMap;
-```
-
-Map containing definition data from dictionary lookup.
-
-###### `theme`
-
-```dart
-final ThemeData? theme;
-```
-
-Theme data for styling the content.
-
-###### `highlightHeadword`
-
-```dart
-final String? highlightHeadword;
-```
-
-Headword to highlight in the definition.
-
-###### `highlightDefinition`
-
-```dart
-final String? highlightDefinition;
-```
-
-Definition text to highlight.
-
-###### `searchSqliteMs`
-
-```dart
-final int? searchSqliteMs;
-```
-
-Time taken for SQLite query in milliseconds.
-
-###### `searchOtherMs`
-
-```dart
-final int? searchOtherMs;
-```
-
-Time taken for other processing in milliseconds.
-
-###### `searchTotalMs`
-
-```dart
-final int? searchTotalMs;
-```
-
-Total search time in milliseconds.
-
-###### `searchResultCount`
-
-```dart
-final int? searchResultCount;
-```
-
-Number of search results.
-
-###### `startIndex`
-
-```dart
-final int? startIndex;
-```
-
-Starting index for paginated results.
-
-###### `forceDefaultMode`
-
-```dart
-final bool forceDefaultMode;
-```
-
-Whether to force default view mode.
-
-##### Private Constructor
-
-```dart
-_MdictDefinitionContent({
-  Key? key,
-  required this.defMap,
-  this.theme,
-  this.highlightHeadword,
-  this.highlightDefinition,
-  this.searchSqliteMs,
-  this.searchOtherMs,
-  this.searchTotalMs,
-  this.searchResultCount,
-  this.startIndex,
-  this.forceDefaultMode = false,
-});
-```
-
-Creates a definition content widget with the specified parameters.
-
-##### Private Instance Methods
-
-###### `createState`
-
-```dart
-State<StatefulWidget> createState()
-```
-
-Creates the mutable state for this widget.
-
-###### `_processMultimedia`
-
-Processes multimedia content.
-
-###### `_buildAccordionItem`
-
-Builds an accordion item for list mode.
-
-###### `_buildDefinitionContentSync`
-
-Builds definition content synchronously.
-
----
-
-#### Class: `_MdictDefinitionContentState`
-
-State class for `_MdictDefinitionContent` widget.
-
-##### Private Instance Fields
-
-###### `_isProcessing`
-
-```dart
-bool _isProcessing = false;
-```
-
-Whether multimedia is being processed.
-
-###### `_rawDefinitions`
-
-```dart
-late List<Map<String, dynamic>> _rawDefinitions;
-```
-
-Raw definitions data.
-
-##### Private Instance Methods
-
-###### `initState`
-
-```dart
-void initState()
-```
-
-Called when this object is inserted into the tree. Initializes the definition content state.
-
-###### `build`
-
-```dart
-Widget build(BuildContext context)
-```
-
-Builds the definition content UI.
-
-###### `_processMultimedia`
-
-Processes multimedia content including video from MDD resources.
-
----
-
-#### Class: `_MediaPlayerDialog`
-
-Dialog for playing audio/video media.
-
-##### Private Instance Fields
-
-###### `data`
-
-```dart
-final String data;
-```
-
-Base64-encoded media data or resource key.
-
-###### `mediaType`
-
-```dart
-final String mediaType;
-```
-
-Type of media ('audio' or 'video').
-
-###### `filename`
-
-```dart
-final String filename;
-```
-
-Original filename of the media.
-
-##### Private Constructor
-
-```dart
-_MediaPlayerDialog({
-  Key? key,
-  required this.data,
-  required this.mediaType,
-  required this.filename,
-});
-```
-
-Creates a media player dialog with the specified media data and type.
-
-##### Private Instance Methods
-
-###### `createState`
-
-```dart
-State<StatefulWidget> createState()
-```
-
-Creates the mutable state for this widget.
-
-###### `_initPlayer`
-
-Initializes the media player.
-
-###### `_formatDuration`
-
-Formats duration for display.
-
----
-
-## Dictionary Management
-
-### 1. `lib/features/dictionary_management/dictionary_management_screen.dart`
-
-#### Class: `_DictionaryManagementScreenState`
-
-The state class for DictionaryManagementScreen.
-
-##### Private Instance Methods
-
-###### `_scanForDictionaries`
-
-Scans for dictionaries in the app directory.
-
-###### `_importDictionaries`
-
-Imports selected dictionaries.
-
-###### `_showImportDialog`
-
-Shows the import dialog.
-
-###### `_showDeleteDialog`
-
-Shows the delete confirmation dialog.
-
----
-
-### 2. `lib/features/dictionary_groups/dictionary_groups_screen.dart`
-
-#### Class: `_DictionaryGroupsScreenState`
-
-The state class for DictionaryGroupsScreen.
-
-##### Private Instance Methods
-
-###### `_loadGroups`
-
-Loads dictionary groups from storage.
-
----
-
-## Flash Cards
-
-### 1. `lib/features/flash_cards/flash_cards_screen.dart`
-
-#### Class: `_FlashCardsScreenState`
-
-The state class for FlashCardsScreen.
-
-##### Private Instance Fields
-
-###### `_score`
-
-```dart
-int _score = 0;
-```
-
-Current score.
-
-###### `_index`
-
-```dart
-int _index = 0;
-```
-
-Current card index.
-
-##### Private Instance Methods
-
-###### `initState`
-
-```dart
-void initState()
-```
-
-Called when this object is inserted into the tree. Initializes the flash card state and loads cards.
-
-###### `dispose`
-
-```dart
-void dispose()
-```
-
-Called when this object is removed from the tree permanently. Cleans up resources like audio player.
-
-###### `build`
-
-```dart
-Widget build(BuildContext context)
-```
-
-Builds the flash card UI with score display and card content.
-
-###### `_loadCards`
-
-Loads flash cards.
-
----
-
-## Search History
-
-### 1. `lib/features/search_history/search_history_screen.dart`
-
-#### Class: `_SearchHistoryScreenState`
-
-The state class for SearchHistoryScreen.
-
-##### Private Instance Methods
-
-###### `initState`
-
-```dart
-void initState()
-```
-
-Called when this object is inserted into the tree. Initializes the search history screen.
-
-###### `build`
-
-```dart
-Widget build(BuildContext context)
-```
-
-Builds the search history list UI.
-
-###### `_loadHistory`
-
-Loads search history from database.
-
-###### `_clearHistory`
-
-Clears all search history.
-
----
-
-## Score History
-
-### 1. `lib/features/score_history/score_history_screen.dart`
-
-#### Class: `_ScoreHistoryScreenState`
-
-The state class for ScoreHistoryScreen.
-
-##### Private Instance Methods
-
-###### `initState`
-
-```dart
-void initState()
-```
-
-Called when this object is inserted into the tree. Initializes the score history screen.
-
-###### `build`
-
-```dart
-Widget build(BuildContext context)
-```
-
-Builds the score history list UI with chart visualization.
-
-###### `_loadScores`
-
-Loads score history from database.
-
----
-
-## Media Players
-
-### 1. `lib/features/home/home_screen.dart`
-
-#### Class: `_MediaPlayerDialogState`
-
-State class for `_MediaPlayerDialog`.
-
-##### Private Instance Fields
-
-###### `_audioPlayer`
-
-```dart
-AudioPlayer? _audioPlayer;
-```
-
-Audio player instance.
-
-###### `_videoController`
-
-```dart
-VideoPlayerController? _videoController;
-```
-
-Video player controller.
-
-##### Private Instance Methods
-
-###### `initState`
-
-```dart
-void initState()
-```
-
-Called when this object is inserted into the tree. Initializes the media player.
-
-###### `dispose`
-
-```dart
-void dispose()
-```
-
-Called when this object is removed from the tree. Disposes of player controllers.
-
-###### `build`
-
-```dart
-Widget build(BuildContext context)
-```
-
-Builds the media player dialog UI with playback controls.
-
----
-
-## Import/Export
-
-### 1. `lib/features/dictionary_management/dictionary_management_screen.dart`
-
-#### Class: `_ImportArgs`
-
-Arguments passed to import isolate for processing archives.
-
-##### Private Constructor
-
-```dart
-_ImportArgs(
-  this.archivePath,
-  this.tempDirPath,
-  this.sendPort,
-  this.rootIsolateToken,
+Future<int> _getDictFileSize(
+  String dictPath,
+  String? dictUri,
+  bool isLinked,
+  String? sourceBookmark,
 )
 ```
 
-##### Fields
+Gets the file size of a StarDict .dict file, handling SAF and bookmark sources.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `archivePath` | `String` | Path to the archive file being imported |
-| `tempDirPath` | `String` | Temporary directory for extraction |
-| `sendPort` | `SendPort` | Port for communication with main isolate |
-| `rootIsolateToken` | `RootIsolateToken` | Token for initializing background isolate |
+**Parameters:**
+- `dictPath` - Local path to the dictionary file
+- `dictUri` - SAF URI for Android linked dictionaries
+- `isLinked` - Whether the dictionary is linked (SAF/bookmark)
+- `sourceBookmark` - Bookmark for bookmark-linked dictionaries
 
-#### Class: `_IndexArgs`
-
-Arguments passed to index isolate for processing StarDict dictionaries.
-
-##### Private Constructor
-
-```dart
-_IndexArgs(
-  this.dictId,
-  this.idxPath,
-  this.dictPath,
-  this.synPath,
-  this.indexDefinitions,
-  this.ifoParser,
-  this.sourceType,
-  this.sourceBookmark,
-  this.sendPort,
-  this.rootIsolateToken, {
-  this.idxUri,
-  this.dictUri,
-  this.synUri,
-})
-```
-
-##### Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `dictId` | `int` | Database ID of the dictionary |
-| `idxPath` | `String` | Path to the .idx file |
-| `dictPath` | `String` | Path to the .dict file |
-| `synPath` | `String?` | Optional path to the .syn file |
-| `indexDefinitions` | `bool` | Whether to index definition content |
-| `ifoParser` | `IfoParser` | Parsed IFO metadata |
-| `sourceType` | `String?` | Source type ('linked', etc.) |
-| `sourceBookmark` | `String?` | SAF bookmark for linked sources |
-| `sendPort` | `SendPort` | Port for communication with main isolate |
-| `rootIsolateToken` | `RootIsolateToken` | Token for initializing background isolate |
-| `idxUri` | `String?` | URI for .idx file (SAF) |
-| `dictUri` | `String?` | URI for .dict file (SAF) |
-| `synUri` | `String?` | URI for .syn file (SAF) |
-
-#### Class: `_IndexMdictArgs`
-
-Arguments passed to index isolate for processing MDict dictionaries.
-
-##### Private Constructor
-
-```dart
-_IndexMdictArgs({
-  required this.dictId,
-  required this.mdxPath,
-  this.mdxBytes,
-  required this.indexDefinitions,
-  required this.bookName,
-  this.sourceType,
-  this.sourceBookmark,
-  required this.sendPort,
-  required this.rootIsolateToken,
-  this.mdxUri,
-  this.mddUri,
-})
-```
-
-##### Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `dictId` | `int` | Database ID of the dictionary |
-| `mdxPath` | `String` | Path to the .mdx file |
-| `mdxBytes` | `Uint8List?` | Optional pre-loaded MDX bytes |
-| `indexDefinitions` | `bool` | Whether to index definition content |
-| `bookName` | `String` | Name of the dictionary |
-| `sourceType` | `String?` | Source type ('linked', etc.) |
-| `sourceBookmark` | `String?` | SAF bookmark for linked sources |
-| `sendPort` | `SendPort` | Port for communication with main isolate |
-| `rootIsolateToken` | `RootIsolateToken` | Token for initializing background isolate |
-| `mdxUri` | `String?` | URI for .mdx file (SAF) |
-| `mddUri` | `String?` | URI for .mdd file (SAF) |
-
-#### Class: `_IndexSlobArgs`
-
-Arguments passed to index isolate for processing SLOB dictionaries.
-
-##### Private Constructor
-
-```dart
-_IndexSlobArgs({
-  required this.dictId,
-  required this.slobPath,
-  this.slobBytes,
-  required this.indexDefinitions,
-  required this.bookName,
-  this.sourceType,
-  this.sourceBookmark,
-  required this.sendPort,
-  required this.rootIsolateToken,
-})
-```
-
-##### Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `dictId` | `int` | Database ID of the dictionary |
-| `slobPath` | `String` | Path to the .slob file |
-| `slobBytes` | `Uint8List?` | Optional pre-loaded SLOB bytes |
-| `indexDefinitions` | `bool` | Whether to index definition content |
-| `bookName` | `String` | Name of the dictionary |
-| `sourceType` | `String?` | Source type ('linked', etc.) |
-| `sourceBookmark` | `String?` | SAF bookmark for linked sources |
-| `sendPort` | `SendPort` | Port for communication with main isolate |
-| `rootIsolateToken` | `RootIsolateToken` | Token for initializing background isolate |
-
-#### Class: `_IndexDictdArgs`
-
-Arguments passed to index isolate for processing Dictd dictionaries.
-
-##### Private Constructor
-
-```dart
-_IndexDictdArgs({
-  required this.dictId,
-  required this.indexPath,
-  required this.dictPath,
-  required this.indexDefinitions,
-  required this.bookName,
-  this.sourceType,
-  this.sourceBookmark,
-  required this.sendPort,
-  required this.rootIsolateToken,
-  this.indexUri,
-  this.dictUri,
-})
-```
-
-##### Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `dictId` | `int` | Database ID of the dictionary |
-| `indexPath` | `String` | Path to the index file |
-| `dictPath` | `String` | Path to the dictionary file |
-| `indexDefinitions` | `bool` | Whether to index definition content |
-| `bookName` | `String` | Name of the dictionary |
-| `sourceType` | `String?` | Source type ('linked', etc.) |
-| `sourceBookmark` | `String?` | SAF bookmark for linked sources |
-| `sendPort` | `SendPort` | Port for communication with main isolate |
-| `rootIsolateToken` | `RootIsolateToken` | Token for initializing background isolate |
-| `indexUri` | `String?` | URI for index file (SAF) |
-| `dictUri` | `String?` | URI for dictionary file (SAF) |
+**Returns:** File size in bytes
 
 ---
 
-## Settings Screen
+###### `_loadDictFileIntoMemory`
 
-### 1. `lib/features/settings/settings_screen.dart`
+```dart
+Future<Uint8List> _loadDictFileIntoMemory(
+  String dictPath,
+  String? dictUri,
+  bool isLinked,
+  String? sourceBookmark,
+)
+```
 
-#### Class: `_SettingsScreenState`
+Loads a StarDict .dict file entirely into memory for fast access on small files.
 
-The state class for SettingsScreen.
+**Parameters:**
+- `dictPath` - Local path to the dictionary file
+- `dictUri` - SAF URI for Android linked dictionaries
+- `isLinked` - Whether the dictionary is linked
+- `sourceBookmark` - Bookmark for bookmark-linked dictionaries
 
-##### Private Instance Methods
+**Returns:** File contents as Uint8List
 
-###### `_getPreviewTheme`
-
-Gets preview theme for settings.
+**Usage:** Used for in-memory optimization when file size is under 50MB.
 
 ---
 
-## Download Dialog
+###### `_getSlobFileSize`
 
-### 1. `lib/features/dictionary_management/stardict_download_dialog.dart`
+```dart
+Future<int> _getSlobFileSize(
+  String slobPath,
+  bool isLinked,
+  String? sourceBookmark,
+)
+```
 
-#### Class: `_StardictDownloadDialogState`
+Gets the file size of a Slob dictionary file.
 
-The state class for StardictDownloadDialog.
+**Parameters:**
+- `slobPath` - Path to the .slob file
+- `isLinked` - Whether the dictionary is linked
+- `sourceBookmark` - Bookmark for bookmark-linked dictionaries
 
-##### Private Instance Methods
-
-###### `_downloadAndImport`
-
-Downloads and imports the dictionary.
+**Returns:** File size in bytes
 
 ---
 
-## Folder Scanner
-
-### 1. `lib/core/utils/folder_scanner.dart`
-
-#### Private Functions
-
-##### `_isArchive`
+###### `_loadSlobFileIntoMemory`
 
 ```dart
-bool _isArchive(String lowerPath)
+Future<Uint8List> _loadSlobFileIntoMemory(
+  String slobPath,
+  bool isLinked,
+  String? sourceBookmark,
+)
 ```
 
-Checks if the given path (in lowercase) is a supported archive format.
+Loads a Slob dictionary file into memory for optimized access.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `lowerPath` | `String` | Lowercase path to check |
+**Parameters:**
+- `slobPath` - Path to the .slob file
+- `isLinked` - Whether the dictionary is linked
+- `sourceBookmark` - Bookmark for bookmark-linked dictionaries
 
-**Returns:** `bool` - True if the path ends with a supported archive extension (.zip, .tar.gz, .tgz, .tar, .tar.bz2, .tbz2, .tar.xz, .txz, .7z).
-
-##### `_extractArchiveToDir`
-
-```dart
-Future<void> _extractArchiveToDir(String filePath, String destDir)
-```
-
-Extracts an archive file into the specified destination directory.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `filePath` | `String` | Path to the archive file |
-| `destDir` | `String` | Destination directory for extraction |
-
-**Returns:** `Future<void>`
-
-Supports: `.zip`, `.tar.gz`, `.tgz`, `.tar`, `.tar.bz2`, `.tbz2`, `.tar.xz`, `.txz`, `.7z`.
-
-##### `_findFile`
-
-```dart
-String? _findFile(String base, List<String> suffixes)
-```
-
-Finds the first file that exists with any of the given suffixes.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `base` | `String` | Base path without extension |
-| `suffixes` | `List<String>` | List of file suffixes to try |
-
-**Returns:** `String?` - Full path to the first found file, or null if none exist.
+**Returns:** File contents as Uint8List
 
 ---
 
-## Video Widgets
-
-### 1. `lib/features/home/home_screen.dart`
-
-#### Class: `_MddVideoWidget`
-
-Widget for playing MDD video resources in a dialog with full playback controls.
-
-##### Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `resourceKey` | `String` | MDD resource key identifying the video file |
-| `dictId` | `int` | Dictionary ID for looking up the MDD reader |
-| `width` | `double?` | Optional video width constraint |
-| `height` | `double?` | Optional video height constraint |
-| `controls` | `bool` | Whether to show playback controls (default: true) |
-| `autoplay` | `bool` | Whether to auto-play video (default: false) |
-| `loop` | `bool` | Whether to loop video (default: false) |
-
-##### Private Constructor
+###### `_getMdxFileSize`
 
 ```dart
-const _MddVideoWidget({
-  required this.resourceKey,
-  required this.dictId,
-  this.width,
-  this.height,
-  this.controls = true,
-  this.autoplay = false,
-  this.loop = false,
-});
+Future<int> _getMdxFileSize(
+  String mdxPath,
+  bool isLinked,
+  String? sourceBookmark,
+)
 ```
 
-Creates a `_MddVideoWidget` with the specified resource and playback options.
+Gets the file size of an MDict .mdx file.
 
-##### Methods
+**Parameters:**
+- `mdxPath` - Path to the .mdx file
+- `isLinked` - Whether the dictionary is linked
+- `sourceBookmark` - Bookmark for bookmark-linked dictionaries
 
-###### `createState`
-
-```dart
-State<_MddVideoWidget> createState()
-```
-
-Creates the mutable state for this widget.
-
-**Returns:** `_MddVideoWidgetState`
+**Returns:** File size in bytes
 
 ---
 
-#### Class: `_MddVideoWidgetState`
-
-State class for `_MddVideoWidget`.
-
-##### Private Instance Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `_videoController` | `VideoPlayerController?` | Video player controller |
-| `_chewieController` | `ChewieController?` | Chewie controller |
-| `_isLoading` | `bool` | Loading state |
-| `_error` | `String?` | Error message |
-| `_tempFilePath` | `String?` | Temporary file path |
-
-##### Private Instance Methods
-
-###### `initState`
+###### `_loadMdxFileIntoMemory`
 
 ```dart
-void initState()
+Future<Uint8List> _loadMdxFileIntoMemory(
+  String mdxPath,
+  bool isLinked,
+  String? sourceBookmark,
+)
 ```
 
-Called when this object is inserted into the tree. Calls `super.initState()` and initiates video loading via `_loadVideo()`.
+Loads an MDict .mdx file into memory for optimized access.
 
-###### `_loadVideo`
+**Parameters:**
+- `mdxPath` - Path to the .mdx file
+- `isLinked` - Whether the dictionary is linked
+- `sourceBookmark` - Bookmark for bookmark-linked dictionaries
 
-```dart
-Future<void> _loadVideo()
-```
-
-Asynchronously loads video from MDD resource. Retrieves bytes from the dictionary's MDD reader, writes them to a temporary file, and initializes the video player controller with Chewie for playback controls.
-
-**Operations:**
-1. Gets the MDict reader for the dictionary ID
-2. Retrieves resource bytes using `getMddResourceBytes`
-3. Writes bytes to a temporary file
-4. Initializes `VideoPlayerController` with the file
-5. Creates a `ChewieController` with playback settings (autoplay, looping, controls)
-
-**Error Handling:** Sets `_error` message and `_isLoading = false` on failure.
-
-###### `dispose`
-
-```dart
-void dispose()
-```
-
-Called when this object is removed from the tree permanently. Disposes both Chewie and video controllers, and deletes the temporary video file.
-
-###### `build`
-
-```dart
-Widget build(BuildContext context)
-```
-
-Builds the video player UI.
-
-**Returns:**
-- Loading indicator when `_isLoading` is true
-- Error display with icon and message when `_error` is set
-- `AspectRatio` widget with Chewie player when ready
+**Returns:** File contents as Uint8List
 
 ---
 
-#### Class: `_InlineVideoWidget`
-
-Widget for playing inline video from MDD resources.
-
-##### Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `resourceKey` | `String` | MDD resource key identifying the video file |
-| `dictId` | `int` | Dictionary ID for looking up the MDD reader |
-
-##### Private Constructor
-
-```dart
-const _InlineVideoWidget({required this.resourceKey, required this.dictId})
-```
-
-Creates an `_InlineVideoWidget` with the specified resource.
-
-##### Methods
-
-###### `createState`
-
-```dart
-State<_InlineVideoWidget> createState()
-```
-
-Creates the mutable state for this widget.
-
-**Returns:** `_InlineVideoWidgetState`
-
----
-
-#### Class: `_InlineVideoWidgetState`
-
-State class for `_InlineVideoWidget`.
-
-##### Private Instance Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `_controller` | `VideoPlayerController?` | Video player controller |
-| `_isLoading` | `bool` | Loading state |
-| `_error` | `String?` | Error message |
-| `_tempFilePath` | `String?` | Temporary file path |
-
-##### Private Instance Methods
-
-###### `initState`
-
-```dart
-void initState()
-```
-
-Called when this object is inserted into the tree. Calls `super.initState()` and initiates video loading via `_loadVideo()`.
-
-###### `_loadVideo`
-
-```dart
-Future<void> _loadVideo()
-```
-
-Asynchronously loads video from MDD resource for inline playback. Retrieves bytes from the dictionary's MDD reader, writes them to a temporary file, and initializes the video player controller.
-
-**Operations:**
-1. Gets the MDict reader for the dictionary ID
-2. Retrieves resource bytes using `getMddResourceBytes`
-3. Writes bytes to a temporary file with `inline_video_` prefix
-4. Initializes `VideoPlayerController` with the file
-
-**Error Handling:** Sets `_error` message and `_isLoading = false` on failure.
-
-###### `dispose`
-
-```dart
-void dispose()
-```
-
-Called when this object is removed from the tree permanently. Disposes the video controller and deletes the temporary video file.
-
-###### `build`
-
-```dart
-Widget build(BuildContext context)
-```
-
-Builds the inline video player UI.
-
-**Returns:**
-- Loading indicator when `_isLoading` is true
-- Error display with icon and message when `_error` is set
-- Video player with controls when ready
-
----
-
-#### Class: `_VideoControls`
-
-Stateless widget for video playback controls.
-
-##### Private Instance Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `controller` | `VideoPlayerController` | Video player controller |
-
-##### Private Instance Methods
-
-###### `_formatDuration`
-
-Formats duration for display.
-
----
-
-## Helper Classes
-
-### 1. `lib/core/manager/dictionary_manager.dart`
-
-#### Class: `_ExtractArgs`
+### Class: `_ExtractArgs`
 
 Arguments class for archive extraction in isolate.
 
@@ -5264,35 +4516,7 @@ Creates an instance of `_ExtractArgs` with the specified file and workspace path
 
 ---
 
-#### Class: `_ImportArgs`
-
-Arguments class for dictionary import operations in isolate.
-
-##### Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `archivePath` | `String` | Path to the archive file being imported |
-| `tempDirPath` | `String` | Temporary directory for extraction |
-| `sendPort` | `SendPort` | Port for communicating progress back to main isolate |
-| `rootIsolateToken` | `RootIsolateToken` | Token for initializing background isolate |
-
-##### Private Constructor
-
-```dart
-_ImportArgs(
-  this.archivePath,
-  this.tempDirPath,
-  this.sendPort,
-  this.rootIsolateToken,
-);
-```
-
-Creates an instance of `_ImportArgs` for passing import parameters to the isolate.
-
----
-
-#### Class: `_IndexArgs`
+### Class: `_IndexArgs`
 
 Arguments class for StarDict (.idx/.dict) indexing in isolate.
 
@@ -5338,7 +4562,7 @@ Creates an instance of `_IndexArgs` for StarDict indexing operations.
 
 ---
 
-#### Class: `_IndexMdictArgs`
+### Class: `_IndexMdictArgs`
 
 Arguments class for MDict (.mdx) indexing in isolate.
 
@@ -5380,7 +4604,7 @@ Creates an instance of `_IndexMdictArgs` for MDict indexing operations.
 
 ---
 
-#### Class: `_IndexSlobArgs`
+### Class: `_IndexSlobArgs`
 
 Arguments class for Slob (.slob) indexing in isolate.
 
@@ -5418,7 +4642,7 @@ Creates an instance of `_IndexSlobArgs` for Slob indexing operations.
 
 ---
 
-#### Class: `_IndexDictdArgs`
+### Class: `_IndexDictdArgs`
 
 Arguments class for DICTD indexing in isolate.
 
@@ -5458,208 +4682,9 @@ _IndexDictdArgs({
 
 Creates an instance of `_IndexDictdArgs` for DICTD server indexing operations.
 
----
+##### Private Standalone Functions
 
-#### Private Standalone Functions
-
-#### Function: `_decompressGzip`
-
-```dart
-List<int> _decompressGzip(List<int> bytes)
-```
-
-Decompresses gzip-encoded byte data using Dart's built-in GZipDecoder.
-
-**Parameters:**
-- `bytes` - The gzip-compressed byte data
-
-**Returns:** Decompressed byte list
-
-**Example:**
-```dart
-final decompressed = _decompressGzip(gzipBytes);
-```
-
----
-
-#### Function: `_decompressBZip2`
-
-```dart
-List<int> _decompressBZip2(List<int> bytes)
-```
-
-Decompresses BZip2-encoded byte data using the archive package.
-
-**Parameters:**
-- `bytes` - The BZip2-compressed byte data
-
-**Returns:** Decompressed byte list
-
----
-
-#### Function: `_decompressXZ`
-
-```dart
-List<int> _decompressXZ(List<int> bytes)
-```
-
-Decompresses XZ-encoded byte data using the archive package.
-
-**Parameters:**
-- `bytes` - The XZ-compressed byte data
-
-**Returns:** Decompressed byte list
-
----
-
-#### Function: `_dictPathIsDz`
-
-```dart
-bool _dictPathIsDz(String dictPath)
-```
-
-Checks if a dictionary path points to a gzip-compressed .dz file.
-
-**Parameters:**
-- `dictPath` - The dictionary file path to check
-
-**Returns:** `true` if the path ends with `.dz` (case-insensitive)
-
----
-
-#### Function: `_getDictFileSize`
-
-```dart
-Future<int> _getDictFileSize(
-  String dictPath,
-  String? dictUri,
-  bool isLinked,
-  String? sourceBookmark,
-)
-```
-
-Gets the file size of a StarDict .dict file, handling SAF and bookmark sources.
-
-**Parameters:**
-- `dictPath` - Local path to the dictionary file
-- `dictUri` - SAF URI for Android linked dictionaries
-- `isLinked` - Whether the dictionary is linked (SAF/bookmark)
-- `sourceBookmark` - Bookmark for bookmark-linked dictionaries
-
-**Returns:** File size in bytes
-
----
-
-#### Function: `_loadDictFileIntoMemory`
-
-```dart
-Future<Uint8List> _loadDictFileIntoMemory(
-  String dictPath,
-  String? dictUri,
-  bool isLinked,
-  String? sourceBookmark,
-)
-```
-
-Loads a StarDict .dict file entirely into memory for fast access on small files.
-
-**Parameters:**
-- `dictPath` - Local path to the dictionary file
-- `dictUri` - SAF URI for Android linked dictionaries
-- `isLinked` - Whether the dictionary is linked
-- `sourceBookmark` - Bookmark for bookmark-linked dictionaries
-
-**Returns:** File contents as Uint8List
-
-**Usage:** Used for in-memory optimization when file size is under 50MB.
-
----
-
-#### Function: `_getSlobFileSize`
-
-```dart
-Future<int> _getSlobFileSize(
-  String slobPath,
-  bool isLinked,
-  String? sourceBookmark,
-)
-```
-
-Gets the file size of a Slob dictionary file.
-
-**Parameters:**
-- `slobPath` - Path to the .slob file
-- `isLinked` - Whether the dictionary is linked
-- `sourceBookmark` - Bookmark for bookmark-linked dictionaries
-
-**Returns:** File size in bytes
-
----
-
-#### Function: `_loadSlobFileIntoMemory`
-
-```dart
-Future<Uint8List> _loadSlobFileIntoMemory(
-  String slobPath,
-  bool isLinked,
-  String? sourceBookmark,
-)
-```
-
-Loads a Slob dictionary file into memory for optimized access.
-
-**Parameters:**
-- `slobPath` - Path to the .slob file
-- `isLinked` - Whether the dictionary is linked
-- `sourceBookmark` - Bookmark for bookmark-linked dictionaries
-
-**Returns:** File contents as Uint8List
-
----
-
-#### Function: `_getMdxFileSize`
-
-```dart
-Future<int> _getMdxFileSize(
-  String mdxPath,
-  bool isLinked,
-  String? sourceBookmark,
-)
-```
-
-Gets the file size of an MDict .mdx file.
-
-**Parameters:**
-- `mdxPath` - Path to the .mdx file
-- `isLinked` - Whether the dictionary is linked
-- `sourceBookmark` - Bookmark for bookmark-linked dictionaries
-
-**Returns:** File size in bytes
-
----
-
-#### Function: `_loadMdxFileIntoMemory`
-
-```dart
-Future<Uint8List> _loadMdxFileIntoMemory(
-  String mdxPath,
-  bool isLinked,
-  String? sourceBookmark,
-)
-```
-
-Loads an MDict .mdx file into memory for optimized access.
-
-**Parameters:**
-- `mdxPath` - Path to the .mdx file
-- `isLinked` - Whether the dictionary is linked
-- `sourceBookmark` - Bookmark for bookmark-linked dictionaries
-
-**Returns:** File contents as Uint8List
-
----
-
-#### Function: `_indexEntry`
+###### `_indexEntry`
 
 ```dart
 Future<void> _indexEntry(_IndexArgs args)
@@ -5680,7 +4705,7 @@ Isolate entry point for indexing StarDict dictionaries (.idx/.dict format). Pars
 
 ---
 
-#### Function: `_indexMdictEntry`
+###### `_indexMdictEntry`
 
 ```dart
 Future<void> _indexMdictEntry(_IndexMdictArgs args)
@@ -5699,7 +4724,7 @@ Isolate entry point for indexing MDict dictionaries (.mdx format). Uses prefix s
 
 ---
 
-#### Function: `_indexSlobEntry`
+###### `_indexSlobEntry`
 
 ```dart
 Future<void> _indexSlobEntry(_IndexSlobArgs args)
@@ -5718,7 +4743,7 @@ Isolate entry point for indexing Slob dictionaries (.slob format). Leverages the
 
 ---
 
-#### Function: `_indexDictdEntry`
+###### `_indexDictdEntry`
 
 ```dart
 Future<void> _indexDictdEntry(_IndexDictdArgs args)
@@ -5737,7 +4762,7 @@ Isolate entry point for indexing DICTD server dictionaries. Parses index entries
 
 ---
 
-#### Function: `_extractToWorkspaceSync`
+###### `_extractToWorkspaceSync`
 
 ```dart
 Future<void> _extractToWorkspaceSync(_ExtractArgs args)
@@ -5758,7 +4783,7 @@ Synchronously extracts an archive file to the workspace directory. Supports .zip
 
 ---
 
-#### Function: `_extractToWorkspace`
+###### `_extractToWorkspace`
 
 ```dart
 Future<void> _extractToWorkspace(String filePath, String workspacePath)
@@ -5774,7 +4799,7 @@ Extracts an archive to the workspace using compute for background processing.
 
 ---
 
-#### Function: `_importEntry`
+###### `_importEntry`
 
 ```dart
 Future<void> _importEntry(_ImportArgs args)
@@ -5793,79 +4818,148 @@ Isolate entry point for import operations. Extracts an archive and scans for dic
 
 ---
 
-### 2. `lib/core/utils/folder_scanner.dart`
+## `lib/core/manager/dictionary_group_manager.dart` {#libcoremanagerdictionary_group_manager-dart}
 
-#### Private Standalone Functions
+### Class: `DictionaryGroup`
 
-#### Function: `_isArchive`
+Represents a group of dictionaries.
 
-```dart
-bool _isArchive(String filePath)
-```
-
-Checks if a file path points to a supported archive format.
-
-**Parameters:**
-- `filePath` - The file path to check
-
-**Returns:** `true` if the file has an archive extension (.zip, .tar.gz, .tar, .tar.bz2, .tar.xz, .7z, .gz)
-
----
-
-#### Function: `_extractArchiveToDir`
+##### Constructor
 
 ```dart
-Future<void> _extractArchiveToDir(String archivePath, String outputDir)
+DictionaryGroup({required String id, required String name, required List<int> dictIds})
 ```
 
-Extracts an archive file to a specified directory. Non-archive files are copied as-is.
+##### Properties
 
-**Parameters:**
-- `archivePath` - Path to the archive file
-- `outputDir` - Destination directory for extraction
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | `String` | Unique group identifier |
+| `dictIds` | `List<int>` | List of dictionary IDs in this group |
+| `name` | `String` | Display name |
 
-**Supported Formats:** Same as `_extractToWorkspaceSync`
+##### Method: `toJson`
 
----
+Converts the instance to a JSON-compatible Map.
 
-#### Function: `_findFile`
+**Returns:** `Map<String, dynamic>`
 
-```dart
-Future<List<File>> _findFile(
-  Directory dir,
-  String pattern,
-  bool recursive,
-)
-```
+##### Static Method: `fromJson`
 
-Recursively searches a directory for files matching a glob pattern.
+Creates a DictionaryGroup from a JSON Map.
 
-**Parameters:**
-- `dir` - The directory to search in
-- `pattern` - Glob pattern to match (e.g., "*.ifo")
-- `recursive` - Whether to search subdirectories
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `json` | `Map<String, dynamic>` | JSON map |
 
-**Returns:** List of matching File objects
+**Returns:** `DictionaryGroup`
 
----
+### Class: `DictionaryGroupManager`
 
-## Private Constants
+Manages dictionary groups stored in SharedPreferences.
 
-### `lib/core/database/database_helper.dart`
+##### Static Method: `getGroups`
 
-##### `_maxQueryCacheEntries`
+Gets all groups.
 
-```dart
-static const int _maxQueryCacheEntries = 1000;
-```
+**Returns:** `Future<List<DictionaryGroup>>` - List of groups.
 
-Maximum number of query cache entries.
+##### Static Method: `saveGroups`
 
----
+Saves groups to storage.
 
-### `lib/core/manager/dictionary_group_manager.dart`
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `groups` | `List<DictionaryGroup>` | List of groups to save |
 
-##### `_key`
+**Returns:** `Future<void>`
+
+##### Static Method: `addDictionaryToGroup`
+
+Adds a dictionary to a group.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `groupName` | `String` | Group name |
+| `dictId` | `int` | Dictionary ID |
+
+**Returns:** `Future<void>`
+
+##### Static Method: `removeDictionaryFromGroup`
+
+Removes a dictionary from a group.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `groupId` | `String` | Group ID |
+| `dictId` | `int` | Dictionary ID |
+
+**Returns:** `Future<void>`
+
+##### Static Method: `removeDictionaryFromAllGroups`
+
+Removes a dictionary from all groups.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dictId` | `int` | Dictionary ID |
+
+**Returns:** `Future<void>`
+
+##### Static Method: `deleteGroup`
+
+Deletes a group.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `groupId` | `String` | Group ID |
+
+**Returns:** `Future<void>`
+
+##### Static Method: `createCustomGroup`
+
+Creates a custom group.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `groupName` | `String` | Group name |
+
+**Returns:** `Future<void>`
+
+##### Static Method: `toggleGroup`
+
+Toggles a group's active state.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `groupId` | `String` | Group ID |
+| `enable` | `bool` | Enable or disable |
+
+**Returns:** `Future<void>`
+
+##### Static Method: `isGroupActive`
+
+Checks if a group is active.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `groupId` | `String` | Group ID |
+
+**Returns:** `Future<bool>` - True if the group is active.
+
+##### Static Method: `autoGenerateGroupsFromDownloaded`
+
+Auto-generates groups from downloaded dictionaries.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `installedDicts` | `List<Map<String, dynamic>>` | List of installed dictionaries |
+
+**Returns:** `Future<void>`
+
+##### Private Static Fields
+
+###### `_key`
 
 ```dart
 static const String _key = 'dictionary_groups';
@@ -5875,208 +4969,554 @@ Key for storing dictionary groups in SharedPreferences.
 
 ---
 
-### `lib/core/manager/dictionary_manager.dart`
+# Database
 
-##### `_maxCacheEntries`
+---
+
+## `lib/core/database/database_helper.dart` {#libcoredatabasedatabase_helper-dart}
+
+### Class: `DatabaseHelper`
+
+Database helper for SQLite operations.
+
+##### Property: `database`
 
 ```dart
-static const int _maxCacheEntries = 50;
+Database get database
 ```
 
-Maximum number of reader cache entries.
+Returns the database instance.
 
----
-
-### `lib/core/parser/mdd_reader.dart`
-
-##### `_maxCacheEntries`
+##### Property: `needsMigrationAlert`
 
 ```dart
-static const int _maxCacheEntries = 100;
+bool get needsMigrationAlert
 ```
 
-Maximum number of resource cache entries.
+Returns true if a migration alert is needed.
 
----
+##### Static Method: `initializeDatabaseFactory`
 
-### `lib/features/settings/services/stardict_service.dart`
+Initializes the database factory for the current platform.
 
-##### `_tsvUrl`
+**Returns:** `Future<void>`
+
+##### Method: `setDatabase`
+
+Sets the database instance.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `db` | `Database` | Database instance |
+
+##### Method: `resolvePath`
+
+Resolves a stored path to an absolute path.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `storedPath` | `String` | Stored relative or absolute path |
+
+**Returns:** `Future<String>` - Absolute path.
+
+##### Method: `saveFile`
+
+Saves a file to the virtual filesystem.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dictId` | `int` | Dictionary ID |
+| `fileName` | `String` | File name |
+| `bytes` | `Uint8List` | File content |
+
+**Returns:** `Future<void>`
+
+##### Method: `getFile`
+
+Gets a file from the virtual filesystem.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dictId` | `int` | Dictionary ID |
+| `fileName` | `String` | File name |
+
+**Returns:** `Future<Uint8List?>` - File bytes, or null if not found.
+
+##### Method: `getFilePart`
+
+Gets a segment of a file from the virtual filesystem.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dictId` | `int` | Dictionary ID |
+| `fileName` | `String` | File name |
+| `offset` | `int` | Byte offset |
+| `length` | `int` | Number of bytes to read |
+
+**Returns:** `Future<Uint8List?>` - File segment, or null if not found.
+
+##### Method: `insertDictionary`
+
+Inserts a new dictionary into the database.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | `String` | Dictionary name |
+| `path` | `String` | Dictionary path |
+| `indexDefinitions` | `bool` | Whether to index definitions |
+| `format` | `String` | Dictionary format (default: 'stardict') |
+| `typeSequence` | `String?` | Optional type sequence |
+| `checksum` | `String?` | Optional checksum |
+| `sourceUrl` | `String?` | Optional source URL |
+| `sourceType` | `String` | Source type (default: 'managed') |
+| `sourceBookmark` | `String?` | Optional source bookmark |
+| `companionUri` | `String?` | Optional companion file URI |
+| `mddPath` | `String?` | Optional MDD file path |
+
+**Returns:** `Future<int>` - Inserted dictionary ID.
+
+##### Method: `updateDictionaryWordCount`
+
+Updates the word count for a dictionary.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | `int` | Dictionary ID |
+| `wordCount` | `int` | Number of words |
+| `definitionWordCount` | `int?` | Optional definition word count |
+
+**Returns:** `Future<void>`
+
+##### Method: `updateDictionaryRowIdRange`
+
+Updates the rowid range for a dictionary.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | `int` | Dictionary ID |
+| `start` | `int` | Start rowid |
+| `end` | `int` | End rowid |
+
+**Returns:** `Future<void>`
+
+##### Method: `getWordCountForDict`
+
+Gets the word count for a specific dictionary.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dictId` | `int` | Dictionary ID |
+
+**Returns:** `Future<int>` - Word count.
+
+##### Method: `getBatchSampleWords`
+
+Gets a batch of random sample words from enabled dictionaries for flash cards.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `totalCount` | `int` | Total number of words to retrieve |
+| `dictIds` | `List<int>` | List of dictionary IDs to sample from |
+
+**Returns:** `Future<List<Map<String, dynamic>>>`
+
+##### Method: `getSampleWords`
+
+Gets random sample words from a dictionary.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dictId` | `int` | Dictionary ID |
+| `limit` | `int` | Maximum number of words (default: 5) |
+
+**Returns:** `Future<List<Map<String, dynamic>>>` - List of sample word entries.
+
+##### Method: `updateDictionaryEnabled`
+
+Updates whether a dictionary is enabled.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | `int` | Dictionary ID |
+| `isEnabled` | `bool` | Enable or disable |
+
+**Returns:** `Future<void>`
+
+##### Method: `updateDictionaryIndexDefinitions`
+
+Updates whether a dictionary has definitions indexed.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | `int` | Dictionary ID |
+| `indexDefinitions` | `bool` | Enable or disable definition indexing |
+
+**Returns:** `Future<void>`
+
+##### Method: `deleteWordsByDictionaryId`
+
+Deletes all words for a specific dictionary.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dictId` | `int` | Dictionary ID |
+
+**Returns:** `Future<void>`
+
+##### Method: `deleteDictionary`
+
+Deletes a dictionary and all associated data from the database.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | `int` | Dictionary ID to delete |
+
+**Returns:** `Future<void>`
+
+##### Method: `optimizeDatabase`
+
+Optimizes the database by running VACUUM and FTS5 optimize.
+
+**Returns:** `Future<void>`
+
+##### Method: `getDatabaseSize`
+
+Gets the total size of the database files.
+
+**Returns:** `Future<int>` - Database size in bytes.
+
+##### Method: `getDictionaries`
+
+Gets all dictionaries.
+
+**Returns:** `Future<List<Map<String, dynamic>>>` - List of all dictionaries.
+
+##### Method: `getEnabledDictionaries`
+
+Gets all enabled dictionaries.
+
+**Returns:** `Future<List<Map<String, dynamic>>>` - List of enabled dictionaries.
+
+##### Method: `isDictionaryUrlDownloaded`
+
+Checks if a dictionary URL has already been downloaded.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `url` | `String` | Source URL to check |
+
+**Returns:** `Future<bool>` - True if already downloaded.
+
+##### Method: `reorderDictionaries`
+
+Reorders dictionaries based on the provided list of IDs.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `sortedIds` | `List<int>` | List of dictionary IDs in new order |
+
+**Returns:** `Future<void>`
+
+##### Method: `getDictionaryByIdSync`
+
+Synchronously gets a dictionary by its ID from the cache.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | `int` | Dictionary ID |
+
+**Returns:** `Map<String, dynamic>?` - Dictionary data or null.
+
+##### Method: `getDictionaryById`
+
+Gets a dictionary by its ID.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | `int` | Dictionary ID |
+
+**Returns:** `Future<Map<String, dynamic>?>` - Dictionary data or null.
+
+##### Method: `getDictionaryByChecksum`
+
+Gets a dictionary by its checksum.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `checksum` | `String` | Dictionary checksum |
+
+**Returns:** `Future<Map<String, dynamic>?>` - Dictionary data or null.
+
+##### Method: `addSearchHistory`
+
+Adds a search term to the search history.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `word` | `String` | The search word |
+| `searchType` | `String` | Search type (default: 'Headword Search') |
+
+**Returns:** `Future<void>`
+
+##### Method: `getSearchHistory`
+
+Gets search history from the database.
+
+**Returns:** `Future<List<Map<String, dynamic>>>`
+
+##### Method: `clearSearchHistory`
+
+Clears all search history.
+
+**Returns:** `Future<void>`
+
+##### Method: `deleteOldSearchHistory`
+
+Deletes search history older than specified days.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `days` | `int` | Number of days to keep |
+
+**Returns:** `Future<void>`
+
+##### Method: `addFlashCardScore`
+
+Adds a flash card score to the database.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `score` | `int` | The score achieved |
+| `total` | `int` | Total possible points |
+| `dictIds` | `String` | Comma-separated dictionary IDs used |
+
+**Returns:** `Future<void>`
+
+##### Method: `getFlashCardScores`
+
+Gets flash card scores from the database.
+
+**Returns:** `Future<List<Map<String, dynamic>>>`
+
+##### Method: `startBatchInsert`
+
+Starts batch insert mode and returns the current maximum ID.
+
+**Returns:** `Future<int>` - Current maximum word_metadata ID.
+
+##### Method: `endBatchInsert`
+
+Ends batch insert mode and restores normal PRAGMA settings.
+
+**Returns:** `Future<void>`
+
+##### Method: `enableBulkInsertMode`
+
+Enables bulk insert mode by setting PRAGMA synchronous to OFF and increasing cache size for faster batch inserts.
+
+**Returns:** `Future<void>`
+
+##### Method: `batchInsertWords`
+
+Inserts multiple words into the database within a transaction. Used during dictionary import for efficient batch insertion with optional FTS5 indexing.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dictId` | `int` | Dictionary ID |
+| `words` | `List<Map<String, dynamic>>` | List of words to insert |
+| `startId` | `int?` | Starting ID for insertion |
+| `populateFts5` | `bool` | Whether to populate FTS5 index (default: true) |
+| `dictName` | `String?` | Optional dictionary name for logging |
+
+**Returns:** `Future<({int startId, int duplicateCount})>` - Starting ID and count of duplicates.
+
+##### Method: `rebuildFts5IndexForDict`
+
+Rebuilds the FTS5 index for a specific dictionary.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dictId` | `int` | Dictionary ID |
+
+**Returns:** `Future<void>`
+
+##### Method: `searchWords`
+
+Searches for words in enabled dictionaries.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `headwordQuery` | `String?` | Headword search query |
+| `headwordMode` | `SearchMode` | Headword search mode (default: prefix) |
+| `definitionQuery` | `String?` | Definition search query |
+| `definitionMode` | `SearchMode` | Definition search mode (default: substring) |
+| `dictId` | `int?` | Optional dictionary ID to search |
+| `limit` | `int` | Maximum results (default: 50) |
+
+**Returns:** `Future<List<Map<String, dynamic>>>`
+
+##### Method: `getPrefixSuggestions`
+
+Gets prefix-based word suggestions from enabled dictionaries for autocomplete.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `prefix` | `String` | The search prefix |
+| `limit` | `int` | Maximum number of suggestions (default: 50) |
+| `fuzzy` | `bool` | Enable fuzzy matching (default: false) |
+
+**Returns:** `Future<List<String>>` - List of matching word suggestions.
+
+##### Method: `getDefinitionSuggestions`
+
+Gets definition-based word suggestions from indexed dictionaries for "Search As You Type" in definitions.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `query` | `String` | The search query |
+| `limit` | `int` | Maximum number of suggestions (default: 50) |
+
+**Returns:** `Future<List<String>>` - List of matching headwords.
+
+##### Method: `insertFreedictDictionaries`
+
+Inserts FreeDict dictionaries into the cache.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dictionaries` | `List<Map<String, dynamic>>` | List of dictionaries to insert |
+
+**Returns:** `Future<void>`
+
+##### Method: `getFreedictDictionaries`
+
+Gets cached FreeDict dictionaries.
+
+**Returns:** `Future<List<Map<String, dynamic>>>` - List of FreeDict dictionaries.
+
+##### Method: `clearFreedictDictionaries`
+
+Clears all FreeDict dictionaries from the cache.
+
+**Returns:** `Future<void>`
+
+##### Method: `saveSafScanCache`
+
+Saves SAF scan data to the cache.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `treeUri` | `String` | Tree URI |
+| `scanDataJson` | `String` | Scan data as JSON |
+
+**Returns:** `Future<void>`
+
+##### Method: `getSafScanCache`
+
+Gets cached SAF scan data for a tree URI.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `treeUri` | `String` | Tree URI |
+
+**Returns:** `Future<String?>` - Cached scan data as JSON, or null if not found.
+
+##### Method: `clearSafScanCache`
+
+Clears the SAF scan cache.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `treeUri` | `String` | Tree URI to clear cache for |
+
+**Returns:** `Future<void>`
+
+##### Method: `clearDictionaryCache`
+
+Clears the in-memory dictionary metadata cache.
+
+**Returns:** `void`
+
+##### Method: `clearQueryCache`
+
+Clears the query result cache.
+
+**Returns:** `void`
+
+##### Static Method: `sqfliteFfiInit`
+
+Initializes the sqflite_common_ffi database factory for desktop platforms.
+
+**Returns:** `void`
+
+##### Method: `toFts5Query`
+
+Converts a search query to FTS5 format.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `query` | `String` | Search query |
+| `isPrefix` | `bool` | Whether this is a prefix search |
+
+**Returns:** `String` - FTS5 formatted query.
+
+##### Private Static Fields
+
+###### `_maxQueryCacheEntries`
 
 ```dart
-static const String _tsvUrl = '...';
+static const int _maxQueryCacheEntries = 1000;
 ```
 
-URL for the StarDict dictionary TSV file.
+Maximum number of query cache entries.
 
 ---
 
-## Dependency Graph
-
-Below is a dependency list showing which private modules depend on others:
-
-```
-hdict (private)
-├── lib/core/
-│   ├── database/
-│   │   └── database_helper.dart
-│   │       ├── lib/features/settings/settings_provider.dart
-│   │       └── lib/core/utils/logger.dart
-│   │
-│   ├── manager/
-│   │   ├── dictionary_manager.dart
-│   │   │   ├── lib/core/database/database_helper.dart
-│   │   │   ├── lib/core/parser/ifo_parser.dart
-│   │   │   ├── lib/core/parser/idx_parser.dart
-│   │   │   ├── lib/core/parser/syn_parser.dart
-│   │   │   ├── lib/core/parser/dict_reader.dart
-│   │   │   ├── lib/core/parser/mdict_reader.dart
-│   │   │   ├── lib/core/parser/mdd_reader.dart
-│   │   │   ├── lib/core/parser/slob_reader.dart
-│   │   │   ├── lib/core/parser/dictd_reader.dart
-│   │   │   ├── lib/core/parser/random_access_source.dart
-│   │   │   ├── lib/core/parser/bookmark_random_access_source.dart
-│   │   │   ├── lib/core/parser/saf_random_access_source.dart
-│   │   │   ├── lib/core/parser/bookmark_manager.dart
-│   │   │   ├── lib/core/utils/folder_scanner.dart
-│   │   │   ├── lib/core/utils/logger.dart
-│   │   │   └── lib/core/manager/dictionary_group_manager.dart
-│   │   │
-│   │   └── dictionary_group_manager.dart
-│   │       ├── lib/core/manager/dictionary_manager.dart
-│   │       └── lib/features/settings/services/stardict_service.dart
-│   │
-│   ├── parser/
-│   │   ├── ifo_parser.dart
-│   │   │   ├── lib/core/parser/random_access_source.dart
-│   │   │   └── lib/core/parser/saf_random_access_source.dart
-│   │   │
-│   │   ├── idx_parser.dart
-│   │   │   ├── lib/core/parser/random_access_source.dart
-│   │   │   └── lib/core/parser/ifo_parser.dart
-│   │   │
-│   │   ├── syn_parser.dart
-│   │   │   └── lib/core/parser/random_access_source.dart
-│   │   │
-│   │   ├── dict_reader.dart
-│   │   │   ├── lib/core/database/database_helper.dart
-│   │   │   ├── lib/core/parser/random_access_source.dart
-│   │   │   ├── lib/core/parser/saf_random_access_source.dart
-│   │   │   └── lib/core/parser/bookmark_random_access_source.dart
-│   │   │
-│   │   ├── mdict_reader.dart
-│   │   │   ├── lib/core/utils/logger.dart
-│   │   │   ├── lib/core/parser/random_access_source.dart
-│   │   │   ├── lib/core/parser/saf_random_access_source.dart
-│   │   │   ├── lib/core/parser/bookmark_random_access_source.dart
-│   │   │   └── lib/core/parser/mdd_reader.dart
-│   │   │
-│   │   ├── mdd_reader.dart
-│   │   │   └── lib/core/parser/random_access_source.dart
-│   │   │
-│   │   ├── slob_reader.dart
-│   │   │   ├── lib/core/parser/random_access_source.dart
-│   │   │   ├── lib/core/parser/saf_random_access_source.dart
-│   │   │   └── lib/core/parser/bookmark_random_access_source.dart
-│   │   │
-│   │   ├── dictd_reader.dart
-│   │   │   ├── lib/core/parser/random_access_source.dart
-│   │   │   ├── lib/core/parser/saf_random_access_source.dart
-│   │   │   └── lib/core/parser/bookmark_random_access_source.dart
-│   │   │
-│   │   ├── bookmark_random_access_source.dart
-│   │   │   ├── lib/core/parser/random_access_source.dart
-│   │   │   └── lib/core/parser/bookmark_manager.dart
-│   │   │
-│   │   ├── saf_random_access_source.dart
-│   │   │   └── lib/core/parser/random_access_source.dart
-│   │   │
-│   │   └── bookmark_manager.dart (standalone - no internal deps)
-│   │
-│   └── utils/
-│       ├── benchmark_utils.dart
-│       │   ├── lib/core/database/database_helper.dart
-│       │   ├── lib/core/manager/dictionary_manager.dart
-│       │   └── lib/core/utils/logger.dart
-│       │
-│       ├── folder_scanner.dart
-│       │   └── lib/core/utils/logger.dart
-│       │
-│       ├── html_lookup_wrapper.dart
-│       │   └── lib/core/utils/logger.dart
-│       │
-│       └── multimedia_processor.dart
-│           ├── lib/core/parser/mdict_reader.dart
-│           └── lib/core/utils/logger.dart
-│
-└── lib/features/
-    ├── home/
-    │   └── home_screen.dart
-    │       ├── lib/core/utils/logger.dart
-    │       ├── lib/core/database/database_helper.dart
-    │       ├── lib/core/manager/dictionary_manager.dart
-    │       ├── lib/core/utils/html_lookup_wrapper.dart
-    │       ├── lib/core/utils/multimedia_processor.dart
-    │       └── lib/features/settings/settings_provider.dart
-    │
-    └── settings/
-        ├── services/
-        │   └── stardict_service.dart
-        │       ├── lib/core/database/database_helper.dart
-        │       ├── lib/core/constants/iso_639_2_languages.dart
-        │       └── lib/core/utils/logger.dart
-        │
-        └── widgets/
-            └── stardict_download_dialog.dart
-                └── lib/features/settings/services/stardict_service.dart
-```
+# Result Screens
 
 ---
 
-## Private Function-Level Dependencies
+## `lib/features/result/result_screen.dart` {#libfeaturesresultresult_screen-dart}
 
+### Class: `ResultScreen`
+
+Screen for displaying search results.
+
+##### Field: `peekCount`
+
+```dart
+final int peekCount
 ```
-DictionaryManager._getReader
-├── MdictReader._openMdict
-│   ├── IfoParser.parseContent / .parseSource
-│   └── MddReader._openMdd
-├── SlobReader._openSlob
-│   └── SlobReader.blobs
-├── DictReader._openDict
-│   ├── IfoParser.parseContent / .parseSource
-│   ├── IdxParser (for .idx)
-│   └── SynParser (for .syn)
-└── DictdReader._connect
 
-DictionaryManager._extractToWorkspace
-├── GZipDecoder (dart:io)
-├── BZip2Decoder (archive)
-├── XZDecoder (archive)
-├── SZArchive.extract (flutter_7zip)
-└── FolderScanner._extractArchiveToDir
+Number of items to peek ahead in the definition.
 
-DatabaseHelper._ensureDictionaryMapCache
-├── DatabaseHelper.database
-└── sqflite queries
+---
 
-HtmlLookupWrapper._tagRegExp (private regex)
-└── logger.hDebugPrint (showHtmlProcessing check)
+# Dialogs
 
-MultimediaProcessor._replaceImgSrcWithDataUris
-├── MddReader.getMddResourceBytes
-└── MultimediaProcessor._base64EncodeImage
+---
 
-MultimediaProcessor._addMediaTapHandlers
-├── MddReader.getCssContent
-└── MultimediaProcessor._createMediaWidget
+## `lib/features/dictionary_management/stardict_download_dialog.dart` {#libfeaturesdictionary_managementstardict_download_dialog-dart}
 
-StardictService._fetchDictionariesFromUrl
-├── http.get (package)
-└── StardictDictionary.fromTsvRow
+### Class: `StardictDownloadDialog`
 
-DictionaryGroupManager._saveGroups
-└── SharedPreferences
-```
+Dialog for downloading StarDict dictionaries.
+
+##### Method: `createState`
+
+Creates the mutable state for this widget.
+
+**Returns:** `_StardictDownloadDialogState` - The state instance.
+
+### Class: `_StardictDownloadDialogState`
+
+The state class for StardictDownloadDialog.
+
+##### Private Instance Methods
+
+###### `_downloadAndImport`
+
+Downloads and imports the dictionary.
 
 ---
 

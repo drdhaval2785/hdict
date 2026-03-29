@@ -248,12 +248,8 @@ def extract_func_name_from_signature(sig):
     return None
 
 
-def parse_documentation_file(path):
-    """Parse a documentation file and extract documented items."""
-    if not path.exists():
-        return set(), set(), set(), set()
-
-    content = path.read_text()
+def parse_documentation_content(content):
+    """Parse documentation content and extract documented items."""
     classes = set()
     enums = set()
     methods = set()
@@ -332,6 +328,172 @@ def parse_documentation_file(path):
         methods.add('<init>')
 
     return classes, enums, methods, fields
+
+
+def parse_documentation_file(path):
+    """Parse REFERENCE.md and extract items from the new unified format."""
+    if not path.exists():
+        return set(), set(), set(), set()
+
+    content = path.read_text()
+
+    classes = set()
+    enums = set()
+    methods = set()
+    fields = set()
+
+    lines = content.split('\n')
+    
+    current_section = None  # Track current section context
+    
+    for line in lines:
+        stripped = line.strip()
+        
+        # Track section context
+        section_match = re.match(r'^#{3,5} Private (?:Static )?(?:Instance )?(Fields|Properties|Methods|Standalone Functions)', stripped)
+        if section_match:
+            member_type = section_match.group(1)
+            if member_type in ('Fields', 'Properties'):
+                current_section = 'fields'
+            else:
+                current_section = 'methods'
+            continue
+        elif re.match(r'^#{3,5} (?:Static )?(Fields|Properties|Methods)', stripped):
+            current_section = None  # Reset on non-private sections
+        elif stripped.startswith('#######') or stripped.startswith('######'):
+            pass  # Don't reset on ######/####### - these are member names
+        
+        # Extract private instance members: ###### `memberName`
+        # Use section context to determine if it's a field or method
+        private_member_match = re.match(r'^###### `(\w+)`', stripped)
+        if private_member_match:
+            name = private_member_match.group(1)
+            if current_section == 'fields':
+                fields.add(name)
+            else:
+                methods.add(name)
+            continue
+        
+        # Extract class names: ### Class: `ClassName`
+        class_match = re.match(r'^### Class: `(\w+)`', stripped)
+        if class_match:
+            classes.add(class_match.group(1))
+            continue
+            
+        # Extract private class names: ### Class: `_ClassName`
+        private_class_match = re.match(r'^### Class: `(_\w+)`', stripped)
+        if private_class_match:
+            classes.add(private_class_match.group(1))
+            continue
+        
+        # Extract enum names: ### Enum: `EnumName`
+        enum_match = re.match(r'^### Enum: `(\w+)`', stripped)
+        if enum_match:
+            enums.add(enum_match.group(1))
+            continue
+        
+        # Extract methods: ##### Method: `methodName` or ##### Static Method: `methodName`
+        method_match = re.match(r'^##### (?:Static )?Method: `(\w+)`', stripped)
+        if method_match:
+            methods.add(method_match.group(1))
+            continue
+        
+        # Extract methods with class prefix: ##### Method: `ClassName.methodName`
+        method_prefix_match = re.match(r'^##### (?:Static )?Method: `[^.]+\.(\w+)`', stripped)
+        if method_prefix_match:
+            methods.add(method_prefix_match.group(1))
+            continue
+        
+        # Extract properties: ##### Property: `propertyName` or ##### Static Property: `propertyName`
+        property_match = re.match(r'^##### (?:Static )?Property: `(\w+)`', stripped)
+        if property_match:
+            fields.add(property_match.group(1))
+            continue
+        
+        # Extract fields: ##### Field: `fieldName`
+        field_match = re.match(r'^##### Field: `(\w+)`', stripped)
+        if field_match:
+            fields.add(field_match.group(1))
+            continue
+        
+        # Extract standalone functions: ### Function:, #### Function:, ##### Function: etc
+        func_match = re.match(r'^(?:###|####|#####) Function: `(\w+)`', stripped)
+        if func_match:
+            methods.add(func_match.group(1))
+            continue
+        
+        # Extract private functions: ##### `_functionName` or ###### `_functionName` (without "Function:" keyword)
+        private_func_match = re.match(r'^#{5,6} `(_\w+)`', stripped)
+        if private_func_match:
+            methods.add(private_func_match.group(1))
+            continue
+        
+        # Extract fields from table format: | `fieldName` | type |
+        table_match = re.match(r'^\| `(\w+)` \|', stripped)
+        if table_match:
+            fields.add(table_match.group(1))
+            continue
+        
+        # Extract constructors: ##### Constructor or ##### Private Constructor
+        if re.match(r'^##### (?:Private )?[Cc]onstructor', stripped):
+            methods.add('<init>')
+            continue
+
+    return classes, enums, methods, fields
+
+
+def extract_field_name(sig):
+    """Extract field name from a field signature like 'static final DatabaseHelper _instance'."""
+    sig = sig.strip()
+    
+    # Remove common prefixes
+    sig = re.sub(r'^(static\s+|final\s+|const\s+|late\s+|abstract\s+|readonly\s+)+', '', sig)
+    
+    # Skip function type parameters
+    if 'Function(' in sig or sig.startswith('Function'):
+        return None
+    
+    # Handle nullable types like `String?`
+    sig = sig.lstrip('?')
+    
+    # Handle generic types like List<Map<String, dynamic>>
+    # Find the last word which is the field name
+    words = sig.split()
+    if not words:
+        return None
+    
+    last_word = words[-1]
+    
+    # Remove trailing punctuation like `;`
+    last_word = last_word.rstrip(';')
+    
+    # If it looks like a type (starts with uppercase), try the second-to-last word
+    if last_word[0].isupper() if last_word else False:
+        if len(words) >= 2:
+            candidate = words[-2].rstrip(';')
+            if candidate and not candidate.startswith('_'):
+                return candidate
+    
+    return last_word
+
+
+def extract_method_name_from_signature(sig):
+    """Extract method name from a method signature like 'Future<String> resolvePath(String storedPath)'."""
+    sig = sig.strip()
+    
+    # Skip function type parameters
+    if 'Function(' in sig or sig.startswith('Function'):
+        return None
+    
+    # Find the name followed by (
+    match = re.search(r'\s+(\w+)\s*\(', sig)
+    if match:
+        name = match.group(1)
+        if name.lower() in ('void', 'int', 'string', 'bool', 'double', 'future', 'stream', 'list', 'map', 'set', 'nullable', 'dynamic'):
+            return None
+        return name
+    
+    return None
 
 
 def compare_apis(api_data, pub_classes, pub_enums, pub_methods, pub_fields,
@@ -468,16 +630,18 @@ def main():
     total_functions = sum(len(f['functions']) for f in api_data['files'].values())
     print(f"  Found: {total_classes} classes, {total_enums} enums, {total_functions} functions")
 
-    print("\n[2/3] Parsing public.md and private.md...")
-    pub_classes, pub_enums, pub_methods, pub_fields = parse_documentation_file(REFERENCE_DIR / "public.md")
-    priv_classes, priv_enums, priv_methods, priv_fields = parse_documentation_file(REFERENCE_DIR / "private.md")
+    print("\n[2/3] Parsing REFERENCE.md...")
+    ref_path = REFERENCE_DIR / "REFERENCE.md"
+    if not ref_path.exists():
+        print("  ERROR: REFERENCE.md not found!")
+        return
+    all_classes, all_enums, all_methods, all_fields = parse_documentation_file(ref_path)
 
-    print(f"  public.md: {len(pub_classes)} classes, {len(pub_enums)} enums, {len(pub_methods)} methods, {len(pub_fields)} fields")
-    print(f"  private.md: {len(priv_classes)} classes, {len(priv_enums)} enums, {len(priv_methods)} methods, {len(priv_fields)} fields")
+    print(f"  REFERENCE.md: {len(all_classes)} classes, {len(all_enums)} enums, {len(all_methods)} methods, {len(all_fields)} fields")
 
     print("\n[3/3] Comparing...")
-    issues = compare_apis(api_data, pub_classes, pub_enums, pub_methods, pub_fields,
-                          priv_classes, priv_enums, priv_methods, priv_fields)
+    issues = compare_apis(api_data, all_classes, all_enums, all_methods, all_fields,
+                          all_classes, all_enums, all_methods, all_fields)
 
     print("\n" + "=" * 80)
     print("RESULTS")
@@ -487,8 +651,7 @@ def main():
         print("\nALL API ELEMENTS ARE DOCUMENTED!")
         return
 
-    total_missing_public = 0
-    total_missing_private = 0
+    total_missing = 0
 
     for file_path, file_issues in issues:
         print(f"\n{file_path}")
@@ -497,27 +660,25 @@ def main():
         missing_private = file_issues['missing_private']
 
         if missing_public:
-            print(f"\n  MISSING in public.md ({len(missing_public)} items):")
+            print(f"\n  MISSING in REFERENCE.md ({len(missing_public)} items):")
             for item in missing_public[:30]:
                 print(f"    - {item}")
             if len(missing_public) > 30:
                 print(f"    ... and {len(missing_public) - 30} more")
-            total_missing_public += len(missing_public)
+            total_missing += len(missing_public)
 
         if missing_private:
-            print(f"\n  MISSING in private.md ({len(missing_private)} items):")
+            print(f"\n  MISSING in REFERENCE.md ({len(missing_private)} items):")
             for item in missing_private[:30]:
                 print(f"    - {item}")
             if len(missing_private) > 30:
                 print(f"    ... and {len(missing_private) - 30} more")
-            total_missing_private += len(missing_private)
+            total_missing += len(missing_private)
 
     print("\n" + "=" * 80)
     print("SUMMARY")
     print("=" * 80)
-    print(f"Missing in public.md: {total_missing_public} items")
-    print(f"Missing in private.md: {total_missing_private} items")
-    print(f"Total missing: {total_missing_public + total_missing_private} items")
+    print(f"Missing in REFERENCE.md: {total_missing} items")
 
 
 if __name__ == "__main__":
