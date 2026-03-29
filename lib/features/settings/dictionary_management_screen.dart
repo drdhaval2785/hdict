@@ -1008,13 +1008,14 @@ class _DictionaryManagementScreenState
             return Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _buildFooterButton(
-                  onPressed: _isLoading ? null : _importDictionary,
-                  icon: Icons.file_open_outlined,
-                  label: 'Import File',
-                  isPrimary: false,
-                ),
-                const SizedBox(width: 8),
+                if (!Platform.isAndroid)
+                  _buildFooterButton(
+                    onPressed: _isLoading ? null : _importDictionary,
+                    icon: Icons.file_open_outlined,
+                    label: 'Import File',
+                    isPrimary: false,
+                  ),
+                if (!Platform.isAndroid) const SizedBox(width: 8),
                 _buildFooterButton(
                   onPressed: _isLoading ? null : _addFolder,
                   icon: Icons.create_new_folder_outlined,
@@ -1041,51 +1042,90 @@ class _DictionaryManagementScreenState
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildFooterButton(
-                        onPressed: _isLoading ? null : _importDictionary,
-                        icon: Icons.file_open_outlined,
-                        label: 'Import File',
-                        isPrimary: false,
+                if (Platform.isAndroid) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildFooterButton(
+                          onPressed: _isLoading ? null : _addFolder,
+                          icon: Icons.create_new_folder_outlined,
+                          label: 'Add Folder',
+                          isPrimary: false,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildFooterButton(
-                        onPressed: _isLoading ? null : _addFolder,
-                        icon: Icons.create_new_folder_outlined,
-                        label: 'Add Folder',
-                        isPrimary: false,
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildFooterButton(
+                          onPressed: _isLoading ? null : _downloadDictionary,
+                          icon: Icons.public,
+                          label: 'Download from Web',
+                          isPrimary: false,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildFooterButton(
-                        onPressed: _isLoading ? null : _downloadDictionary,
-                        icon: Icons.public,
-                        label: 'Download from Web',
-                        isPrimary: false,
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildFooterButton(
+                          onPressed: _isLoading
+                              ? null
+                              : _downloadFreedictDictionary,
+                          icon: Icons.language,
+                          label: 'Select by Language',
+                          isPrimary: true,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildFooterButton(
-                        onPressed: _isLoading
-                            ? null
-                            : _downloadFreedictDictionary,
-                        icon: Icons.language,
-                        label: 'Select by Language',
-                        isPrimary: true,
+                    ],
+                  ),
+                ] else ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildFooterButton(
+                          onPressed: _isLoading ? null : _importDictionary,
+                          icon: Icons.file_open_outlined,
+                          label: 'Import File',
+                          isPrimary: false,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildFooterButton(
+                          onPressed: _isLoading ? null : _addFolder,
+                          icon: Icons.create_new_folder_outlined,
+                          label: 'Add Folder',
+                          isPrimary: false,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildFooterButton(
+                          onPressed: _isLoading ? null : _downloadDictionary,
+                          icon: Icons.public,
+                          label: 'Download from Web',
+                          isPrimary: false,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildFooterButton(
+                          onPressed: _isLoading
+                              ? null
+                              : _downloadFreedictDictionary,
+                          icon: Icons.language,
+                          label: 'Select by Language',
+                          isPrimary: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             );
           }
