@@ -311,7 +311,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildSectionHeader(theme, 'Database'),
             ListTile(
               title: const Text('Database Size'),
-              subtitle: Text(_formatBytes(_databaseSize)),
+              subtitle: Text('${_formatBytes(_databaseSize)} (DB + WAL + SHM)'),
               trailing: _isOptimizing
                   ? const SizedBox(
                       width: 24,

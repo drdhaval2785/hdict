@@ -9,8 +9,6 @@
 - Field: `static bool? _fts5Available`
 - Field: `static Directory? _appDocDir`
 - Field: `static bool needsMigrationAlert`
-- Field: `static Set<int>? _definitionIndexedDictIds`
-- Field: `static bool _definitionCacheInitialized`
 - Field: `final LinkedHashMap<String, List<Map<String, dynamic>>> _queryCache`
 - Field: `static const int _maxQueryCacheEntries`
 - Field: `List<Map<String, dynamic>>? _dictionaryCache`
@@ -143,6 +141,9 @@
   - Parameter: `String? dictName`
 - Method: `Future<void> rebuildFts5IndexForDict(int dictId)`
   - Parameter: `int dictId`
+- Method: `Future<List<Map<String, dynamic>>> findDictsNeedingFts5Rebuild()`
+- Method: `Future<int> _getWordCountForDict(int dictId)`
+  - Parameter: `int dictId`
 - Method: `Future<List<Map<String, dynamic>>> searchWords({String? headwordQuery, SearchMode headwordMode = SearchMode.prefix, String? definitionQuery, SearchMode definitionMode = SearchMode.substring, int? dictId, int limit = 50})`
   - Parameter: `String? headwordQuery`
   - Parameter: `SearchMode headwordMode = SearchMode.prefix`
@@ -159,7 +160,6 @@
   - Parameter: `String prefix`
   - Parameter: `int limit = 50`
   - Parameter: `bool fuzzy = false`
-- Method: `Future<void> _refreshDefinitionIndexCache()`
 - Method: `Future<List<String>> getDefinitionSuggestions(String query, {int limit = 50})`
   - Parameter: `String query`
   - Parameter: `int limit = 50`
@@ -189,6 +189,11 @@
 - Method: `static String? wordAt(String text, int offset)`
   - Parameter: `String text`
   - Parameter: `int offset`
+- Method: `static RegExp prefixRegex(String prefix)`
+  - Parameter: `String prefix`
+- Method: `static Set<String> findWordsStartingWith(String text, String prefix)`
+  - Parameter: `String text`
+  - Parameter: `String prefix`
 
 ## File: `lib/core/utils/folder_scanner.dart`
 
@@ -1709,6 +1714,7 @@
 #### Methods
 - Method: `void initState()`
 - Method: `Future<void> _loadData()`
+- Method: `Future<void> _refreshInBackground()`
 - Method: `Future<void> _refresh()`
 - Property: `List<String> get _sourceLanguages`
 - Method: `int _getSourceLanguageCount(String code)`
@@ -1794,6 +1800,7 @@
 - Field: `final Debouncer _definitionSuggestionsDebouncer`
 - Field: `List<String> _definitionSuggestions`
 - Field: `bool _isLoadingDefinitionSuggestions`
+- Field: `SuggestionTarget _activeSuggestionTarget`
 - Field: `final Debouncer _quickSearchDebouncer`
 - Field: `bool _hasDictionaries`
 - Field: `bool _checkingDicts`
@@ -2112,6 +2119,14 @@
 - Constructor: `const ManualScreen({super.key})`
   - Parameter: `super.key`
 #### Methods
+- Method: `State<ManualScreen> createState()`
+
+### Class: `_ManualScreenState`
+#### Fields
+- Field: `String _appVersion`
+#### Methods
+- Method: `void initState()`
+- Method: `Future<void> _loadVersion()`
 - Method: `Widget build(BuildContext context)`
   - Parameter: `BuildContext context`
 

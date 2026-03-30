@@ -2,18 +2,41 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:hdict/features/home/widgets/app_drawer.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
-class ManualScreen extends StatelessWidget {
+class ManualScreen extends StatefulWidget {
   const ManualScreen({super.key});
+
+  @override
+  State<ManualScreen> createState() => _ManualScreenState();
+}
+
+class _ManualScreenState extends State<ManualScreen> {
+  String _appVersion = '1.0.0';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    final packageInfo = await PackageInfo.fromPlatform();
+    if (mounted) {
+      setState(() {
+        _appVersion = packageInfo.version;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       drawer: const AppDrawer(),
       appBar: AppBar(
-        title: const Text(
-          'User Manual',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        title: Text(
+          'User Manual (v$_appVersion)',
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
       body: FutureBuilder<String>(
@@ -32,7 +55,9 @@ class ManualScreen extends StatelessWidget {
             );
           }
 
-          final String data = snapshot.data ?? 'No content found.';
+          String data = snapshot.data ?? 'No content found.';
+          data = data.replaceAll('{{VERSION}}', _appVersion);
+
           final theme = Theme.of(context);
 
           return SafeArea(

@@ -1,4 +1,4 @@
-# API Reference (version 1.5.11)
+# API Reference (version 1.5.12)
 
 This document lists all classes, functions, and methods in the HDict codebase. Each entry includes the file location, description, parameters, return types, and usage examples where applicable.
 
@@ -99,6 +99,41 @@ Extracts the word at a given offset from text.
 ```dart
 final word = WordBoundary.wordAt("Hello world", 0); // Returns "Hello"
 final word = WordBoundary.wordAt("Hello world", 6); // Returns "world"
+```
+
+##### Static Method: `prefixRegex`
+
+Creates a regex pattern to find words starting with a given prefix using Unicode-aware word boundaries.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `prefix` | `String` | The prefix to match |
+
+**Returns:** `RegExp` - A compiled regex that matches words starting with the prefix.
+
+```dart
+final regex = WordBoundary.prefixRegex('क');
+final matches = regex.allMatches('कर्म की गोद में खड़ा है');
+// matches: ['कर्म', 'की', 'खड़ा', 'कमल']
+```
+
+##### Static Method: `findWordsStartingWith`
+
+Finds all words in text that start with a given prefix using Unicode-aware word boundaries.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `text` | `String` | The text to search |
+| `prefix` | `String` | The prefix to match |
+
+**Returns:** `Set<String>` - A set of unique lowercase words matching the prefix.
+
+```dart
+final words = WordBoundary.findWordsStartingWith(
+  'कर्म की गोद में खड़ा है कमल',
+  'क'
+);
+// Returns: {'कर्म', 'की', 'खड़ा', 'कमल'}
 ```
 
 ---
@@ -3882,6 +3917,42 @@ About app screen.
 
 User manual screen.
 
+##### Constructor
+
+```dart
+const ManualScreen({super.key})
+```
+
+### Class: `_ManualScreenState`
+
+State class for ManualScreen.
+
+##### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `_appVersion` | `String` | Current app version |
+
+##### Method: `initState`
+
+Called when this object is inserted into the tree.
+
+##### Method: `_loadVersion`
+
+Loads the app version from package info.
+
+**Returns:** `Future<void>`
+
+##### Method: `build`
+
+Describes the part of the user interface represented by this widget.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `context` | `BuildContext` | The build context |
+
+**Returns:** `Widget`
+
 ---
 
 ## `lib/features/support/support_screen.dart` {#libfeaturessupportsupport_screen-dart}
@@ -5332,13 +5403,19 @@ Inserts multiple words into the database within a transaction. Used during dicti
 
 ##### Method: `rebuildFts5IndexForDict`
 
-Rebuilds the FTS5 index for a specific dictionary.
+Rebuilds the word_index table for a specific dictionary. If FTS5 is available, populates as FTS5 virtual table; otherwise populates as regular table (fallback).
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `dictId` | `int` | Dictionary ID |
 
 **Returns:** `Future<void>`
+
+##### Method: `findDictsNeedingFts5Rebuild`
+
+Finds dictionaries that have `index_definitions=1` but whose word_index has no content. Used to identify dictionaries that need their definition index rebuilt.
+
+**Returns:** `Future<List<Map<String, dynamic>>>` - List of dictionaries needing FTS5 rebuild.
 
 ##### Method: `searchWords`
 

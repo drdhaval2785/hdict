@@ -2,10 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.12] - 2026-03-30
+
+### Added
+
+- **Auto-Refresh for Select by Language**: Dictionary list now automatically refreshes when opening the "Select by Language" dialog. Shows cached data first for offline support, then silently updates in background when online.
+
+### Fixed
+
+- **FTS5 Availability Detection**: Fixed a bug where FTS5 was incorrectly reported as unavailable on Android. The issue was caused by a duplicate `_fts5_probe` table error during initialization. Now properly detects SQLite 3.52.0 with FTS5 support.
+- **FTS5 Indexing for StarDict**: StarDict dictionaries now properly populate FTS5 index immediately during import instead of deferring to a background rebuild (which couldn't work with SAF file paths). Definition search now works correctly for newly imported dictionaries.
+- **Unicode Support for Definition Suggestions**: Fixed issue where Devanagari and other non-ASCII scripts were not showing suggestions in definition search. Implemented Unicode-aware word boundary detection using `\p{L}` character classes.
+
+### Changed
+
+- **Default Theme**: Changed default app theme from "Custom" to "Light" for better out-of-box experience.
+
+### Documentation
+
+- **Android Permissions**: Clarified user manual to recommend `Documents/DictData` folder for dictionary storage on Android.
+- **Search Suggestions**: Updated documentation to explain that suggestions work for both headwords and definition words.
+- **Reindex All**: Added documentation for the "Reindex All" functionality in Settings.
+
 ## [1.5.11] - 2026-03-29
 
 ### Added
-- **Search As You Type (Headword)**: Dynamic headword suggestions appear as you type in the headword search field. Shows up to 50 suggestions with 250ms debounce. 
+- **Search As You Type (Headword)**: Dynamic headword suggestions appear as you type in the headword search field. Shows up to 50 suggestions with 250ms debounce.
 - **Search As You Type (Definition)**: Dynamic definition keyword suggestions appear as you type in the definition search field. Uses FTS5 MATCH for efficient searching.
 - **Suggestion Settings**: Two new toggles in Settings:
   - "Show Search Suggestions" (default ON) - Controls visibility of suggestion chips

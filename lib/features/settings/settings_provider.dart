@@ -60,7 +60,7 @@ class SettingsProvider with ChangeNotifier {
   static const String _keyShowSearchSuggestions = 'show_search_suggestions';
   static const String _keySearchAsYouType = 'search_as_you_type';
 
-  AppThemeMode _appThemeMode = AppThemeMode.custom;
+  AppThemeMode _appThemeMode = AppThemeMode.light;
   String _fontFamily = 'Roboto';
   double _fontSize = 16.0;
   Color _backgroundColor = Colors.white;

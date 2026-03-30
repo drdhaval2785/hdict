@@ -1,4 +1,3 @@
-# hdict User Manual
 
 Welcome to **hdict**, your powerful, customizable dictionary reader! This guide will help you get the most out of the app.
 
@@ -30,9 +29,9 @@ Perfect for bulk importing entire collections from your device.
 2. Select a directory containing dictionary files.
 3. The app recursively scans for all supported formats and groups them under the folder's name.
 
-> **📱 Android Note**: Due to Android's security restrictions, the "Downloads" folder (and some other system folders) cannot be accessed by apps. 
-> * Store your dictionary files in a user-accessible folder like `Downloads/DictData` or create a new folder.
-> * On Android 11+, you may need to grant "Files and media" permission to access certain locations.
+> **📱 Android Note**: Due to Android's security restrictions, the app cannot access the "Downloads" folder directly.
+> * **Highly recommended**: Store your dictionary files in `Documents/DictData` folder.
+> * You may need to grant "Files and media" permission to access certain locations.
 
 #### 3. Link Files
 Use this to link dictionary files directly from your device without copying them. This is ideal for saving storage space—linked dictionaries remain in their original location.
@@ -70,6 +69,7 @@ By default, the app looks for "Headwords" (the main titles of entries). However,
 
 *   **What it does**: It reads every single word inside every definition and maps it.
 *   **Example**: If you search for "astronomy", a normal search finds the entry for "Astronomy". A **Deep Search** will also find "Telescope" or "Galaxy" because they mention "astronomy" in their descriptions.
+*   **Suggestions**: When enabled, **suggestion chips appear for definition words** as you type, helping you discover related terms even before pressing Enter.
 *   **Note**: This makes the import process take longer and uses more storage space, but it provides much more powerful search results.
 
 ---
@@ -92,7 +92,7 @@ Head over to **Settings** to make the app your own:
 ### Search Settings
 *   **Search Modes**: Set whether your search should match the start of the word (**Prefix**), the end (**Suffix**), the internal (**Substring**) or the **Exact** word.
 *   **Search As You Type**: Enable this to automatically search as you type each character, providing instant results.
-*   **Show Search Suggestions**: Display suggestion chips while typing to help you find words faster.
+*   **Show Search Suggestions**: Display suggestion chips while typing to help you find words faster. Suggestions appear for **headwords** in headword search, and for **definition words** in definition search (when Deep Search is enabled).
 *   **List Mode**: When enabled, search results appear as an accordion—tap to expand and see the full definition. This is useful for browsing multiple results at a glance.
 
 ### Appearance
@@ -109,4 +109,6 @@ Head over to **Settings** to make the app your own:
 In **Manage Dictionaries**, you have full control:
 
 *   **Reorder Priority**: Drag dictionaries up or down. If multiple dictionaries have the same word, the one at the top will be shown first.
-*   **Re-indexing**: If a dictionary seems to have missing words, use the "Re-index" tool to rebuild its word list.
+*   **Re-indexing**: If a dictionary seems to have missing words, use the "Re-index" tool to rebuild its word list. Access it via the triple dots menu next to each dictionary.
+*   **Reindex All**: Use the "Reindex All" button to rebuild the word list for all dictionaries at once. Previously indexed dictionaries will retain their definition indexing setting; others default to "Headword Only".
+
