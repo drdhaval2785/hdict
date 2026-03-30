@@ -180,6 +180,9 @@ class DatabaseHelper {
   /// - If word_index exists and is correct: does nothing.
   static Future<void> _ensureWordIndexTable(Database db) async {
     final bool fts5Available = await _checkFts5Available(db);
+    hDebugPrint(
+      'DatabaseHelper: _ensureWordIndexTable - FTS5 available on this SQLite build: $fts5Available',
+    );
 
     // Check if word_index already exists and what type it is.
     final existing = await db.rawQuery(
@@ -194,13 +197,25 @@ class DatabaseHelper {
             )).firstOrNull?['sql']?.toString().contains('fts5') ==
             true;
 
+    if (tableExists) {
+      hDebugPrint(
+        'DatabaseHelper: word_index already exists, tableIsFts5=$tableIsFts5',
+      );
+    }
+
     if (tableExists && tableIsFts5 && !fts5Available) {
       // The stored table is FTS5 but the runtime doesn't support it.
       // Drop and recreate as a regular table to restore functionality.
       hDebugPrint(
-        'word_index is FTS5 but FTS5 module is unavailable — migrating to regular table.',
+        'DatabaseHelper: word_index is FTS5 but FTS5 module is unavailable — migrating to regular table (fallback).',
       );
       await db.execute('DROP TABLE word_index');
+      final newExists = (await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE name = 'word_index'",
+      )).isNotEmpty;
+      if (!newExists) {
+        hDebugPrint('DatabaseHelper: word_index dropped successfully');
+      }
     }
 
     // Re-check existence after potential drop.
@@ -211,6 +226,9 @@ class DatabaseHelper {
     if (!existsNow) {
       if (fts5Available) {
         // 1. Physical metadata table (supports scanning/SQL joins/deletes)
+        hDebugPrint(
+          'DatabaseHelper: Creating word_metadata table (physical table for headword search)',
+        );
         await db.execute('''
           CREATE TABLE IF NOT EXISTS word_metadata(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -230,6 +248,9 @@ class DatabaseHelper {
           'CREATE INDEX IF NOT EXISTS idx_metadata_dict_word ON word_metadata(dict_id, word COLLATE NOCASE)',
         );
 
+        hDebugPrint(
+          'DatabaseHelper: Creating word_index as FTS5 virtual table (for definition search with FTS5)',
+        );
         await db.execute('''
           CREATE VIRTUAL TABLE word_index USING fts5(
             word,
@@ -237,10 +258,12 @@ class DatabaseHelper {
             tokenize = 'unicode61'
           )
         ''');
-        hDebugPrint('word_index created as FTS5 virtual table.');
+        hDebugPrint(
+          'DatabaseHelper: word_index created as FTS5 virtual table SUCCESSFULLY',
+        );
       } else {
         hDebugPrint(
-          'FTS5 unavailable — creating word_index as regular indexed table.',
+          'DatabaseHelper: FTS5 unavailable on this SQLite build — creating word_index as regular indexed table (fallback for definition search)',
         );
         await db.execute('''
           CREATE TABLE IF NOT EXISTS word_index (
@@ -256,16 +279,29 @@ class DatabaseHelper {
             'CREATE INDEX IF NOT EXISTS idx_word_index_word ON word_index(word)',
           );
         } catch (_) {}
+        hDebugPrint(
+          'DatabaseHelper: word_index created as regular indexed table SUCCESSFULLY (FALLBACK MODE)',
+        );
       }
+    } else {
+      hDebugPrint(
+        'DatabaseHelper: word_index already exists and is compatible, no action needed',
+      );
     }
   }
 
   /// Called every time the database is opened (after onCreate/onUpgrade).
   /// Ensures word_index is usable on this device's SQLite build.
   Future<void> _onOpen(Database db) async {
+    hDebugPrint(
+      'DatabaseHelper: _onOpen called - checking FTS5 availability and word_index table',
+    );
     await _ensureWordIndexTable(db);
     // Cache FTS5 availability for the lifetime of this DB session.
     _fts5Available = await _checkFts5Available(db);
+    hDebugPrint(
+      'DatabaseHelper: _onOpen complete - _fts5Available=$_fts5Available',
+    );
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -1647,7 +1683,8 @@ class DatabaseHelper {
     return await db.transaction<({int startId, int duplicateCount})>((
       txn,
     ) async {
-      final bool useFts5 = (_fts5Available ?? true) && populateFts5;
+      final bool fts5Available = _fts5Available ?? true;
+      final bool useFts5 = fts5Available && populateFts5;
       int newStartId = startId ?? 0;
       int duplicateCount = 0;
 
@@ -1693,7 +1730,46 @@ class DatabaseHelper {
         }
 
         newStartId = (metaResults.last as int);
+      } else if (!fts5Available) {
+        // FTS5 unavailable: populate word_index as regular table for definition search fallback
+        final List<String> tokenizedContents = words
+            .map((w) => _tokenizeContent(w['content'] as String?))
+            .toList();
+
+        final metaBatch = txn.batch();
+        for (final word in words) {
+          metaBatch.insert('word_metadata', {
+            'word': word['word'],
+            'dict_id': dictId,
+            'offset': word['offset'],
+            'length': word['length'],
+          });
+        }
+        final metaResults = await metaBatch.commit(noResult: false);
+
+        final idxBatch = txn.batch();
+        for (int i = 0; i < words.length; i++) {
+          final int actualInsertedId = metaResults[i] as int;
+          idxBatch.insert('word_index', {
+            'word': words[i]['word'],
+            'content': tokenizedContents[i],
+            'dict_id': dictId,
+            'offset': words[i]['offset'],
+            'length': words[i]['length'],
+          });
+        }
+        await idxBatch.commit(noResult: true);
+
+        newStartId = (metaResults.last as int);
+        hDebugPrint(
+          'DatabaseHelper: Indexed ${words.length} words in regular word_index table (FTS5 unavailable - FALLBACK MODE)',
+        );
       } else {
+        // FTS5 available but populateFts5=false (deferred to rebuild for headword-only mode)
+        // Only insert into word_metadata for headword search
+        hDebugPrint(
+          'DatabaseHelper: FTS5 available, populateFts5=$populateFts5 - only inserting into word_metadata (headword search mode)',
+        );
         final batch = txn.batch();
         for (final word in words) {
           batch.insert('word_metadata', {
@@ -1709,13 +1785,16 @@ class DatabaseHelper {
     });
   }
 
-  /// Rebuilds FTS5 index for a specific dictionary in the background.
+  /// Rebuilds word_index for a specific dictionary in the background.
   /// This is called after import when populateFts5 was false.
+  /// - If FTS5 is available: populates word_index as FTS5 virtual table
+  /// - If FTS5 is unavailable: populates word_index as regular table (fallback)
   Future<void> rebuildFts5IndexForDict(int dictId) async {
     final db = await database;
-    if (_fts5Available != true) return;
-
-    hDebugPrint('DatabaseHelper: Rebuilding FTS5 index for dict_id=$dictId');
+    final bool useFts5 = _fts5Available == true;
+    hDebugPrint(
+      'DatabaseHelper: rebuildFts5IndexForDict START for dict_id=$dictId, _fts5Available=$_fts5Available, useFts5=$useFts5',
+    );
 
     // Get dictionary path and format
     final dictResults = await db.query(
@@ -1725,7 +1804,9 @@ class DatabaseHelper {
       whereArgs: [dictId],
     );
     if (dictResults.isEmpty) {
-      hDebugPrint('DatabaseHelper: Dictionary $dictId not found');
+      hDebugPrint(
+        'DatabaseHelper: Rebuild ABORTED - Dictionary $dictId not found in dictionaries table',
+      );
       return;
     }
 
@@ -1736,7 +1817,7 @@ class DatabaseHelper {
     // Other formats (slob, dictd) have different indexing paths
     if (dictFormat != 'stardict') {
       hDebugPrint(
-        'DatabaseHelper: Skipping FTS5 rebuild for non-Stardict format: $dictFormat',
+        'DatabaseHelper: Rebuild SKIPPED for non-Stardict format: $dictFormat',
       );
       return;
     }
@@ -1746,7 +1827,9 @@ class DatabaseHelper {
     final dictFile = File(resolvedPath);
 
     if (!await dictFile.exists()) {
-      hDebugPrint('DatabaseHelper: Dictionary file not found: $resolvedPath');
+      hDebugPrint(
+        'DatabaseHelper: Rebuild ABORTED - Dictionary file not found: $resolvedPath',
+      );
       return;
     }
 
@@ -1757,13 +1840,27 @@ class DatabaseHelper {
       whereArgs: [dictId],
     );
 
-    if (words.isEmpty) return;
+    if (words.isEmpty) {
+      hDebugPrint(
+        'DatabaseHelper: Rebuild SKIPPED - No words found in word_metadata for dict_id=$dictId',
+      );
+      return;
+    }
 
-    await db.delete(
-      'word_index',
-      where: 'rowid IN (SELECT id FROM word_metadata WHERE dict_id = ?)',
-      whereArgs: [dictId],
+    hDebugPrint(
+      'DatabaseHelper: Rebuild proceeding - Found ${words.length} words in word_metadata for dict_id=$dictId',
     );
+
+    // Delete existing entries for this dictionary
+    if (useFts5) {
+      await db.delete(
+        'word_index',
+        where: 'rowid IN (SELECT id FROM word_metadata WHERE dict_id = ?)',
+        whereArgs: [dictId],
+      );
+    } else {
+      await db.delete('word_index', where: 'dict_id = ?', whereArgs: [dictId]);
+    }
 
     // Create DictReader to read content from dictionary file
     DictReader? dictReader;
@@ -1791,16 +1888,27 @@ class DatabaseHelper {
           final word = batch[j];
           final content = contents[j];
           final tokenized = _tokenizeContent(content);
-          idxBatch.rawInsert(
-            'INSERT OR IGNORE INTO word_index(rowid, word, content) VALUES (?, ?, ?)',
-            [word['id'], word['word'], tokenized],
-          );
+
+          if (useFts5) {
+            idxBatch.rawInsert(
+              'INSERT OR IGNORE INTO word_index(rowid, word, content) VALUES (?, ?, ?)',
+              [word['id'], word['word'], tokenized],
+            );
+          } else {
+            idxBatch.insert('word_index', {
+              'word': word['word'],
+              'content': tokenized,
+              'dict_id': dictId,
+              'offset': word['offset'],
+              'length': word['length'],
+            });
+          }
         }
         await idxBatch.commit(noResult: true);
 
         if ((i + batchSize) % 10000 == 0 || end == words.length) {
           hDebugPrint(
-            'DatabaseHelper: FTS5 rebuild progress: ${min(i + batchSize, words.length)}/${words.length}',
+            'DatabaseHelper: Rebuild progress: ${min(i + batchSize, words.length)}/${words.length}',
           );
         }
       }
@@ -1808,9 +1916,13 @@ class DatabaseHelper {
       await dictReader?.close();
     }
 
-    await db.execute("INSERT INTO word_index(word_index) VALUES('optimize')");
+    if (useFts5) {
+      await db.execute("INSERT INTO word_index(word_index) VALUES('optimize')");
+    }
 
-    hDebugPrint('DatabaseHelper: FTS5 index rebuilt for dict_id=$dictId');
+    hDebugPrint(
+      'DatabaseHelper: word_index rebuilt SUCCESSFULLY for dict_id=$dictId as ${useFts5 ? 'FTS5 virtual table' : 'regular table (FALLBACK)'}, indexed ${words.length} words',
+    );
   }
 
   /// Finds all dictionaries that have definitions indexed but empty FTS5 content.
@@ -2279,7 +2391,14 @@ class DatabaseHelper {
     String query, {
     int limit = 50,
   }) async {
-    if (query.trim().isEmpty) return [];
+    hDebugPrint(
+      '[DEF_SUGG_DB] getDefinitionSuggestions ENTER with query="$query"',
+    );
+
+    if (query.trim().isEmpty) {
+      hDebugPrint('[DEF_SUGG_DB] query is empty, returning []');
+      return [];
+    }
 
     final totalStopwatch = Stopwatch()..start();
 
@@ -2288,8 +2407,25 @@ class DatabaseHelper {
       final String cleanQuery = query.trim().toLowerCase();
       final bool useFts5 = _fts5Available ?? true;
 
+      hDebugPrint(
+        '[DEF_SUGG_DB] useFts5=$useFts5, _fts5Available=$_fts5Available',
+      );
+
       final dicts = await getEnabledDictionaries();
-      if (dicts.isEmpty) return [];
+      hDebugPrint('[DEF_SUGG_DB] got ${dicts.length} enabled dictionaries');
+
+      // Debug: check if any dict has index_definitions = 1
+      final indexedDictsCheck = await db.rawQuery(
+        'SELECT id, name, index_definitions, definition_word_count FROM dictionaries WHERE index_definitions = 1',
+      );
+      hDebugPrint(
+        '[DEF_SUGG_DB] DEBUG: dicts with index_definitions=1: $indexedDictsCheck',
+      );
+
+      if (dicts.isEmpty) {
+        hDebugPrint('[DEF_SUGG_DB] no enabled dictionaries, returning []');
+        return [];
+      }
 
       final Map<int, int> dictDisplayOrder = {};
       for (final dict in dicts) {
@@ -2298,6 +2434,7 @@ class DatabaseHelper {
       }
 
       if (useFts5) {
+        hDebugPrint('[DEF_SUGG_DB] FTS5 path');
         final queryStopwatch = Stopwatch()..start();
         const sql = '''
           SELECT i.content, m.dict_id, d.display_order
@@ -2363,6 +2500,9 @@ class DatabaseHelper {
 
         return suggestions;
       } else {
+        hDebugPrint(
+          '[DEF_SUGG_DB] FALLBACK path (FTS5 unavailable or _fts5Available == false)',
+        );
         final getIndexedStopwatch = Stopwatch()..start();
         final List<Map<String, dynamic>> indexedDicts = await db.rawQuery('''
           SELECT DISTINCT m.dict_id
@@ -2371,6 +2511,9 @@ class DatabaseHelper {
           WHERE i.content IS NOT NULL AND i.content != ''
         ''');
         getIndexedStopwatch.stop();
+        hDebugPrint(
+          '[DEF_SUGG_DB] fallback: found ${indexedDicts.length} dicts with indexed content',
+        );
 
         final indexedDictIds = indexedDicts
             .map((r) => r['dict_id'] as int)
@@ -2379,7 +2522,16 @@ class DatabaseHelper {
             .where((d) => indexedDictIds.contains(d['id'] as int))
             .toList();
 
-        if (filteredDicts.isEmpty) return [];
+        hDebugPrint(
+          '[DEF_SUGG_DB] fallback: filtered to ${filteredDicts.length} dicts',
+        );
+
+        if (filteredDicts.isEmpty) {
+          hDebugPrint(
+            '[DEF_SUGG_DB] fallback: no dicts with indexed content, returning []',
+          );
+          return [];
+        }
 
         final dictIds = filteredDicts.map((d) => d['id'] as int).toList();
         final dictIdList = dictIds.join(',');

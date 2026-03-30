@@ -451,30 +451,47 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Future<List<String>> _getDefinitionSuggestions(String query) async {
+    hDebugPrint(
+      '[DEF_SUGG] _getDefinitionSuggestions ENTER with query="$query"',
+    );
+
     if (query.isEmpty) {
+      hDebugPrint('[DEF_SUGG] query is empty, returning []');
       return [];
     }
 
+    hDebugPrint('[DEF_SUGG] setting _isLoadingDefinitionSuggestions = true');
     setState(() {
       _isLoadingDefinitionSuggestions = true;
     });
 
     try {
+      hDebugPrint('[DEF_SUGG] calling _dbHelper.getDefinitionSuggestions...');
       final suggestions = await _dbHelper.getDefinitionSuggestions(
         query,
         limit: 50,
       );
 
-      if (!mounted) return [];
+      hDebugPrint(
+        '[DEF_SUGG] getDefinitionSuggestions returned ${suggestions.length} suggestions',
+      );
 
+      if (!mounted) {
+        hDebugPrint('[DEF_SUGG] not mounted, returning []');
+        return [];
+      }
+
+      hDebugPrint(
+        '[DEF_SUGG] setting _definitionSuggestions and _isLoadingDefinitionSuggestions = false',
+      );
       setState(() {
         _definitionSuggestions = suggestions;
         _isLoadingDefinitionSuggestions = false;
       });
 
       return suggestions;
-    } catch (e) {
-      hDebugPrint('Error fetching definition suggestions: $e');
+    } catch (e, st) {
+      hDebugPrint('Error fetching definition suggestions: $e\n$st');
       if (mounted) {
         setState(() {
           _isLoadingDefinitionSuggestions = false;
@@ -1496,7 +1513,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   void _onDefinitionSuggestionSelected(String suggestion) {
-    hDebugPrint('_onDefinitionSuggestionSelected: chip tapped -> "$suggestion"');
+    hDebugPrint(
+      '_onDefinitionSuggestionSelected: chip tapped -> "$suggestion"',
+    );
     _definitionSuggestionsDebouncer.cancel();
     _quickSearchDebouncer.cancel();
     _definitionController.text = suggestion;
