@@ -30,6 +30,7 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
   }
 
   Future<void> _loadData() async {
+    // First, load cached data so users can browse even when offline
     try {
       final cachedDicts = await _service.fetchDictionaries();
       final downloadedUrls = await _service.getDownloadedUrls();
@@ -41,17 +42,35 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
           _isLoading = false;
         });
       }
-
-      if (cachedDicts.isEmpty) {
-        _refresh();
-      }
     } catch (e) {
+      // If we can't even load cache, show error
       if (mounted) {
         setState(() {
           _error = e.toString();
           _isLoading = false;
         });
       }
+      return;
+    }
+
+    // Then refresh in background to get latest list
+    _refreshInBackground();
+  }
+
+  Future<void> _refreshInBackground() async {
+    // Silently refresh without showing loading indicator
+    try {
+      final dicts = await _service.refreshDictionaries();
+      final downloadedUrls = await _service.getDownloadedUrls();
+      if (mounted) {
+        setState(() {
+          _allDictionaries = dicts;
+          _downloadedUrls = downloadedUrls;
+        });
+      }
+    } catch (e) {
+      // Silently fail - cached data is still shown
+      debugPrint('Failed to refresh dictionary list: $e');
     }
   }
 
@@ -146,7 +165,6 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
     final count = _getSourceLanguageCount(code);
     return '$name ($code) ($count)';
   }
-
 
   String _parseCodeFromOption(String option) {
     final match = RegExp(r'\(([a-z]{3})\)').firstMatch(option);
@@ -252,34 +270,34 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
           },
           optionsViewBuilder: (context, onSelected, options) {
             return LayoutBuilder(
-                builder: (context, constraints) {
-                  return Align(
-                    alignment: Alignment.topLeft,
-                    child: Material(
-                      elevation: 4.0,
-                      borderRadius: BorderRadius.circular(8),
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxHeight: 300,
-                          maxWidth: constraints.maxWidth,
-                        ),
-                        child: ListView.builder(
-                          padding: EdgeInsets.zero,
-                          shrinkWrap: true,
-                          itemCount: options.length,
-                          itemBuilder: (context, index) {
-                            final option = options.elementAt(index);
-                            final code = _parseCodeFromOption(option);
-                            return ListTile(
-                              title: Text(option),
-                              onTap: () => onSelected(code),
-                            );
-                          },
-                        ),
+              builder: (context, constraints) {
+                return Align(
+                  alignment: Alignment.topLeft,
+                  child: Material(
+                    elevation: 4.0,
+                    borderRadius: BorderRadius.circular(8),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: 300,
+                        maxWidth: constraints.maxWidth,
+                      ),
+                      child: ListView.builder(
+                        padding: EdgeInsets.zero,
+                        shrinkWrap: true,
+                        itemCount: options.length,
+                        itemBuilder: (context, index) {
+                          final option = options.elementAt(index);
+                          final code = _parseCodeFromOption(option);
+                          return ListTile(
+                            title: Text(option),
+                            onTap: () => onSelected(code),
+                          );
+                        },
                       ),
                     ),
-                  );
-                }
+                  ),
+                );
+              },
             );
           },
           onSelected: (code) {
@@ -316,11 +334,11 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
           onChanged: _selectedSourceLanguage == null
               ? null
               : (String? value) {
-            setState(() {
-              _selectedTargetLanguage = value;
-              _selectedUrls.clear();
-            });
-          },
+                  setState(() {
+                    _selectedTargetLanguage = value;
+                    _selectedUrls.clear();
+                  });
+                },
         ),
         const SizedBox(height: 8),
         CheckboxListTile(
@@ -349,7 +367,10 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
                 child: Text(
                   'Select languages to see available dictionaries.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontStyle: FontStyle.italic,
+                  ),
                 ),
               ),
             ),
@@ -362,13 +383,29 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
                 Expanded(
                   child: Text(
                     'Available Dictionaries (${_filteredDictionaries.length})',
-                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey,
+                    ),
                   ),
                 ),
                 TextButton.icon(
                   icon: const Icon(Icons.select_all, size: 18),
                   label: Text(
-                    _filteredDictionaries.where((d) => d.getPreferredRelease() != null && !_downloadedUrls.contains(d.getPreferredRelease()!.url)).every((d) => _selectedUrls.contains(d.getPreferredRelease()!.url)) && _selectedUrls.isNotEmpty
+                    _filteredDictionaries
+                                .where(
+                                  (d) =>
+                                      d.getPreferredRelease() != null &&
+                                      !_downloadedUrls.contains(
+                                        d.getPreferredRelease()!.url,
+                                      ),
+                                )
+                                .every(
+                                  (d) => _selectedUrls.contains(
+                                    d.getPreferredRelease()!.url,
+                                  ),
+                                ) &&
+                            _selectedUrls.isNotEmpty
                         ? 'Deselect All'
                         : 'Select All',
                   ),
@@ -376,11 +413,17 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
                     setState(() {
                       final availableUrls = _filteredDictionaries
                           .map((d) => d.getPreferredRelease()?.url)
-                          .where((url) => url != null && !_downloadedUrls.contains(url))
+                          .where(
+                            (url) =>
+                                url != null && !_downloadedUrls.contains(url),
+                          )
                           .cast<String>()
                           .toList();
 
-                      if (availableUrls.every((url) => _selectedUrls.contains(url)) && availableUrls.isNotEmpty) {
+                      if (availableUrls.every(
+                            (url) => _selectedUrls.contains(url),
+                          ) &&
+                          availableUrls.isNotEmpty) {
                         _selectedUrls.removeAll(availableUrls);
                       } else {
                         _selectedUrls.addAll(availableUrls);
@@ -408,7 +451,9 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                     side: BorderSide(
-                      color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+                      color: theme.colorScheme.outlineVariant.withValues(
+                        alpha: 0.5,
+                      ),
                     ),
                   ),
                   child: Padding(
@@ -456,7 +501,11 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
                                 child: const Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(Icons.check_circle, color: Colors.green, size: 14),
+                                    Icon(
+                                      Icons.check_circle,
+                                      color: Colors.green,
+                                      size: 14,
+                                    ),
                                     SizedBox(width: 4),
                                     Text(
                                       'Installed',
@@ -496,7 +545,9 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
               padding: const EdgeInsets.only(top: 16.0),
               child: ElevatedButton.icon(
                 icon: const Icon(Icons.download),
-                label: Text('Download ${_selectedUrls.length} ${(_selectedUrls.length == 1) ? "Dictionary" : "Dictionaries"}'),
+                label: Text(
+                  'Download ${_selectedUrls.length} ${(_selectedUrls.length == 1) ? "Dictionary" : "Dictionaries"}',
+                ),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.all(16.0),
                 ),
@@ -504,7 +555,8 @@ class _StardictDownloadDialogState extends State<StardictDownloadDialog> {
                   Navigator.pop(context, {
                     'urls': _selectedUrls.toList(),
                     'index': _indexDefinitions,
-                    'groupName': '$_selectedSourceLanguage-$_selectedTargetLanguage',
+                    'groupName':
+                        '$_selectedSourceLanguage-$_selectedTargetLanguage',
                   });
                 },
               ),
