@@ -25,13 +25,6 @@ class DatabaseHelper {
   /// Whether the user just upgraded from version 16 and needs a notice.
   static bool needsMigrationAlert = false;
 
-  /// Cached list of dictionary IDs that have definition content indexed.
-  /// Populated on first access and refreshed when needed.
-  static Set<int>? _definitionIndexedDictIds;
-
-  /// Whether the definition index cache has been initialized.
-  static bool _definitionCacheInitialized = false;
-
   factory DatabaseHelper() {
     return _instance;
   }
@@ -1423,8 +1416,6 @@ class DatabaseHelper {
     hDebugPrint('DatabaseHelper: Deleting from files table');
     await db.delete('files', where: 'dict_id = ?', whereArgs: [id]);
 
-    await _refreshDefinitionIndexCache();
-
     hDebugPrint('DatabaseHelper: Dictionary delete complete for id=$id');
   }
 
@@ -1632,7 +1623,6 @@ class DatabaseHelper {
     await db.execute('PRAGMA synchronous = NORMAL');
     clearQueryCache();
     clearDictionaryCache();
-    await _refreshDefinitionIndexCache();
   }
 
   Future<void> enableBulkInsertMode() async {
@@ -2204,50 +2194,62 @@ class DatabaseHelper {
     int limit = 50,
     bool fuzzy = false,
   }) async {
+    final stopwatch = Stopwatch()..start();
     try {
       final db = await database;
-      // prefix may have quotes, clean them
       final String cleanPrefix = prefix
           .replaceAll(RegExp(r'["*\(\)]'), '')
           .trim();
-      final bool useFts5 = _fts5Available ?? true;
-      final String fallbackTable = useFts5 ? 'word_metadata' : 'word_index';
 
-      // Use sequential search for standard prefix suggestions to leverage idx_metadata_dict_word
-      if (!fuzzy && !cleanPrefix.contains(' ')) {
+      if (!fuzzy && !cleanPrefix.contains(' ') && cleanPrefix.isNotEmpty) {
         final List<Map<String, dynamic>> dicts = await getEnabledDictionaries();
-        final List<String> suggestions = [];
+        if (dicts.isEmpty) return [];
 
+        final dictIds = dicts.map((d) => d['id'] as int).toList();
+        final dictIdList = dictIds.join(',');
+
+        final Map<int, int> dictDisplayOrder = {};
         for (final dict in dicts) {
-          // dicts already filtered by is_enabled
-
-          final int currentLimit = limit - suggestions.length;
-          if (currentLimit <= 0) break;
-
-          final results = await db.query(
-            'word_metadata',
-            columns: ['word'],
-            where: 'dict_id = ? AND word LIKE ?',
-            whereArgs: [dict['id'], '$cleanPrefix%'],
-            orderBy: 'word ASC',
-            limit: currentLimit,
-          );
-
-          for (var r in results) {
-            String w = r['word'] as String;
-            if (!suggestions.contains(w)) suggestions.add(w);
-          }
+          dictDisplayOrder[dict['id'] as int] =
+              dict['display_order'] as int? ?? 0;
         }
-        _log(
-          'SEQUENTIAL_SUGGEST (Prefix)',
-          'Iterated ${dicts.length} dicts',
-          [cleanPrefix, limit],
-          suggestions,
+
+        final String likePattern = '$cleanPrefix%';
+        final rawResults = await db.rawQuery(
+          'SELECT word, dict_id FROM word_metadata WHERE dict_id IN ($dictIdList) AND word LIKE ? LIMIT ?',
+          [likePattern, limit],
+        );
+
+        final Set<String> seen = {};
+        final List<(String word, int dictId)> sortedResults = [];
+
+        for (final r in rawResults) {
+          final String w = r['word'] as String;
+          if (seen.add(w)) {
+            sortedResults.add((w, r['dict_id'] as int));
+          }
+          if (sortedResults.length >= limit) break;
+        }
+
+        sortedResults.sort((a, b) {
+          final aOrder = dictDisplayOrder[a.$2] ?? 0;
+          final bOrder = dictDisplayOrder[b.$2] ?? 0;
+          if (aOrder != bOrder) return aOrder.compareTo(bOrder);
+          if (a.$2 != b.$2) return a.$2.compareTo(b.$2);
+          return a.$1.toLowerCase().compareTo(b.$1.toLowerCase());
+        });
+
+        final suggestions = sortedResults.map((r) => r.$1).toList();
+        stopwatch.stop();
+        hDebugPrint(
+          'getPrefixSuggestions: ${stopwatch.elapsedMicroseconds}us for ${suggestions.length} results',
         );
         return suggestions;
       }
 
-      // Fallback for fuzzy/multi-word/no-FTS suggestions
+      final bool useFts5 = _fts5Available ?? true;
+      final String fallbackTable = useFts5 ? 'word_metadata' : 'word_index';
+
       final String sql =
           '''
         SELECT DISTINCT word 
@@ -2262,31 +2264,14 @@ class DatabaseHelper {
         limit,
       ]);
       _log('RAW_QUERY (Suggest Fallback)', sql, [cleanPrefix, limit], results);
+      stopwatch.stop();
+      hDebugPrint(
+        'getPrefixSuggestions fallback: ${stopwatch.elapsedMicroseconds}us',
+      );
       return results.map((r) => r['word'] as String).toList();
     } catch (e) {
       hDebugPrint('Error getting prefix suggestions: $e');
       return [];
-    }
-  }
-
-  Future<void> _refreshDefinitionIndexCache() async {
-    try {
-      final db = await database;
-      final results = await db.rawQuery('''
-        SELECT DISTINCT m.dict_id 
-        FROM word_metadata m
-        INNER JOIN word_index i ON m.id = i.rowid
-        WHERE i.content IS NOT NULL AND i.content != ''
-      ''');
-      _definitionIndexedDictIds = results
-          .map((r) => r['dict_id'] as int)
-          .toSet();
-      _definitionCacheInitialized = true;
-      hDebugPrint(
-        'Definition index cache refreshed: ${_definitionIndexedDictIds!.length} dicts indexed',
-      );
-    } catch (e) {
-      hDebugPrint('Error refreshing definition index cache: $e');
     }
   }
 
@@ -2296,99 +2281,131 @@ class DatabaseHelper {
   }) async {
     if (query.trim().isEmpty) return [];
 
-    if (!_definitionCacheInitialized) {
-      await _refreshDefinitionIndexCache();
-    }
-
-    if (_definitionIndexedDictIds == null ||
-        _definitionIndexedDictIds!.isEmpty) {
-      return [];
-    }
+    final totalStopwatch = Stopwatch()..start();
 
     try {
       final db = await database;
       final String cleanQuery = query.trim();
+      final bool useFts5 = _fts5Available ?? true;
 
-      final List<Map<String, dynamic>> allEnabledDicts =
-          await getEnabledDictionaries();
-      if (allEnabledDicts.isEmpty) return [];
+      if (useFts5) {
+        final queryStopwatch = Stopwatch()..start();
+        final results = await db.rawQuery(
+          '''
+          SELECT DISTINCT snippet(word_index, 1, '<b>', '</b>', '...', 10) AS matched_word
+          FROM word_index
+          JOIN word_metadata m ON word_index.rowid = m.id
+          JOIN dictionaries d ON m.dict_id = d.id
+          WHERE d.is_enabled = 1
+          AND m.dict_id IN (
+            SELECT DISTINCT wm.dict_id
+            FROM word_metadata wm
+            JOIN word_index wi ON wm.id = wi.rowid
+            WHERE wi.content IS NOT NULL AND wi.content != ''
+          )
+          AND word_index.content MATCH ?
+          LIMIT ?
+        ''',
+          ['$cleanQuery*', limit],
+        );
+        queryStopwatch.stop();
 
-      final List<Map<String, dynamic>> dicts = allEnabledDicts
-          .where((d) => _definitionIndexedDictIds!.contains(d['id'] as int))
-          .toList();
-
-      if (dicts.isEmpty) return [];
-
-      final List<String> suggestions = [];
-
-      for (final dict in dicts) {
-        if (suggestions.length >= limit) break;
-
-        final int currentLimit = limit - suggestions.length;
-        if (currentLimit <= 0) break;
-
-        final bool useFts5 = _fts5Available ?? true;
-
-        if (useFts5) {
-          final results = await db.rawQuery(
-            '''
-            SELECT DISTINCT snippet(word_index, 1, '<b>', '</b>', '...', 10) AS matched_word
-            FROM word_index
-            JOIN word_metadata m ON word_index.rowid = m.id
-            WHERE m.dict_id = ?
-            AND word_index.content MATCH ?
-            LIMIT ?
-          ''',
-            [dict['id'], '$cleanQuery*', currentLimit],
-          );
-
-          for (var r in results) {
-            String? snippet = r['matched_word'] as String?;
-            if (snippet != null && snippet.isNotEmpty) {
-              final regex = RegExp(r'<b>(.*?)</b>');
-              final matches = regex.allMatches(snippet);
-              for (final match in matches) {
-                String w = match.group(1)!.toLowerCase();
-                if (!suggestions.contains(w)) suggestions.add(w);
-              }
-            }
-          }
-        } else {
-          final results = await db.query(
-            'word_index',
-            columns: ['content'],
-            where: 'dict_id = ? AND content LIKE ?',
-            whereArgs: [dict['id'], '%$cleanQuery%'],
-            limit: currentLimit,
-          );
-
-          for (var r in results) {
-            String? content = r['content'] as String?;
-            if (content != null) {
-              final regex = RegExp(
-                r'\b\w*' + RegExp.escape(cleanQuery) + r'\w*\b',
-                caseSensitive: false,
-              );
-              final matches = regex.allMatches(content);
-              for (final match in matches) {
-                String w = match.group(0)!.toLowerCase();
-                if (!suggestions.contains(w)) suggestions.add(w);
-              }
+        final parseStopwatch = Stopwatch()..start();
+        final Set<String> seen = {};
+        final List<String> suggestions = [];
+        final regex = RegExp(r'<b>(.*?)</b>');
+        for (var r in results) {
+          String? snippet = r['matched_word'] as String?;
+          if (snippet != null && snippet.isNotEmpty) {
+            final matches = regex.allMatches(snippet);
+            for (final match in matches) {
+              String w = match.group(1)!.toLowerCase();
+              if (seen.add(w)) suggestions.add(w);
             }
           }
         }
-      }
+        parseStopwatch.stop();
 
-      _log(
-        'SEQUENTIAL_SUGGEST (Definition)',
-        'Searched ${dicts.length} dicts',
-        [cleanQuery, limit],
-        suggestions,
-      );
-      return suggestions;
+        totalStopwatch.stop();
+        hDebugPrint(
+          'getDefinitionSuggestions FTS5: query=${(queryStopwatch.elapsedMicroseconds / 1000).toStringAsFixed(0)}ms, '
+          'parse=${(parseStopwatch.elapsedMicroseconds / 1000).toStringAsFixed(0)}ms, '
+          'total=${(totalStopwatch.elapsedMicroseconds / 1000).toStringAsFixed(0)}ms',
+        );
+
+        return suggestions;
+      } else {
+        final getDictsStopwatch = Stopwatch()..start();
+        final List<Map<String, dynamic>> allEnabledDicts =
+            await getEnabledDictionaries();
+        getDictsStopwatch.stop();
+
+        if (allEnabledDicts.isEmpty) return [];
+
+        final getIndexedStopwatch = Stopwatch()..start();
+        final List<Map<String, dynamic>> indexedDicts = await db.rawQuery('''
+          SELECT DISTINCT m.dict_id
+          FROM word_metadata m
+          JOIN word_index i ON m.id = i.rowid
+          WHERE i.content IS NOT NULL AND i.content != ''
+        ''');
+        getIndexedStopwatch.stop();
+
+        final indexedDictIds = indexedDicts
+            .map((r) => r['dict_id'] as int)
+            .toSet();
+        final dicts = allEnabledDicts
+            .where((d) => indexedDictIds.contains(d['id'] as int))
+            .toList();
+
+        if (dicts.isEmpty) return [];
+
+        final dictIds = dicts.map((d) => d['id'] as int).toList();
+        final dictIdList = dictIds.join(',');
+
+        final regex = RegExp(
+          r'\b\w*' + RegExp.escape(cleanQuery) + r'\w*\b',
+          caseSensitive: false,
+        );
+
+        final results = await db.rawQuery(
+          'SELECT content FROM word_index WHERE dict_id IN ($dictIdList) AND content LIKE ? LIMIT ?',
+          ['%$cleanQuery%', limit * 10],
+        );
+
+        final Set<String> seen = {};
+        final List<String> suggestions = [];
+        for (var r in results) {
+          String? content = r['content'] as String?;
+          if (content != null) {
+            final matches = regex.allMatches(content);
+            for (final match in matches) {
+              String w = match.group(0)!.toLowerCase();
+              if (seen.add(w)) suggestions.add(w);
+              if (suggestions.length >= limit) break;
+            }
+          }
+          if (suggestions.length >= limit) break;
+        }
+
+        totalStopwatch.stop();
+        hDebugPrint(
+          'getDefinitionSuggestions fallback: getDicts=${(getDictsStopwatch.elapsedMicroseconds / 1000).toStringAsFixed(0)}ms, '
+          'getIndexed=${(getIndexedStopwatch.elapsedMicroseconds / 1000).toStringAsFixed(0)}ms, '
+          'total=${(totalStopwatch.elapsedMicroseconds / 1000).toStringAsFixed(0)}ms, '
+          'results=${suggestions.length}',
+        );
+
+        return suggestions;
+      }
     } catch (e) {
       hDebugPrint('Error getting definition suggestions: $e');
       return [];
+    } finally {
+      totalStopwatch.stop();
+      hDebugPrint(
+        'getDefinitionSuggestions total: ${(totalStopwatch.elapsedMicroseconds / 1000).toStringAsFixed(0)}ms',
+      );
     }
   }
 
