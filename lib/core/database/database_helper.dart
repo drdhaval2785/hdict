@@ -1,5 +1,6 @@
 import 'dart:collection';
 import 'package:hdict/core/utils/logger.dart';
+import 'package:hdict/core/utils/word_boundary.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
@@ -2495,17 +2496,14 @@ class DatabaseHelper {
         final Set<String> seen = {};
         final List<(String word, int dictId)> candidates = [];
 
-        final regex = RegExp(
-          r'\b' + RegExp.escape(cleanQuery) + r'\w*\b',
-          caseSensitive: false,
-        );
-
         for (var r in results) {
           String? content = r['content'] as String?;
           if (content != null) {
-            final matches = regex.allMatches(content);
-            for (final match in matches) {
-              String w = match.group(0)!.toLowerCase();
+            final words = WordBoundary.findWordsStartingWith(
+              content,
+              cleanQuery,
+            );
+            for (final w in words) {
               if (seen.add(w)) {
                 candidates.add((w, r['dict_id'] as int));
               }
@@ -2573,11 +2571,6 @@ class DatabaseHelper {
         final dictIds = filteredDicts.map((d) => d['id'] as int).toList();
         final dictIdList = dictIds.join(',');
 
-        final regex = RegExp(
-          r'\b' + RegExp.escape(cleanQuery) + r'\w*\b',
-          caseSensitive: false,
-        );
-
         final results = await db.rawQuery(
           'SELECT content, dict_id FROM word_index WHERE dict_id IN ($dictIdList) AND content LIKE ? LIMIT ?',
           ['%$cleanQuery%', limit * 10],
@@ -2588,9 +2581,11 @@ class DatabaseHelper {
         for (var r in results) {
           String? content = r['content'] as String?;
           if (content != null) {
-            final matches = regex.allMatches(content);
-            for (final match in matches) {
-              String w = match.group(0)!.toLowerCase();
+            final words = WordBoundary.findWordsStartingWith(
+              content,
+              cleanQuery,
+            );
+            for (final w in words) {
               if (seen.add(w)) {
                 candidates.add((w, r['dict_id'] as int));
               }
