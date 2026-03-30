@@ -284,6 +284,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   List<String> _definitionSuggestions = [];
   bool _isLoadingDefinitionSuggestions = false;
 
+  // Tracks which search bar last received typed input — used to decide which
+  // suggestion list to show WITHOUT depending on FocusNode.hasFocus. Focus
+  // can be lost at pointer-down time (before onPressed fires on the chip),
+  // which would make the chips disappear and swallow the tap.
+  SuggestionTarget _activeSuggestionTarget = SuggestionTarget.none;
+
   final Debouncer _quickSearchDebouncer = Debouncer(milliseconds: 150);
 
   bool _hasDictionaries = false;
@@ -486,8 +492,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   void _onSuggestionSelected(String suggestion) {
+    hDebugPrint('_onSuggestionSelected: chip tapped -> "$suggestion"');
+    _suggestionsDebouncer.cancel();
+    _quickSearchDebouncer.cancel();
     _headwordController.text = suggestion;
     _suggestions.clear();
+    _activeSuggestionTarget = SuggestionTarget.none;
     FocusScope.of(context).unfocus();
     _performSearch();
   }
@@ -495,6 +505,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Future<void> _performSearch({bool isRobust = false}) async {
     final headword = _headwordController.text.trim();
     final definition = _definitionController.text.trim();
+    hDebugPrint(
+      '_performSearch: ENTER headword="$headword" definition="$definition"',
+    );
 
     if (headword.isEmpty && definition.isEmpty) return;
 
@@ -1401,12 +1414,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         onPressed: () {
                           _headwordController.clear();
                           _suggestions.clear();
+                          _activeSuggestionTarget = SuggestionTarget.none;
                           setState(() {});
                         },
                       ),
               ),
               onChanged: (value) {
                 if (value.isNotEmpty) {
+                  _activeSuggestionTarget = SuggestionTarget.headword;
                   if (settings.isShowSearchSuggestionsEnabled) {
                     _suggestionsDebouncer.run(() {
                       _getSuggestions(value);
@@ -1419,6 +1434,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   }
                 } else {
                   _suggestions.clear();
+                  _activeSuggestionTarget = SuggestionTarget.none;
                 }
                 setState(() {});
               },
@@ -1447,12 +1463,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         onPressed: () {
                           _definitionController.clear();
                           _definitionSuggestions.clear();
+                          _activeSuggestionTarget = SuggestionTarget.none;
                           setState(() {});
                         },
                       ),
               ),
               onChanged: (value) {
                 if (value.isNotEmpty) {
+                  _activeSuggestionTarget = SuggestionTarget.definition;
                   if (settings.isShowSearchSuggestionsEnabled) {
                     _definitionSuggestionsDebouncer.run(() {
                       _getDefinitionSuggestions(value);
@@ -1465,6 +1483,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   }
                 } else {
                   _definitionSuggestions.clear();
+                  _activeSuggestionTarget = SuggestionTarget.none;
                 }
                 setState(() {});
               },
@@ -1477,8 +1496,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   void _onDefinitionSuggestionSelected(String suggestion) {
+    hDebugPrint('_onDefinitionSuggestionSelected: chip tapped -> "$suggestion"');
+    _definitionSuggestionsDebouncer.cancel();
+    _quickSearchDebouncer.cancel();
     _definitionController.text = suggestion;
     _definitionSuggestions.clear();
+    _activeSuggestionTarget = SuggestionTarget.none;
     FocusScope.of(context).unfocus();
     _performSearch();
   }
@@ -1493,7 +1516,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       return const SizedBox.shrink();
     }
 
-    final target = _getActiveSuggestionTarget();
+    // Use _activeSuggestionTarget (set by onChanged, not by focus) so the
+    // chips remain in the widget tree during a tap gesture. On iOS/Android,
+    // focus is resigned at pointer-down — before onPressed fires — which
+    // previously made hasFocus return false, causing a rebuild that removed
+    // the chips and swallowed the tap entirely.
+    final target = _activeSuggestionTarget;
     if (target == SuggestionTarget.none) {
       return const SizedBox.shrink();
     }
