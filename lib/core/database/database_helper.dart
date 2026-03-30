@@ -106,13 +106,9 @@ class DatabaseHelper {
   }
 
   // For testing only — also probes FTS5 availability on the injected DB.
-  static void setDatabase(Database db) {
+  static Future<void> setDatabase(Database db) async {
     _database = db;
-    // Run the probe synchronously-ish: fire-and-forget is fine for tests
-    // since the database open is already complete before the first query.
-    _checkFts5Available(db).then((available) {
-      _fts5Available = available;
-    });
+    _fts5Available = await _checkFts5Available(db);
   }
 
   Future<Database> _initDatabase() async {

@@ -48,7 +48,7 @@ void main() {
         )
       ''');
 
-      DatabaseHelper.setDatabase(db);
+      await DatabaseHelper.setDatabase(db);
     });
 
     tearDown(() async {
@@ -76,7 +76,11 @@ void main() {
         },
       );
 
-      final resultTuple = await dbHelper.batchInsertWords(dictId, words, startId: startId);
+      final resultTuple = await dbHelper.batchInsertWords(
+        dictId,
+        words,
+        startId: startId,
+      );
       final newStartId = resultTuple.startId;
       expect(newStartId, 100);
 
@@ -264,7 +268,11 @@ void main() {
             'length': 10,
           },
         );
-        final result1 = await dbHelper.batchInsertWords(dictId, words1, startId: startId);
+        final result1 = await dbHelper.batchInsertWords(
+          dictId,
+          words1,
+          startId: startId,
+        );
         startId = result1.startId;
         expect(startId, 100);
 
@@ -280,7 +288,11 @@ void main() {
         );
         // This will throw a constraint exception if rowid overlaps.
         // But since startId is correctly advanced, it shouldn't.
-        final result2 = await dbHelper.batchInsertWords(dictId, words2, startId: startId);
+        final result2 = await dbHelper.batchInsertWords(
+          dictId,
+          words2,
+          startId: startId,
+        );
         startId = result2.startId;
         expect(startId, 200);
 
