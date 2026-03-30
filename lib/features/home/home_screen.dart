@@ -404,18 +404,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  SuggestionTarget _getActiveSuggestionTarget() {
-    if (_headwordFocusNode.hasFocus &&
-        _headwordController.text.trim().isNotEmpty) {
-      return SuggestionTarget.headword;
-    }
-    if (_definitionFocusNode.hasFocus &&
-        _definitionController.text.trim().isNotEmpty) {
-      return SuggestionTarget.definition;
-    }
-    return SuggestionTarget.none;
-  }
-
   Future<List<String>> _getSuggestions(String query) async {
     if (query.isEmpty) {
       return [];

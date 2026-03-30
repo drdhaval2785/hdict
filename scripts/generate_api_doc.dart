@@ -1,19 +1,25 @@
+// ignore_for_file: deprecated_member_use
 import 'dart:io';
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/analysis/features.dart';
 
-void main() async {
+void main(List<String> args) async {
   final dir = Directory('lib');
   if (!dir.existsSync()) {
-    print('lib directory not found.');
+    stdout.writeln('lib directory not found.');
     return;
   }
 
   final files = dir
       .listSync(recursive: true)
       .whereType<File>()
-      .where((f) => f.path.endsWith('.dart') && !f.path.endsWith('.g.dart') && !f.path.endsWith('.freezed.dart'))
+      .where(
+        (f) =>
+            f.path.endsWith('.dart') &&
+            !f.path.endsWith('.g.dart') &&
+            !f.path.endsWith('.freezed.dart'),
+      )
       .toList();
 
   final sb = StringBuffer();
@@ -37,38 +43,43 @@ void main() async {
       for (final decl in unit.declarations) {
         if (decl is ClassDeclaration) {
           final typeParams = decl.typeParameters?.toSource() ?? '';
-          sb.writeln('### Class: `${decl.name.lexeme}$typeParams`');
+          sb.writeln('### Class: `${decl.name}$typeParams`');
           _extractMembers(decl.members, sb, '####');
           sb.writeln();
         } else if (decl is MixinDeclaration) {
           final typeParams = decl.typeParameters?.toSource() ?? '';
-          sb.writeln('### Mixin: `${decl.name.lexeme}$typeParams`');
+          sb.writeln('### Mixin: `${decl.name}$typeParams`');
           _extractMembers(decl.members, sb, '####');
           sb.writeln();
         } else if (decl is ExtensionDeclaration) {
           final typeParams = decl.typeParameters?.toSource() ?? '';
           final onType = decl.onClause?.extendedType.toSource() ?? 'Unknown';
-          sb.writeln('### Extension: `${decl.name?.lexeme ?? 'Unnamed'}$typeParams` on `$onType`');
+          sb.writeln(
+            '### Extension: `${decl.name ?? 'Unnamed'}$typeParams` on `$onType`',
+          );
           _extractMembers(decl.members, sb, '####');
           sb.writeln();
         } else if (decl is EnumDeclaration) {
           final typeParams = decl.typeParameters?.toSource() ?? '';
-          sb.writeln('### Enum: `${decl.name.lexeme}$typeParams`');
+          sb.writeln('### Enum: `${decl.name}$typeParams`');
           if (decl.constants.isNotEmpty) {
             sb.writeln('#### Constants');
             for (final ec in decl.constants) {
               final argsStr = ec.arguments?.toSource() ?? '';
-              sb.writeln('- `${ec.name.lexeme}$argsStr`');
+              sb.writeln('- `${ec.name}$argsStr`');
             }
           }
           _extractMembers(decl.members, sb, '####');
           sb.writeln();
         } else if (decl is FunctionDeclaration) {
           final retType = decl.returnType?.toSource() ?? 'void';
-          final typeParams = decl.functionExpression.typeParameters?.toSource() ?? '';
+          final typeParams =
+              decl.functionExpression.typeParameters?.toSource() ?? '';
           final paramsNode = decl.functionExpression.parameters;
           final paramsStr = paramsNode?.toSource() ?? '()';
-          sb.writeln('### Function: `$retType ${decl.name.lexeme}$typeParams$paramsStr`');
+          sb.writeln(
+            '### Function: `$retType ${decl.name}$typeParams$paramsStr`',
+          );
           if (paramsNode != null && paramsNode.parameters.isNotEmpty) {
             for (final p in paramsNode.parameters) {
               sb.writeln('  - Parameter: `${p.toSource()}`');
@@ -77,25 +88,31 @@ void main() async {
           sb.writeln();
         } else if (decl is TopLevelVariableDeclaration) {
           sb.writeln('### Top-Level Variables');
-          for (final  v in decl.variables.variables) {
+          for (final v in decl.variables.variables) {
             final type = decl.variables.type?.toSource() ?? 'var';
-            final keyword = decl.variables.isConst ? 'const ' : decl.variables.isFinal ? 'final ' : '';
+            final keyword = decl.variables.isConst
+                ? 'const '
+                : decl.variables.isFinal
+                ? 'final '
+                : '';
             final prefix = type != 'var' ? '$type ' : '';
-            sb.writeln('- `$keyword$prefix${v.name.lexeme}`');
+            sb.writeln('- `$keyword$prefix${v.name}`');
           }
           sb.writeln();
         } else if (decl is GenericTypeAlias) {
           final typeParams = decl.typeParameters?.toSource() ?? '';
           final aliasedType = decl.type.toSource();
-          sb.writeln('### Type Alias: `${decl.name.lexeme}$typeParams = $aliasedType`');
+          sb.writeln(
+            '### Type Alias: `${decl.name}$typeParams = $aliasedType`',
+          );
           sb.writeln();
         } else if (decl is TypeAlias) {
-          sb.writeln('### Type Alias: `${decl.name.lexeme}`');
+          sb.writeln('### Type Alias: `${decl.name}`');
           sb.writeln();
         }
       }
     } catch (e) {
-      print('Error parsing ${file.path}: $e');
+      stdout.writeln('Error parsing ${file.path}: $e');
     }
   }
 
@@ -106,10 +123,14 @@ void main() async {
   }
   final outPath = 'reference/api_documentation.md';
   File(outPath).writeAsStringSync(sb.toString());
-  print('API documentation generated in $outPath');
+  stdout.writeln('API documentation generated in $outPath');
 }
 
-void _extractMembers(NodeList<ClassMember> members, StringBuffer sb, String prefix) {
+void _extractMembers(
+  NodeList<ClassMember> members,
+  StringBuffer sb,
+  String prefix,
+) {
   final fields = <String>[];
   final constructors = <String>[];
   final methods = <String>[];
@@ -119,12 +140,18 @@ void _extractMembers(NodeList<ClassMember> members, StringBuffer sb, String pref
       final isStatic = m.isStatic ? 'static ' : '';
       final retType = m.returnType?.toSource() ?? '';
       final retStr = retType.isNotEmpty ? '$retType ' : '';
-      final kind = m.isGetter ? 'get ' : m.isSetter ? 'set ' : '';
+      final kind = m.isGetter
+          ? 'get '
+          : m.isSetter
+          ? 'set '
+          : '';
       final typeStr = kind.isNotEmpty ? 'Property' : 'Method';
       final typeParams = m.typeParameters?.toSource() ?? '';
       final paramsNode = m.parameters;
       final paramsStr = paramsNode?.toSource() ?? '';
-      methods.add('- $typeStr: `$isStatic$retStr$kind${m.name.lexeme}$typeParams$paramsStr`');
+      methods.add(
+        '- $typeStr: `$isStatic$retStr$kind${m.name}$typeParams$paramsStr`',
+      );
       if (paramsNode != null && paramsNode.parameters.isNotEmpty) {
         for (final p in paramsNode.parameters) {
           methods.add('  - Parameter: `${p.toSource()}`');
@@ -132,16 +159,22 @@ void _extractMembers(NodeList<ClassMember> members, StringBuffer sb, String pref
       }
     } else if (m is FieldDeclaration) {
       final isStatic = m.isStatic ? 'static ' : '';
-      final keyword = m.fields.isConst ? 'const ' : m.fields.isFinal ? 'final ' : '';
+      final keyword = m.fields.isConst
+          ? 'const '
+          : m.fields.isFinal
+          ? 'final '
+          : '';
       final type = m.fields.type?.toSource() ?? 'var';
       final tStr = type != 'var' ? '$type ' : '';
       for (final v in m.fields.variables) {
-        fields.add('- Field: `$isStatic$keyword$tStr${v.name.lexeme}`');
+        fields.add('- Field: `$isStatic$keyword$tStr${v.name}`');
       }
     } else if (m is ConstructorDeclaration) {
       final isConst = m.constKeyword != null ? 'const ' : '';
       final isFactory = m.factoryKeyword != null ? 'factory ' : '';
-      final name = m.name?.lexeme == null ? m.returnType.toSource() : '${m.returnType.toSource()}.${m.name!.lexeme}';
+      final name = m.name?.lexeme == null
+          ? m.returnType.toSource()
+          : '${m.returnType.toSource()}.${m.name!.lexeme}';
       final paramsNode = m.parameters;
       final paramsStr = paramsNode.toSource();
       constructors.add('- Constructor: `$isConst$isFactory$name$paramsStr`');

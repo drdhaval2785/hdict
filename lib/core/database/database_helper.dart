@@ -1787,7 +1787,6 @@ class DatabaseHelper {
 
         final idxBatch = txn.batch();
         for (int i = 0; i < words.length; i++) {
-          final int actualInsertedId = metaResults[i] as int;
           idxBatch.insert('word_index', {
             'word': words[i]['word'],
             'content': tokenizedContents[i],
