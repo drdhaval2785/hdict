@@ -471,8 +471,8 @@ Future<void> _indexEntry(_IndexArgs args) async {
     const int batchSize = 10000;
     const bool useBatching = true;
     int startId = await dbHelper.startBatchInsert();
-    bool populateFts5 =
-        false; // Background indexing logic will be triggered at end if needed
+    final bool populateFts5 =
+        args.indexDefinitions; // Populate FTS5 immediately during import
     final bool canLoadInMemory =
         args.indexDefinitions && dictFileSize < 50 * 1024 * 1024;
 
@@ -747,13 +747,6 @@ Future<void> _indexEntry(_IndexArgs args) async {
       defWordCount,
     );
     await dbHelper.endBatchInsert();
-
-    // Rebuild FTS5 index in background if definitions were indexed but FTS5 was deferred
-    if (args.indexDefinitions && !populateFts5) {
-      hDebugPrint('StarDict: Starting background FTS5 indexing');
-      await dbHelper.rebuildFts5IndexForDict(args.dictId);
-      hDebugPrint('StarDict: Background FTS5 indexing complete');
-    }
 
     sendPort.send(
       ImportProgress(

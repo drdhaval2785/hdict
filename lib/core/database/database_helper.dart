@@ -165,11 +165,33 @@ class DatabaseHelper {
   /// Tests whether the FTS5 module is available in the current SQLite build.
   /// Creates a temporary test table, then drops it.
   static Future<bool> _checkFts5Available(Database db) async {
+    // First, log SQLite version and compile options for diagnostics
     try {
+      final versionResult = await db.rawQuery('SELECT sqlite_version()');
+      final sqliteVersion = versionResult.first.values.first;
+      hDebugPrint('DatabaseHelper: SQLite version: $sqliteVersion');
+
+      final compileOptions = await db.rawQuery('PRAGMA compile_options');
+      final options = compileOptions.map((r) => r.values.first).toList();
+      hDebugPrint('DatabaseHelper: SQLite compile options: $options');
+
+      final hasFts5 = options.any(
+        (o) => o.toString().toUpperCase().contains('FTS5'),
+      );
+      hDebugPrint('DatabaseHelper: FTS5 in compile options: $hasFts5');
+    } catch (e) {
+      hDebugPrint('DatabaseHelper: Could not query SQLite version/options: $e');
+    }
+
+    try {
+      // Clean up any leftover probe table from previous failed runs
+      await db.execute('DROP TABLE IF EXISTS _fts5_probe');
       await db.execute('CREATE VIRTUAL TABLE _fts5_probe USING fts5(x)');
       await db.execute('DROP TABLE IF EXISTS _fts5_probe');
+      hDebugPrint('DatabaseHelper: FTS5 test CREATE VIRTUAL TABLE succeeded');
       return true;
-    } catch (_) {
+    } catch (e) {
+      hDebugPrint('DatabaseHelper: FTS5 test CREATE VIRTUAL TABLE failed: $e');
       return false;
     }
   }
@@ -215,6 +237,20 @@ class DatabaseHelper {
       )).isNotEmpty;
       if (!newExists) {
         hDebugPrint('DatabaseHelper: word_index dropped successfully');
+      }
+    } else if (tableExists && !tableIsFts5 && fts5Available) {
+      // Regular table exists but FTS5 is available — migrate to FTS5 for better performance.
+      hDebugPrint(
+        'DatabaseHelper: word_index is regular table but FTS5 is available — migrating to FTS5 virtual table.',
+      );
+      await db.execute('DROP TABLE word_index');
+      final newExists = (await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE name = 'word_index'",
+      )).isNotEmpty;
+      if (!newExists) {
+        hDebugPrint(
+          'DatabaseHelper: word_index dropped successfully, will recreate as FTS5',
+        );
       }
     }
 
@@ -298,6 +334,7 @@ class DatabaseHelper {
     );
     await _ensureWordIndexTable(db);
     // Cache FTS5 availability for the lifetime of this DB session.
+    // Note: _ensureWordIndexTable is static so we call _checkFts5Available here too.
     _fts5Available = await _checkFts5Available(db);
     hDebugPrint(
       'DatabaseHelper: _onOpen complete - _fts5Available=$_fts5Available',
