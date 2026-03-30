@@ -9,6 +9,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'dart:math';
 import 'package:hdict/features/settings/settings_provider.dart';
+import 'package:hdict/core/parser/dict_reader.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -1726,6 +1727,39 @@ class DatabaseHelper {
 
     hDebugPrint('DatabaseHelper: Rebuilding FTS5 index for dict_id=$dictId');
 
+    // Get dictionary path and format
+    final dictResults = await db.query(
+      'dictionaries',
+      columns: ['path', 'format'],
+      where: 'id = ?',
+      whereArgs: [dictId],
+    );
+    if (dictResults.isEmpty) {
+      hDebugPrint('DatabaseHelper: Dictionary $dictId not found');
+      return;
+    }
+
+    final dictPath = dictResults.first['path'] as String;
+    final dictFormat = dictResults.first['format'] as String? ?? 'stardict';
+
+    // Only StarDict format needs content reading from file
+    // Other formats (slob, dictd) have different indexing paths
+    if (dictFormat != 'stardict') {
+      hDebugPrint(
+        'DatabaseHelper: Skipping FTS5 rebuild for non-Stardict format: $dictFormat',
+      );
+      return;
+    }
+
+    // Resolve the dictionary path to absolute path
+    final resolvedPath = await resolvePath(dictPath);
+    final dictFile = File(resolvedPath);
+
+    if (!await dictFile.exists()) {
+      hDebugPrint('DatabaseHelper: Dictionary file not found: $resolvedPath');
+      return;
+    }
+
     // Get all word_metadata for this dictionary
     final words = await db.query(
       'word_metadata',
@@ -1741,27 +1775,104 @@ class DatabaseHelper {
       whereArgs: [dictId],
     );
 
-    const batchSize = 50000;
-    for (int i = 0; i < words.length; i += batchSize) {
-      final end = min(i + batchSize, words.length);
-      final batch = words.sublist(i, end);
+    // Create DictReader to read content from dictionary file
+    DictReader? dictReader;
+    try {
+      dictReader = await DictReader.fromPath(resolvedPath, dictId: dictId);
+      await dictReader.open();
 
-      final idxBatch = db.batch();
-      for (int j = 0; j < batch.length; j++) {
-        final word = batch[j];
-        final content = word['content'] as String?;
-        final tokenized = _tokenizeContent(content);
-        idxBatch.rawInsert(
-          'INSERT OR IGNORE INTO word_index(rowid, word, content) VALUES (?, ?, ?)',
-          [word['id'], word['word'], tokenized],
-        );
+      const batchSize = 5000;
+      for (int i = 0; i < words.length; i += batchSize) {
+        final end = min(i + batchSize, words.length);
+        final batch = words.sublist(i, end);
+
+        // Prepare read entries for bulk read
+        final readEntries = batch
+            .map(
+              (w) => (offset: w['offset'] as int, length: w['length'] as int),
+            )
+            .toList();
+
+        // Read content from dictionary file
+        final contents = await dictReader.readBulk(readEntries);
+
+        final idxBatch = db.batch();
+        for (int j = 0; j < batch.length; j++) {
+          final word = batch[j];
+          final content = contents[j];
+          final tokenized = _tokenizeContent(content);
+          idxBatch.rawInsert(
+            'INSERT OR IGNORE INTO word_index(rowid, word, content) VALUES (?, ?, ?)',
+            [word['id'], word['word'], tokenized],
+          );
+        }
+        await idxBatch.commit(noResult: true);
+
+        if ((i + batchSize) % 10000 == 0 || end == words.length) {
+          hDebugPrint(
+            'DatabaseHelper: FTS5 rebuild progress: ${min(i + batchSize, words.length)}/${words.length}',
+          );
+        }
       }
-      await idxBatch.commit(noResult: true);
+    } finally {
+      await dictReader?.close();
     }
 
     await db.execute("INSERT INTO word_index(word_index) VALUES('optimize')");
 
     hDebugPrint('DatabaseHelper: FTS5 index rebuilt for dict_id=$dictId');
+  }
+
+  /// Finds all dictionaries that have definitions indexed but empty FTS5 content.
+  /// These need their FTS5 index rebuilt.
+  Future<List<Map<String, dynamic>>> findDictsNeedingFts5Rebuild() async {
+    final db = await database;
+
+    // Get all dictionaries with definitions indexed
+    final dictsWithDefs = await db.rawQuery('''
+      SELECT d.id, d.name, d.word_count, d.definition_word_count,
+             d.index_definitions, d.path
+      FROM dictionaries d
+      WHERE d.index_definitions = 1 AND d.definition_word_count > 0
+    ''');
+
+    if (dictsWithDefs.isEmpty) return [];
+
+    final result = <Map<String, dynamic>>[];
+
+    for (final dict in dictsWithDefs) {
+      final dictId = dict['id'] as int;
+
+      // Check if any FTS5 entry has content for this dict
+      final ftsCheck = await db.rawQuery(
+        '''
+        SELECT COUNT(*) as count FROM word_index i
+        JOIN word_metadata m ON i.rowid = m.id
+        WHERE m.dict_id = ? AND i.content IS NOT NULL AND i.content != ''
+      ''',
+        [dictId],
+      );
+
+      final contentCount = ftsCheck.first['count'] as int;
+
+      if (contentCount == 0) {
+        result.add({
+          ...dict,
+          'missing_content_count': await _getWordCountForDict(dictId),
+        });
+      }
+    }
+
+    return result;
+  }
+
+  Future<int> _getWordCountForDict(int dictId) async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM word_metadata WHERE dict_id = ?',
+      [dictId],
+    );
+    return result.first['count'] as int;
   }
 
   Future<List<Map<String, dynamic>>> searchWords({
