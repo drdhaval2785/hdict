@@ -2583,7 +2583,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 child: Text(
                   headwordText.isNotEmpty ? headwordText : 'Entry $globalIndex',
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: settings.fontSize,
                     fontWeight: FontWeight.w500,
                     color: settings.getEffectiveHeadwordColor(context),
                   ),
@@ -3358,7 +3358,7 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
                 child: Text(
                   headwordText.isNotEmpty ? headwordText : 'Entry $globalIndex',
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: settings.fontSize,
                     fontWeight: FontWeight.w500,
                     color: settings.getEffectiveHeadwordColor(context),
                   ),
