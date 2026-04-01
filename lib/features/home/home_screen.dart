@@ -203,13 +203,21 @@ class HomeScreen extends StatefulWidget {
           depthStack.removeLast();
         }
         buffer.write(fullMatch);
-      } else if (fullMatch.startsWith('<ul') || fullMatch.startsWith('<ol')) {
+      } else if (fullMatch.startsWith('<ol')) {
         final depth = depthStack.length;
         depthStack.add(depth + 1);
         final colorIndex = depth % indentColors.length;
         final color = indentColors[colorIndex];
         buffer.write(
-          '<${fullMatch.substring(1, fullMatch.length - 1)} style="margin-left:${6 * (depth + 1)}px;color:$color;">',
+          '<ol style="margin-left:${6 * (depth + 1)}px;color:$color;list-style-type:decimal;">',
+        );
+      } else if (fullMatch.startsWith('<ul')) {
+        final depth = depthStack.length;
+        depthStack.add(depth + 1);
+        final colorIndex = depth % indentColors.length;
+        final color = indentColors[colorIndex];
+        buffer.write(
+          '<ul style="margin-left:${6 * (depth + 1)}px;color:$color;list-style-type:disc;">',
         );
       } else if (fullMatch.startsWith('<li')) {
         final depth = depthStack.isEmpty ? 0 : depthStack.last;
