@@ -492,7 +492,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void _triggerLiveSearch() {
     final headword = _headwordController.text.trim();
     if (headword.isNotEmpty) {
-      _performSearch();
+      _performSearch(recordHistory: false);
     }
   }
 
@@ -507,7 +507,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _performSearch();
   }
 
-  Future<void> _performSearch({bool isRobust = false}) async {
+  Future<void> _performSearch({
+    bool isRobust = false,
+    bool recordHistory = true,
+  }) async {
     final headword = _headwordController.text.trim();
     final definition = _definitionController.text.trim();
     hDebugPrint(
@@ -522,15 +525,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       'HomeScreen._performSearch: START gen=$searchGen for "$headword"',
     );
 
-    if (headword.isNotEmpty && definition.isNotEmpty) {
-      await _dbHelper.addSearchHistory(headword, searchType: 'Combined Search');
-    } else if (headword.isNotEmpty) {
-      await _dbHelper.addSearchHistory(headword, searchType: 'Headword Search');
-    } else if (definition.isNotEmpty) {
-      await _dbHelper.addSearchHistory(
-        definition,
-        searchType: 'Definition Search',
-      );
+    if (recordHistory) {
+      if (headword.isNotEmpty && definition.isNotEmpty) {
+        await _dbHelper.addSearchHistory(
+          headword,
+          searchType: 'Combined Search',
+        );
+      } else if (headword.isNotEmpty) {
+        await _dbHelper.addSearchHistory(
+          headword,
+          searchType: 'Headword Search',
+        );
+      } else if (definition.isNotEmpty) {
+        await _dbHelper.addSearchHistory(
+          definition,
+          searchType: 'Definition Search',
+        );
+      }
     }
 
     if (!mounted) return;
