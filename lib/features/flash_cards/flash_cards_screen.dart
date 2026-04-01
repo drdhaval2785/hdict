@@ -573,6 +573,12 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                                                 margin: Margins.zero,
                                                 padding: HtmlPaddings.zero,
                                               ),
+                                              "blockquote": Style(
+                                                margin: Margins.only(left: 6),
+                                                padding: HtmlPaddings.only(
+                                                  left: 4,
+                                                ),
+                                              ),
                                             },
                                           ),
                                         ),
@@ -774,6 +780,10 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                                       "hr": Style(
                                         margin: Margins.zero,
                                         padding: HtmlPaddings.zero,
+                                      ),
+                                      "blockquote": Style(
+                                        margin: Margins.only(left: 6),
+                                        padding: HtmlPaddings.only(left: 4),
                                       ),
                                     },
                                     onLinkTap: (url, attributes, element) {
@@ -1080,6 +1090,10 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                       "hr": Style(
                         margin: Margins.zero,
                         padding: HtmlPaddings.zero,
+                      ),
+                      "blockquote": Style(
+                        margin: Margins.only(left: 6),
+                        padding: HtmlPaddings.only(left: 4),
                       ),
                     },
                   ),

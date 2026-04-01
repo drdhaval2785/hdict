@@ -123,6 +123,53 @@ class HomeScreen extends StatefulWidget {
     return consolidated;
   }
 
+  /// Colors for indentation levels (10 levels)
+  static const List<String> indentColors = [
+    '#424242', // Level 1 - Dark gray
+    '#1565C0', // Level 2 - Blue
+    '#2E7D32', // Level 3 - Green
+    '#F57C00', // Level 4 - Orange
+    '#7B1FA2', // Level 5 - Purple
+    '#C62828', // Level 6 - Red
+    '#00838F', // Level 7 - Teal
+    '#FF8F00', // Level 8 - Amber
+    '#6D4C41', // Level 9 - Brown
+    '#455A64', // Level 10 - Blue gray
+  ];
+
+  /// Adds colored left borders to nested blockquotes based on depth.
+  /// This helps visualize hierarchy on mobile screens.
+  static String addBlockquoteColors(String html) {
+    if (!html.contains('<blockquote')) return html;
+
+    final buffer = StringBuffer();
+    int depth = 0;
+    int i = 0;
+
+    while (i < html.length) {
+      if (html.substring(i).startsWith('<blockquote')) {
+        depth++;
+        final colorIndex = (depth - 1) % indentColors.length;
+        final color = indentColors[colorIndex];
+        buffer.write(
+          '<blockquote style="border-left:3px solid $color;margin-left:4px;padding-left:6px;">',
+        );
+
+        int endTag = html.indexOf('>', i);
+        i = endTag + 1;
+      } else if (html.substring(i).startsWith('</blockquote>')) {
+        depth--;
+        buffer.write('</blockquote>');
+        i += 13;
+      } else {
+        buffer.write(html[i]);
+        i++;
+      }
+    }
+
+    return buffer.toString();
+  }
+
   /// Normalizes whitespace. If content is HTML, it's more aggressive.
   /// If it's plain text, it preserves newlines as <br>.
   static String normalizeWhitespace(
@@ -213,7 +260,7 @@ class HomeScreen extends StatefulWidget {
         processed = processed.replaceAll(RegExp(r'\s+'), ' ');
       }
 
-      final result = processed.trim();
+      final result = addBlockquoteColors(processed.trim());
       if (showHtmlProcessing) {
         hDebugPrint('normalizeWhitespace (HTML): Result: [$result]');
       }
@@ -2075,6 +2122,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                         ),
                                       ),
                                     ),
+                                    "blockquote": Style(
+                                      margin: Margins.only(left: 6),
+                                      padding: HtmlPaddings.only(left: 4),
+                                    ),
                                   },
                                   extensions: [
                                     MddVideoHtmlExtension(
@@ -3086,6 +3137,10 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
                                     ),
                                   ),
                                 ),
+                                "blockquote": Style(
+                                  margin: Margins.only(left: 6),
+                                  padding: HtmlPaddings.only(left: 4),
+                                ),
                               },
                               extensions: [
                                 MddVideoHtmlExtension(
@@ -3521,6 +3576,10 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
                             width: 1,
                           ),
                         ),
+                      ),
+                      "blockquote": Style(
+                        margin: Margins.only(left: 6),
+                        padding: HtmlPaddings.only(left: 4),
                       ),
                     },
                     extensions: [
