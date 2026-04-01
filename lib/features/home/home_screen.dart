@@ -140,24 +140,31 @@ class HomeScreen extends StatefulWidget {
   /// Adds colored left borders to nested blockquotes based on depth.
   /// This helps visualize hierarchy on mobile screens.
   static String addBlockquoteColors(String html) {
-    if (!html.contains('<blockquote')) return html;
+    if (!html.contains('<blockquote')) {
+      return html;
+    }
 
     final buffer = StringBuffer();
     int depth = 0;
     int i = 0;
+    final length = html.length;
 
-    while (i < html.length) {
-      if (html.substring(i).startsWith('<blockquote')) {
+    while (i < length) {
+      if (html.startsWith('<blockquote', i)) {
         depth++;
         final colorIndex = (depth - 1) % indentColors.length;
         final color = indentColors[colorIndex];
+        int endTag = html.indexOf('>', i);
+        if (endTag == -1) {
+          buffer.write(html[i]);
+          i++;
+          continue;
+        }
         buffer.write(
           '<blockquote style="border-left:3px solid $color;margin-left:4px;padding-left:6px;">',
         );
-
-        int endTag = html.indexOf('>', i);
         i = endTag + 1;
-      } else if (html.substring(i).startsWith('</blockquote>')) {
+      } else if (html.startsWith('</blockquote>', i)) {
         depth--;
         buffer.write('</blockquote>');
         i += 13;
@@ -167,6 +174,58 @@ class HomeScreen extends StatefulWidget {
       }
     }
 
+    return buffer.toString();
+  }
+
+  /// Formats lists with indentation and color based on depth.
+  static String formatLists(String html) {
+    if (!html.contains('<ul') && !html.contains('<ol')) {
+      return html;
+    }
+
+    final tagRegex = RegExp(r'<(/?(?:ul|ol|li)[^>]*)>', caseSensitive: false);
+    final matches = tagRegex.allMatches(html).toList();
+
+    if (matches.isEmpty) return html;
+
+    final buffer = StringBuffer();
+    int lastEnd = 0;
+    final List<int> depthStack = [0];
+
+    for (final match in matches) {
+      final fullMatch = match.group(0)!;
+      final isClosing = fullMatch.startsWith('</');
+
+      buffer.write(html.substring(lastEnd, match.start));
+
+      if (isClosing) {
+        if (fullMatch.startsWith('</ol') || fullMatch.startsWith('</ul')) {
+          depthStack.removeLast();
+        }
+        buffer.write(fullMatch);
+      } else if (fullMatch.startsWith('<ul') || fullMatch.startsWith('<ol')) {
+        final depth = depthStack.length;
+        depthStack.add(depth + 1);
+        final colorIndex = depth % indentColors.length;
+        final color = indentColors[colorIndex];
+        buffer.write(
+          '<${fullMatch.substring(1, fullMatch.length - 1)} style="margin-left:${6 * (depth + 1)}px;color:$color;">',
+        );
+      } else if (fullMatch.startsWith('<li')) {
+        final depth = depthStack.isEmpty ? 0 : depthStack.last;
+        final colorIndex = (depth - 1) % indentColors.length;
+        final color = indentColors[colorIndex >= 0 ? colorIndex : 0];
+        buffer.write(
+          '<${fullMatch.substring(1, fullMatch.length - 1)} style="color:$color;">',
+        );
+      } else {
+        buffer.write(fullMatch);
+      }
+
+      lastEnd = match.end;
+    }
+
+    buffer.write(html.substring(lastEnd));
     return buffer.toString();
   }
 
@@ -260,7 +319,7 @@ class HomeScreen extends StatefulWidget {
         processed = processed.replaceAll(RegExp(r'\s+'), ' ');
       }
 
-      final result = addBlockquoteColors(processed.trim());
+      final result = formatLists(addBlockquoteColors(processed.trim()));
       if (showHtmlProcessing) {
         hDebugPrint('normalizeWhitespace (HTML): Result: [$result]');
       }
