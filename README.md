@@ -8,7 +8,7 @@
     <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83&amp;releaseDate=1719878400" alt="Download on the App Store" height="60">
   </a>
   <a href="https://snapcraft.io/hdict">
-    <img src="https://snapcraft.io/static/images/badges/en/snap-store-black.svg" alt="Get it from the Snap Store" height="60">
+    <img src="https://snapcraft.io/static/images/badges/en/snap-store-black.svg" alt="Get it from the Snap Store" height="40">
   </a>
 </p>
 
