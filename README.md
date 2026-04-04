@@ -1,6 +1,9 @@
 # hdict
 
 <p align="left">
+  <a href="https://play.google.com/store/apps/details?id=in.sanskritworld.hdict">
+    <img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" height="40">
+  </a>
   <a href="https://apps.apple.com/in/app/hdict/id6759493062">
     <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83&amp;releaseDate=1719878400" alt="Download on the App Store" height="40">
   </a>
