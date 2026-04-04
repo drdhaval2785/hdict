@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.13] - 2026-04-04
+
+### Added
+
+- **Slob lzma2 compression support**: Started to support lzma2 compression for slob files.
+
+### Fixed
+
+- **Wordnet dictionaries display**: Started to show colour-coded vertical bars for easier visual differentiation about parent-child relationships in wordnet dictionaries.
+- **Freedict dictionaries display**: Started to show freedict dictionaries in cleaner way. Still a long way to go.
+- **dictzip_reader**: Dependency on local package removed. Now uses dictzip_reader version 0.1.3 from pub.dev.
+- **slob_reader**: Dependency on local package removed. Now uses slob_reader version 0.1.6 from pub.dev.
+- **List Mode Fontsize issue**: List Mode now uses the user selected font size.
+
 ## [1.5.12] - 2026-03-30
 
 ### Added

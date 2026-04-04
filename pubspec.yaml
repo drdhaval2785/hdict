@@ -55,9 +55,9 @@ dependencies:
   flutter_colorpicker: ^1.1.0
   provider: ^6.1.5+1
   intl: ^0.20.2
-  dictzip_reader: ^0.1.2
+  dictzip_reader: ^0.1.3
   dictd_reader: ^0.1.2
-  slob_reader: ^0.1.5
+  slob_reader: ^0.1.6
   docman: ^1.2.0
   saf_stream: ^2.0.0
   flutter_markdown_plus: ^1.0.7
@@ -151,9 +151,5 @@ flutter_launcher_icons:
     image_path: "assets/hdict_logo.png"
 
 dependency_overrides:
-  dictzip_reader:
-    path: ../dictzip_reader
   dictd_reader:
     path: ../dictd_reader
-  slob_reader:
-    path: ../slob_test
