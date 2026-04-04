@@ -85,38 +85,6 @@ Future<int> _getDictFileSize(
   }
 }
 
-Future<Uint8List> _loadDictFileIntoMemory(
-  String dictPath,
-  String? dictUri,
-  bool isLinked,
-  String? sourceBookmark,
-) async {
-  if (isLinked && Platform.isAndroid && dictUri != null) {
-    final source = SafRandomAccessSource(dictUri);
-    await source.open();
-    try {
-      final length = await source.length;
-      return await source.read(0, length);
-    } finally {
-      await source.close();
-    }
-  } else if (isLinked) {
-    final source = BookmarkRandomAccessSource(
-      sourceBookmark!,
-      targetPath: p.basename(dictPath),
-    );
-    await source.open();
-    try {
-      final length = await source.length;
-      return await source.read(0, length);
-    } finally {
-      await source.close();
-    }
-  } else {
-    return await File(dictPath).readAsBytes();
-  }
-}
-
 Future<int> _getSlobFileSize(
   String slobPath,
   bool isLinked,
@@ -463,53 +431,29 @@ Future<void> _indexEntry(_IndexArgs args) async {
           )
         : 0;
 
-    final bool canLoadInMemory =
-        args.indexDefinitions && dictFileSize < 50 * 1024 * 1024;
     final bool isDz = _dictPathIsDz(args.dictPath);
 
     if (args.indexDefinitions) {
-      hDebugPrint(
-        'StarDict: dictFileSize=$dictFileSize, canLoadInMemory=$canLoadInMemory, isDz=$isDz',
-      );
+      hDebugPrint('StarDict: dictFileSize=$dictFileSize, isDz=$isDz');
     }
 
     DictReader? dictReader;
-    Uint8List? dictFileBytes;
 
     if (args.indexDefinitions) {
-      // For .dict.dz (compressed): load into memory (required for DictzipReader)
-      // For .dict (uncompressed): use disk reads via readBulk() - NO pre-loading
-      if (canLoadInMemory && isDz) {
-        hDebugPrint('StarDict: Loading compressed .dict.dz into memory');
-        final dictBytes = await _loadDictFileIntoMemory(
-          args.dictPath,
-          args.dictUri,
-          isLinked,
-          args.sourceBookmark,
-        );
-        dictReader = await DictReader.fromBytes(
-          dictBytes,
-          fileName: p.basename(args.dictPath),
-        );
-        await dictReader.open();
-        dictFileBytes = dictBytes;
-      } else {
-        // Use disk-based reading - readBulk() handles it efficiently
-        hDebugPrint('StarDict: Using disk-based reading');
-        dictReader = (isLinked && Platform.isAndroid && args.dictUri != null)
-            ? await DictReader.fromUri(args.dictUri!)
-            : (isLinked
-                  ? await DictReader.fromLinkedSource(
-                      args.sourceBookmark!,
-                      targetPath: p.basename(args.dictPath),
-                      actualPath: args.dictPath,
-                    )
-                  : await DictReader.fromPath(args.dictPath));
-        await dictReader.open();
-      }
-      hDebugPrint(
-        'StarDict: DictReader opened, canLoadInMemory=$canLoadInMemory',
-      );
+      // Use disk-based reading for all files
+      // DictzipReader handles .dict.dz chunk decompression efficiently via random-access reads
+      hDebugPrint('StarDict: Using disk-based reading');
+      dictReader = (isLinked && Platform.isAndroid && args.dictUri != null)
+          ? await DictReader.fromUri(args.dictUri!)
+          : (isLinked
+                ? await DictReader.fromLinkedSource(
+                    args.sourceBookmark!,
+                    targetPath: p.basename(args.dictPath),
+                    actualPath: args.dictPath,
+                  )
+                : await DictReader.fromPath(args.dictPath));
+      await dictReader.open();
+      hDebugPrint('StarDict: DictReader opened');
     }
 
     // 2. IDX Parser and streaming processing
@@ -540,19 +484,12 @@ Future<void> _indexEntry(_IndexArgs args) async {
 
         String content = '';
         if (args.indexDefinitions) {
-          if (isDz && dictFileBytes != null) {
-            // Compressed .dict.dz: read via DictReader
-            final results = await dictReader!.readBulk([
-              (offset: offset, length: length),
-            ]);
-            content = results.isNotEmpty ? results[0] : '';
-          } else {
-            // Uncompressed .dict: read via readBulk (disk-based, efficient)
-            final results = await dictReader!.readBulk([
-              (offset: offset, length: length),
-            ]);
-            content = results.isNotEmpty ? results[0] : '';
-          }
+          // readBulk() handles both .dict and .dict.dz efficiently
+          // For .dict.dz, DictzipReader decompresses only the needed chunks via random access
+          final results = await dictReader!.readBulk([
+            (offset: offset, length: length),
+          ]);
+          content = results.isNotEmpty ? results[0] : '';
         }
 
         wordOffsets.add((offset: offset, length: length, content: content));
