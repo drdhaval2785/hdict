@@ -7,6 +7,7 @@ import 'package:hdict/core/parser/syn_parser.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
 import 'package:hdict/core/parser/random_access_source.dart';
 import 'package:hdict/core/parser/dictd_reader.dart';
+import 'package:hdict/core/parser/dictd_adapter.dart';
 import 'package:hdict/core/utils/html_lookup_wrapper.dart';
 import 'package:path/path.dart' as p;
 
@@ -201,7 +202,7 @@ author=Tester
       final indexSource = FileRandomAccessSource(indexPath);
       final List<Map<String, dynamic>> entries = [];
       try {
-        await for (final entry in parser.parseIndex(indexSource)) {
+        await for (final entry in parser.parseIndex(DictdSourceAdapter(indexSource))) {
           entries.add(entry);
         }
       } finally {

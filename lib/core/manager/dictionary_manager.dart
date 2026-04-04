@@ -19,6 +19,7 @@ import 'package:hdict/core/parser/dict_reader.dart';
 import 'package:hdict/core/parser/mdict_reader.dart';
 import 'package:hdict/core/parser/slob_reader.dart';
 import 'package:hdict/core/parser/dictd_reader.dart';
+import 'package:hdict/core/parser/dictd_adapter.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_7zip/flutter_7zip.dart';
 import 'package:hdict/core/utils/folder_scanner.dart';
@@ -1170,7 +1171,7 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
 
     final List<Map<String, dynamic>> entriesList = [];
     try {
-      final indexStream = dictdParser.parseIndex(indexSource);
+      final indexStream = dictdParser.parseIndex(DictdSourceAdapter(indexSource));
       await for (final entry in indexStream) {
         entriesList.add(entry);
       }

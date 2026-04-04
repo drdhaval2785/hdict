@@ -9,6 +9,7 @@ export 'package:dictd_reader/dictd_reader.dart' show DictdParser;
 import 'package:hdict/core/parser/random_access_source.dart';
 import 'package:hdict/core/parser/saf_random_access_source.dart';
 import 'package:hdict/core/parser/bookmark_random_access_source.dart';
+import 'package:hdict/core/parser/dictd_adapter.dart';
 
 /// Wrapper around the `dictd_reader` package for hdict.
 /// Seamlessly integrates platform-specific `RandomAccessSource`.
@@ -80,7 +81,7 @@ class DictdReader {
   Future<void> openSource(RandomAccessSource source) async {
     _source = source;
     _reader = lib.DictdReader(dictPath);
-    await _reader!.openSource(source);
+    await _reader!.openSource(DictdSourceAdapter(source));
   }
 
   Future<void> open() async {

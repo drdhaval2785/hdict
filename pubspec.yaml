@@ -56,7 +56,7 @@ dependencies:
   provider: ^6.1.5+1
   intl: ^0.20.2
   dictzip_reader: ^0.1.3
-  dictd_reader: ^0.1.2
+  dictd_reader: ^0.1.3
   slob_reader: ^0.1.6
   docman: ^1.2.0
   saf_stream: ^2.0.0
@@ -149,7 +149,3 @@ flutter_launcher_icons:
   linux:
     generate: true
     image_path: "assets/hdict_logo.png"
-
-dependency_overrides:
-  dictd_reader:
-    path: ../dictd_reader

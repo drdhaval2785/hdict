@@ -9,6 +9,7 @@ import 'package:hdict/core/parser/ifo_parser.dart';
 import 'package:hdict/core/parser/idx_parser.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
 import 'package:hdict/core/parser/random_access_source.dart';
+import 'package:hdict/core/parser/dictd_adapter.dart';
 
 import 'package:flutter/services.dart';
 
@@ -111,7 +112,7 @@ void main() {
       int headwordCount = 0;
       int defWordCount = 0;
       try {
-        final entries = await parser.parseIndex(indexSource).toList();
+        final entries = await parser.parseIndex(DictdSourceAdapter(indexSource)).toList();
         for (final entry in entries) {
           headwordCount++;
           final content = await reader.readEntry(
