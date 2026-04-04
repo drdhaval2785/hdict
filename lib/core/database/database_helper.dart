@@ -1698,7 +1698,9 @@ class DatabaseHelper {
   Future<void> enableBulkInsertMode() async {
     final db = await database;
     await db.execute('PRAGMA synchronous = OFF');
-    await db.execute('PRAGMA cache_size = 64000'); // 64MB cache
+    await db.execute(
+      'PRAGMA cache_size = 16000',
+    ); // 16MB cache (reduced from 64MB to prevent OOM)
     final result = await db.rawQuery('PRAGMA synchronous');
     hDebugPrint(
       'DatabaseHelper: PRAGMA synchronous = ${result.first.values.first}',
@@ -1714,7 +1716,7 @@ class DatabaseHelper {
   }) async {
     if (words.isEmpty) return (startId: startId ?? 0, duplicateCount: 0);
     final db = await database;
-    return await db.transaction<({int startId, int duplicateCount})>((
+    final result = await db.transaction<({int startId, int duplicateCount})>((
       txn,
     ) async {
       final bool fts5Available = _fts5Available ?? true;
@@ -1816,6 +1818,8 @@ class DatabaseHelper {
       }
       return (startId: newStartId, duplicateCount: duplicateCount);
     });
+    await db.execute('PRAGMA wal_checkpoint(TRUNCATE)');
+    return result;
   }
 
   /// Rebuilds word_index for a specific dictionary in the background.
