@@ -31,8 +31,6 @@ dependencies:
   flutter:
     sdk: flutter
   sqflite: ^2.4.2
-  mdict_reader:
-    path: ../mdict_reader_new
   path_provider: ^2.1.5
   path: ^1.9.1
   archive: ^4.0.9
@@ -41,6 +39,7 @@ dependencies:
   file_selector: ^1.1.0
   blockchain_utils: ^5.4.0
   charset: ^2.0.1
+  html_unescape: ^2.0.0
   flutter_7zip:
     git:
       url: https://github.com/wgh136/flutter_7zip.git

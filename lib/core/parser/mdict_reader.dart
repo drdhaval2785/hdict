@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:hdict/core/utils/logger.dart';
-import 'package:mdict_reader/mdict_reader.dart' as dr;
+import 'package:hdict/core/mdict_reader/mdict_reader.dart' as dr;
 import 'package:hdict/core/parser/mdd_reader.dart';
 import 'package:hdict/core/parser/random_access_source.dart';
 import 'package:hdict/core/parser/saf_random_access_source.dart';

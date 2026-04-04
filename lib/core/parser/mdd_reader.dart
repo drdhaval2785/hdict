@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 import 'package:hdict/core/parser/random_access_source.dart';
-import 'package:mdict_reader/mdict_reader.dart' as dr;
+import 'package:hdict/core/mdict_reader/mdict_reader.dart' as dr;
 
 class MddReader {
   final RandomAccessSource source;
