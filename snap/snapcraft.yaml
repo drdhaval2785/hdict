@@ -17,6 +17,9 @@ website: https://github.com/drdhaval2785/hdict
 confinement: strict
 base: core22
 grade: stable
+architectures:
+  - build-on: [amd64]
+  - build-on: [arm64]
 
 apps:
   hdict:
