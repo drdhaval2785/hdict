@@ -24,12 +24,12 @@ class _DictionaryGroupsScreenState extends State<DictionaryGroupsScreen> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     final dicts = await DictionaryManager.instance.getDictionaries();
-    
+
     // Auto-generate groups for already downloaded dictionaries
     await DictionaryGroupManager.autoGenerateGroupsFromDownloaded(dicts);
-    
+
     final groups = await DictionaryGroupManager.getGroups();
-    
+
     setState(() {
       _allDictionaries = dicts;
       _groups = groups;
@@ -46,9 +46,7 @@ class _DictionaryGroupsScreenState extends State<DictionaryGroupsScreen> {
           title: const Text('Create Custom Group'),
           content: TextField(
             controller: nameController,
-            decoration: const InputDecoration(
-              hintText: 'Group Name',
-            ),
+            decoration: const InputDecoration(hintText: 'Group Name'),
             autofocus: true,
           ),
           actions: [
@@ -89,9 +87,9 @@ class _DictionaryGroupsScreenState extends State<DictionaryGroupsScreen> {
             final filteredDicts = searchQuery.isEmpty
                 ? _allDictionaries
                 : _allDictionaries.where((dict) {
-                    return (dict['name'] as String)
-                        .toLowerCase()
-                        .contains(searchQuery.toLowerCase());
+                    return (dict['name'] as String).toLowerCase().contains(
+                      searchQuery.toLowerCase(),
+                    );
                   }).toList();
 
             return AlertDialog(
@@ -168,18 +166,21 @@ class _DictionaryGroupsScreenState extends State<DictionaryGroupsScreen> {
       },
     ).then((saved) async {
       if (saved == true) {
-         // Apply removals and additions
-         for (int id in originalDictIds) {
-            if (!selectedDictIds.contains(id)) {
-               await DictionaryGroupManager.removeDictionaryFromGroup(group.id, id);
-            }
-         }
-         for (int id in selectedDictIds) {
-            if (!originalDictIds.contains(id)) {
-               await DictionaryGroupManager.addDictionaryToGroup(group.name, id);
-            }
-         }
-         await _loadData();
+        // Apply removals and additions
+        for (int id in originalDictIds) {
+          if (!selectedDictIds.contains(id)) {
+            await DictionaryGroupManager.removeDictionaryFromGroup(
+              group.id,
+              id,
+            );
+          }
+        }
+        for (int id in selectedDictIds) {
+          if (!originalDictIds.contains(id)) {
+            await DictionaryGroupManager.addDictionaryToGroup(group.name, id);
+          }
+        }
+        await _loadData();
       }
     });
   }
@@ -189,17 +190,19 @@ class _DictionaryGroupsScreenState extends State<DictionaryGroupsScreen> {
     if (_isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Dictionary Groups'),
-      ),
+      appBar: AppBar(title: const Text('Dictionary Groups')),
       drawer: const AppDrawer(),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _createCustomGroup,
-        icon: const Icon(Icons.add),
-        label: const Text('Create Custom Group'),
-        tooltip: 'Create Custom Group',
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: ElevatedButton.icon(
+            onPressed: _createCustomGroup,
+            icon: const Icon(Icons.add),
+            label: const Text('Create Custom Group'),
+          ),
+        ),
       ),
       body: _groups.isEmpty
           ? const Center(child: Text('No dictionary groups available.'))
@@ -211,35 +214,58 @@ class _DictionaryGroupsScreenState extends State<DictionaryGroupsScreen> {
                   future: DictionaryGroupManager.isGroupActive(group.id),
                   builder: (context, snapshot) {
                     final isActive = snapshot.data ?? false;
-                    
+
                     return ListTile(
-                      title: Text(group.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text('${group.dictIds.where((id) => _allDictionaries.any((d) => d['id'] == id)).length} dictionaries'),
+                      title: Text(
+                        group.name,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Text(
+                        '${group.dictIds.where((id) => _allDictionaries.any((d) => d['id'] == id)).length} dictionaries',
+                      ),
                       trailing: Row(
-                         mainAxisSize: MainAxisSize.min,
-                         children: [
-                            Switch(
-                              value: isActive,
-                              onChanged: group.dictIds.isEmpty ? null : (bool value) async {
-                                 await DictionaryGroupManager.toggleGroup(group.id, value);
-                                 setState(() {}); // refresh the whole list to show updated active states
-                              },
-                            ),
-                            PopupMenuButton<String>(
-                              onSelected: (val) async {
-                                 if (val == 'edit') {
-                                    await _manageGroupDictionaries(group);
-                                 } else if (val == 'delete') {
-                                    await DictionaryGroupManager.deleteGroup(group.id);
-                                    await _loadData();
-                                 }
-                              },
-                              itemBuilder: (context) => [
-                                const PopupMenuItem(value: 'edit', child: Text('Manage Dictionaries')),
-                                const PopupMenuItem(value: 'delete', child: Text('Delete Group', style: TextStyle(color: Colors.red))),
-                              ]
-                            )
-                         ],
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Switch(
+                            value: isActive,
+                            onChanged: group.dictIds.isEmpty
+                                ? null
+                                : (bool value) async {
+                                    await DictionaryGroupManager.toggleGroup(
+                                      group.id,
+                                      value,
+                                    );
+                                    setState(
+                                      () {},
+                                    ); // refresh the whole list to show updated active states
+                                  },
+                          ),
+                          PopupMenuButton<String>(
+                            onSelected: (val) async {
+                              if (val == 'edit') {
+                                await _manageGroupDictionaries(group);
+                              } else if (val == 'delete') {
+                                await DictionaryGroupManager.deleteGroup(
+                                  group.id,
+                                );
+                                await _loadData();
+                              }
+                            },
+                            itemBuilder: (context) => [
+                              const PopupMenuItem(
+                                value: 'edit',
+                                child: Text('Manage Dictionaries'),
+                              ),
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: Text(
+                                  'Delete Group',
+                                  style: TextStyle(color: Colors.red),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                       onTap: () => _manageGroupDictionaries(group),
                     );
