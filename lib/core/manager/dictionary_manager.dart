@@ -49,9 +49,20 @@ bool _dictPathIsDz(String dictPath) {
 
 int _getAdaptiveBatchSize() {
   if (kIsWeb) return 10000;
-  if (Platform.isAndroid || Platform.isIOS) return 2000;
-  if (Platform.isMacOS || Platform.isWindows) return 5000;
-  return 2000;
+  if (Platform.isAndroid) return 10000;
+  if (Platform.isIOS) return 5000;
+  if (Platform.isMacOS || Platform.isWindows) return 10000;
+  return 10000;
+}
+
+void _logMemoryUsage(String tag) {
+  try {
+    final rss = ProcessInfo.currentRss;
+    final mb = (rss / 1024 / 1024).toStringAsFixed(1);
+    hDebugPrint('[MEMORY] $tag - RSS: ${mb}MB');
+  } catch (e) {
+    hDebugPrint('[MEMORY] $tag - could not get memory info');
+  }
 }
 
 Future<int> _getDictFileSize(
@@ -411,6 +422,10 @@ Future<void> _indexEntry(_IndexArgs args) async {
   final SendPort sendPort = args.sendPort;
   final dbHelper = DatabaseHelper();
 
+  hDebugPrint(
+    '[MEMORY] _indexEntry START - dictId=${args.dictId}, dictName=${args.ifoParser.bookName}',
+  );
+  _logMemoryUsage('_indexEntry START');
   try {
     final bool isLinked =
         args.sourceType == 'linked' && args.sourceBookmark != null;
@@ -420,6 +435,10 @@ Future<void> _indexEntry(_IndexArgs args) async {
     int startId = await dbHelper.startBatchInsert();
     await dbHelper.enableBulkInsertMode();
     final bool populateFts5 = args.indexDefinitions;
+
+    hDebugPrint(
+      '[MEMORY] _indexEntry: batchSize=$batchSize, populateFts5=$populateFts5',
+    );
 
     // 1. Dict Reader setup
     final int dictFileSize = args.indexDefinitions
@@ -511,6 +530,19 @@ Future<void> _indexEntry(_IndexArgs args) async {
         }
 
         if (useBatching && dbBatch.length >= batchSize) {
+          hDebugPrint(
+            '[MEMORY] _indexEntry: Before batchInsertWords - dbBatch.length=${dbBatch.length}, wordOffsets.length=${wordOffsets.length}',
+          );
+
+          // Clear wordOffsets that are no longer needed (already written to DB)
+          // Keep them only if synonyms need to be processed
+          if (args.synPath == null) {
+            wordOffsets.clear();
+            hDebugPrint(
+              '[MEMORY] _indexEntry: wordOffsets cleared (no synonyms)',
+            );
+          }
+
           final result = await dbHelper.batchInsertWords(
             args.dictId,
             dbBatch,
@@ -521,6 +553,10 @@ Future<void> _indexEntry(_IndexArgs args) async {
           startId = result.startId;
           totalDuplicates += result.duplicateCount;
           dbBatch.clear();
+          hDebugPrint(
+            '[MEMORY] _indexEntry: After dbBatch.clear() - wordOffsets.length=${wordOffsets.length}',
+          );
+          _logMemoryUsage('After batch insert');
 
           // Yield to event loop for GC
           await Future.delayed(Duration.zero);
@@ -566,6 +602,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
     // 3. Synonyms processing (if .syn file exists)
     if (args.synPath != null) {
       hDebugPrint('StarDict: Starting synonyms processing');
+      _logMemoryUsage('Before syn processing');
       final synParser = SynParser();
       final synSource = (isLinked && Platform.isAndroid && args.synUri != null)
           ? SafRandomAccessSource(args.synUri!)
@@ -602,6 +639,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
             startId = result.startId;
             totalDuplicates += result.duplicateCount;
             synBatch.clear();
+            _logMemoryUsage('After syn batch insert');
             await Future.delayed(Duration.zero);
             sendPort.send(
               ImportProgress(
@@ -637,8 +675,13 @@ Future<void> _indexEntry(_IndexArgs args) async {
         startId = result.startId;
         totalDuplicates += result.duplicateCount;
         synBatch.clear();
+        _logMemoryUsage('After final syn batch insert');
         hDebugPrint('StarDict: Synonyms DB insertion complete');
       }
+
+      // Clear wordOffsets after synonyms processing - no longer needed
+      // This prevents memory buildup when importing many dictionaries
+      wordOffsets.clear();
     }
 
     if (totalDuplicates > 0) {
@@ -668,6 +711,27 @@ Future<void> _indexEntry(_IndexArgs args) async {
         dictionaryName: args.ifoParser.bookName,
       ),
     );
+
+    // Cleanup memory before completing
+    dbBatch.clear();
+    wordOffsets.clear();
+    hDebugPrint('[MEMORY] _indexEntry: Cleanup done - lists cleared');
+    await Future.delayed(const Duration(milliseconds: 50));
+    hDebugPrint(
+      '[MEMORY] _indexEntry COMPLETE - dictId=${args.dictId}, headwordCount=$headwordCount',
+    );
+    _logMemoryUsage('_indexEntry COMPLETE');
+
+    // Aggressive cleanup - clear any remaining references
+    // This is critical before exiting isolate
+    try {
+      await dictReader?.close();
+    } catch (_) {}
+    await dbHelper.endBatchInsert();
+
+    // Clear parser and source references
+    // Exit isolate immediately to free all memory
+    Isolate.exit();
   } catch (e, s) {
     await dbHelper.endBatchInsert();
     hDebugPrint('Error in _indexEntry: $e\n$s');
@@ -688,6 +752,10 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
   await DatabaseHelper.initializeDatabaseFactory();
   final dbHelper = DatabaseHelper();
   final sendPort = args.sendPort;
+
+  hDebugPrint(
+    '[MEMORY] _indexMdictEntry START - dictId=${args.dictId}, bookName=${args.bookName}',
+  );
 
   try {
     final mddPath = args.mdxPath.replaceAll(
@@ -726,6 +794,8 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
     // Fetch all keys via prefix search with empty prefix
     final allKeys = await reader.prefixSearch('', limit: 500000);
     final totalKeys = allKeys.length;
+
+    hDebugPrint('[MEMORY] _indexMdictEntry: totalKeys=$totalKeys');
 
     List<Map<String, dynamic>> batch = [];
     int indexed = 0;
@@ -837,6 +907,10 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
         dictionaryName: args.bookName,
       ),
     );
+    hDebugPrint(
+      '[MEMORY] _indexMdictEntry COMPLETE - dictId=${args.dictId}, indexed=$indexed',
+    );
+    Isolate.exit();
   } catch (e, s) {
     await dbHelper.endBatchInsert();
     hDebugPrint('MDict indexing error: $e\n$s');
@@ -857,6 +931,10 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
   await DatabaseHelper.initializeDatabaseFactory();
   final dbHelper = DatabaseHelper();
   final sendPort = args.sendPort;
+
+  hDebugPrint(
+    '[MEMORY] _indexSlobEntry START - dictId=${args.dictId}, bookName=${args.bookName}',
+  );
 
   try {
     SlobReader reader;
@@ -1026,6 +1104,10 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
         dictionaryName: args.bookName,
       ),
     );
+    hDebugPrint(
+      '[MEMORY] _indexSlobEntry COMPLETE - dictId=${args.dictId}, headwordCount=$headwordCount',
+    );
+    Isolate.exit();
   } catch (e, s) {
     await dbHelper.endBatchInsert();
     hDebugPrint('Slob indexing error: $e\n$s');
@@ -1046,6 +1128,10 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
   await DatabaseHelper.initializeDatabaseFactory();
   final dbHelper = DatabaseHelper();
   final sendPort = args.sendPort;
+
+  hDebugPrint(
+    '[MEMORY] _indexDictdEntry START - dictId=${args.dictId}, bookName=${args.bookName}',
+  );
 
   try {
     final bool isLinked =
@@ -1215,6 +1301,10 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
         dictionaryName: args.bookName,
       ),
     );
+    hDebugPrint(
+      '[MEMORY] _indexDictdEntry COMPLETE - dictId=${args.dictId}, headwordCount=$headwordCount',
+    );
+    Isolate.exit();
   } catch (e, s) {
     await dbHelper.endBatchInsert();
     hDebugPrint('DICTD indexing error: $e\n$s');
@@ -1385,6 +1475,15 @@ class DictionaryManager {
   static DictionaryManager get instance => _instance ??= DictionaryManager();
 
   String? _currentImportSourceUrl;
+
+  /// Flag to track if bulk import is in progress - used to skip pre-warming
+  bool _isBulkImportInProgress = false;
+  bool get isBulkImportInProgress => _isBulkImportInProgress;
+
+  /// Set bulk import state - use to skip pre-warming during bulk imports
+  void setBulkImportInProgress(bool value) {
+    _isBulkImportInProgress = value;
+  }
 
   DictionaryManager({DatabaseHelper? dbHelper, http.Client? client})
     : _dbHelper = dbHelper ?? DatabaseHelper(),
@@ -4286,7 +4385,14 @@ class DictionaryManager {
   /// Pre-warms all dictionary readers in parallel.
   /// This eliminates the cold SAF read penalty (~200ms) on first search.
   /// Call this after database initialization for faster first search.
-  Future<void> preWarmReaders() async {
+  /// Skip pre-warming during bulk imports to prevent memory buildup.
+  Future<void> preWarmReaders({bool force = false}) async {
+    // Skip pre-warming during bulk imports unless forced
+    if (!force && _isBulkImportInProgress) {
+      hDebugPrint('[PreWarm] Skipping - bulk import in progress');
+      return;
+    }
+
     // Wait a brief moment to let the UI finish its initial frame(s)
     await Future.delayed(const Duration(milliseconds: 200));
 
@@ -5714,6 +5820,22 @@ class DictionaryManager {
         tempFile.path,
         indexDefinitions: indexDefinitions,
       );
+
+      hDebugPrint('[MEMORY] Download complete, cleaning up temp files...');
+      // Clear temp file
+      try {
+        await tempFile.delete();
+      } catch (_) {}
+      // Clear entire temp directory
+      try {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+          hDebugPrint('[MEMORY] Temp directory deleted');
+        }
+      } catch (_) {}
+
+      hDebugPrint('[MEMORY] Temp cleanup done');
+      await Future.delayed(const Duration(milliseconds: 100));
     } catch (e) {
       yield ImportProgress(
         message: 'Download error: $e',

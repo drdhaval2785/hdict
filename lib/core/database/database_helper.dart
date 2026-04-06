@@ -1690,6 +1690,12 @@ class DatabaseHelper {
 
   Future<void> endBatchInsert() async {
     final db = await database;
+    try {
+      // Use rawQuery to handle PRAGMA wal_checkpoint result without throwing Code=0 "not an error"
+      await db.rawQuery('PRAGMA wal_checkpoint(TRUNCATE)');
+    } catch (e) {
+      hDebugPrint('DatabaseHelper: WAL checkpoint failed (non-critical): $e');
+    }
     await db.execute('PRAGMA synchronous = NORMAL');
     clearQueryCache();
     clearDictionaryCache();
@@ -1698,9 +1704,7 @@ class DatabaseHelper {
   Future<void> enableBulkInsertMode() async {
     final db = await database;
     await db.execute('PRAGMA synchronous = OFF');
-    await db.execute(
-      'PRAGMA cache_size = 16000',
-    ); // 16MB cache (reduced from 64MB to prevent OOM)
+    await db.execute('PRAGMA cache_size = 16000'); // 16MB cache
     final result = await db.rawQuery('PRAGMA synchronous');
     hDebugPrint(
       'DatabaseHelper: PRAGMA synchronous = ${result.first.values.first}',
@@ -1715,6 +1719,9 @@ class DatabaseHelper {
     String? dictName,
   }) async {
     if (words.isEmpty) return (startId: startId ?? 0, duplicateCount: 0);
+    hDebugPrint(
+      '[MEMORY] batchInsertWords START - dictId=$dictId, wordCount=${words.length}, populateFts5=$populateFts5',
+    );
     final db = await database;
     final result = await db.transaction<({int startId, int duplicateCount})>((
       txn,
@@ -1725,10 +1732,14 @@ class DatabaseHelper {
       int duplicateCount = 0;
 
       if (useFts5) {
+        hDebugPrint(
+          '[MEMORY] batchInsertWords: FTS5 path - tokenizing ${words.length} words',
+        );
         final List<String> tokenizedContents = words
             .map((w) => _tokenizeContent(w['content'] as String?))
             .toList();
 
+        hDebugPrint('[MEMORY] batchInsertWords: Inserting into word_metadata');
         final metaBatch = txn.batch();
         for (final word in words) {
           metaBatch.insert('word_metadata', {
@@ -1740,6 +1751,9 @@ class DatabaseHelper {
         }
         final metaResults = await metaBatch.commit(noResult: false);
 
+        hDebugPrint(
+          '[MEMORY] batchInsertWords: Inserting into word_index (FTS5)',
+        );
         final idxBatch = txn.batch();
         for (int i = 0; i < words.length; i++) {
           final int actualInsertedId = metaResults[i] as int;
@@ -1818,7 +1832,7 @@ class DatabaseHelper {
       }
       return (startId: newStartId, duplicateCount: duplicateCount);
     });
-    await db.execute('PRAGMA wal_checkpoint(TRUNCATE)');
+    hDebugPrint('[MEMORY] batchInsertWords COMPLETE');
     return result;
   }
 

@@ -3,7 +3,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:file_selector/file_selector.dart';
 import 'package:file_picker/file_picker.dart';
-
+import 'package:hdict/core/utils/logger.dart';
+import 'package:hdict/core/database/database_helper.dart';
 import 'package:hdict/core/manager/dictionary_manager.dart';
 import 'package:hdict/core/manager/dictionary_group_manager.dart';
 import 'package:hdict/core/parser/bookmark_manager.dart';
@@ -300,6 +301,10 @@ class _DictionaryManagementScreenState
       final List<String> allIncomplete = [];
       final List<String> allImported = [];
 
+      // Mark bulk import start to skip pre-warming during imports
+      _dictionaryManager.setBulkImportInProgress(true);
+      hDebugPrint('[MEMORY] Bulk import started - pre-warming disabled');
+
       for (int i = 0; i < urls.length; i++) {
         if (cancelled) break;
         final url = urls[i];
@@ -343,6 +348,37 @@ class _DictionaryManagementScreenState
               }
             }
           }
+
+          hDebugPrint(
+            '[MEMORY] _downloadFreedictDictionary: After dict $i import, cleaning up',
+          );
+
+          // Aggressive memory cleanup after each dictionary import
+          hDebugPrint('[MEMORY] Clearing caches...');
+          DatabaseHelper().clearQueryCache();
+          DatabaseHelper().clearDictionaryCache();
+          hDebugPrint('[MEMORY] Caches cleared');
+
+          hDebugPrint('[MEMORY] Before PRAGMA - logging memory...');
+          // Force SQLite to release memory
+          try {
+            final db = await DatabaseHelper().database;
+            hDebugPrint('[MEMORY] Executing PRAGMA cache_size...');
+            await db.execute('PRAGMA cache_size = -2000'); // Reduce to 2MB
+            hDebugPrint('[MEMORY] Cache size reduced');
+            hDebugPrint('[MEMORY] Executing PRAGMA shrink_memory...');
+            await db.execute('PRAGMA shrink_memory');
+            hDebugPrint('[MEMORY] Memory shrunk');
+          } catch (e) {
+            hDebugPrint('[MEMORY] Pragma error (may not be supported): $e');
+          }
+
+          hDebugPrint('[MEMORY] Waiting for GC...');
+          // Longer delay to allow GC to run
+          await Future.delayed(const Duration(milliseconds: 500));
+          hDebugPrint(
+            '[MEMORY] _downloadFreedictDictionary: Cleanup done for dict $i',
+          );
         } catch (e) {
           failureCount++;
           allIncomplete.add('(${i + 1}/${urls.length}) $e');
@@ -381,6 +417,11 @@ class _DictionaryManagementScreenState
             SnackBar(content: Text(msg), duration: const Duration(seconds: 5)),
           );
         }
+
+        // Mark bulk import complete - pre-warming can run again
+        _dictionaryManager.setBulkImportInProgress(false);
+        hDebugPrint('[MEMORY] Bulk import completed - pre-warming enabled');
+
         await _loadDictionaries();
       }
     }
