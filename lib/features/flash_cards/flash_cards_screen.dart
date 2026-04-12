@@ -11,6 +11,7 @@ import 'package:hdict/features/flash_cards/result_screen.dart';
 import 'package:hdict/core/utils/word_boundary.dart' as util;
 import 'package:flutter/rendering.dart';
 import 'package:hdict/core/utils/logger.dart';
+import 'package:diacritic/diacritic.dart';
 
 class FlashCardsScreen extends StatefulWidget {
   const FlashCardsScreen({super.key});
@@ -841,6 +842,11 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
   void _showWordPopup(String word) async {
     final settings = context.read<SettingsProvider>();
 
+    String searchWord = word;
+    if (settings.isIgnoreDiacriticsEnabled) {
+      searchWord = removeDiacritics(word);
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -896,14 +902,14 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
 
                   List<Map<String, dynamic>> candidates = await _dbHelper
                       .searchWords(
-                        headwordQuery: word,
+                        headwordQuery: searchWord,
                         headwordMode: SearchMode.exact,
                       );
 
                   // 2. Fallback to prefix if exact fails
                   if (candidates.isEmpty) {
                     candidates = await _dbHelper.searchWords(
-                      headwordQuery: word,
+                      headwordQuery: searchWord,
                       headwordMode: SearchMode.prefix,
                     );
                   }

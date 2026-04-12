@@ -23,6 +23,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_review/in_app_review.dart';
 import 'package:chewie/chewie.dart';
+import 'package:diacritic/diacritic.dart';
 
 enum SuggestionTarget { none, headword, definition }
 
@@ -674,6 +675,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     try {
       HPerf.reset();
       final settings = context.read<SettingsProvider>();
+
+      String normalizedHeadword = headword;
+      String normalizedDefinition = definition;
+      if (settings.isIgnoreDiacriticsEnabled) {
+        if (headword.isNotEmpty) {
+          normalizedHeadword = removeDiacritics(headword);
+        }
+        if (definition.isNotEmpty) {
+          normalizedDefinition = removeDiacritics(definition);
+        }
+      }
+
       final totalWatch = HPerf.start('Search_Total');
       final sqliteWatch = HPerf.start('Search_SQLite');
 
@@ -682,9 +695,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       if (headword.isNotEmpty && definition.isNotEmpty) {
         // Combined: search with BOTH headword AND definition
         results = await _dbHelper.searchWords(
-          headwordQuery: headword,
+          headwordQuery: normalizedHeadword,
           headwordMode: settings.headwordSearchMode,
-          definitionQuery: definition,
+          definitionQuery: normalizedDefinition,
           definitionMode: settings.definitionSearchMode,
           limit: settings.searchResultLimit,
         );
@@ -693,20 +706,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         if (isRobust && results.isEmpty) {
           if (settings.headwordSearchMode != SearchMode.exact) {
             results = await _dbHelper.searchWords(
-              headwordQuery: headword,
+              headwordQuery: normalizedHeadword,
               headwordMode: SearchMode.exact,
-              definitionQuery: definition,
+              definitionQuery: normalizedDefinition,
               definitionMode: settings.definitionSearchMode,
             );
           }
           if (results.isEmpty) {
-            String prefix = headword;
+            String prefix = normalizedHeadword;
             while (prefix.length > 2) {
               prefix = prefix.substring(0, prefix.length - 1);
               results = await _dbHelper.searchWords(
                 headwordQuery: prefix,
                 headwordMode: SearchMode.prefix,
-                definitionQuery: definition,
+                definitionQuery: normalizedDefinition,
                 definitionMode: settings.definitionSearchMode,
                 limit: settings.searchResultLimit,
               );
@@ -717,7 +730,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       } else if (headword.isNotEmpty) {
         // Headword only search
         results = await _dbHelper.searchWords(
-          headwordQuery: headword,
+          headwordQuery: normalizedHeadword,
           headwordMode: settings.headwordSearchMode,
           limit: settings.searchResultLimit,
         );
@@ -727,14 +740,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           // 1. Try exact match if preferred mode wasn't already exact
           if (settings.headwordSearchMode != SearchMode.exact) {
             results = await _dbHelper.searchWords(
-              headwordQuery: headword,
+              headwordQuery: normalizedHeadword,
               headwordMode: SearchMode.exact,
             );
           }
 
           // 2. Try longest prefix match (like popup logic)
           if (results.isEmpty) {
-            String prefix = headword;
+            String prefix = normalizedHeadword;
             while (prefix.length > 2) {
               prefix = prefix.substring(0, prefix.length - 1);
               results = await _dbHelper.searchWords(
@@ -748,7 +761,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         }
       } else if (definition.isNotEmpty) {
         results = await _dbHelper.searchWords(
-          definitionQuery: definition,
+          definitionQuery: normalizedDefinition,
           definitionMode: settings.definitionSearchMode,
           limit: settings.searchResultLimit,
         );
@@ -2359,6 +2372,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void _showWordPopup(String word) async {
     hDebugPrint('HomeScreen._showWordPopup: START for word="$word"');
     final settings = context.read<SettingsProvider>();
+
+    String searchWord = word;
+    if (settings.isIgnoreDiacriticsEnabled) {
+      searchWord = removeDiacritics(word);
+    }
+
     await _dbHelper.addSearchHistory(word, searchType: 'Pop-up Search');
     if (!mounted) {
       hDebugPrint('HomeScreen._showWordPopup: NOT mounted, returning');
@@ -2446,21 +2465,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     // 1. Try exact match first for popups
                     List<Map<String, dynamic>> candidates = await _dbHelper
                         .searchWords(
-                          headwordQuery: word,
+                          headwordQuery: searchWord,
                           headwordMode: SearchMode.exact,
                         );
 
                     // 2. Fallback to user setting or prefix if exact fails
                     if (candidates.isEmpty) {
                       candidates = await _dbHelper.searchWords(
-                        headwordQuery: word,
+                        headwordQuery: searchWord,
                         headwordMode: settings.headwordSearchMode,
                       );
                     }
 
                     // 3. Last fallback: longest prefix match
                     if (candidates.isEmpty) {
-                      String prefix = word;
+                      String prefix = searchWord;
                       while (prefix.length > 2) {
                         prefix = prefix.substring(0, prefix.length - 1);
                         candidates = await _dbHelper.searchWords(

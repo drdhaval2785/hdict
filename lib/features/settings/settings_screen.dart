@@ -265,6 +265,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               value: settings.isSearchAsYouTypeEnabled,
               onChanged: (value) => settings.setSearchAsYouType(value),
             ),
+            SwitchListTile(
+              title: const Text('Ignore Diacritics in Search'),
+              subtitle: const Text('Search "cafe" finds "café"'),
+              value: settings.isIgnoreDiacriticsEnabled,
+              onChanged: (value) => settings.setIgnoreDiacritics(value),
+            ),
             const Divider(),
             _buildSectionHeader(theme, 'Flash Cards'),
             ListTile(
