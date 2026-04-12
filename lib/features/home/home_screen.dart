@@ -726,14 +726,32 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           limit: settings.searchResultLimit,
         );
 
-        // If diacritics enabled and no results, try normalized query
+        // If diacritics enabled and no results, try matching normalized form
         if (ignoreDiacritics && results.isEmpty) {
           final normalizedHeadword = removeDiacritics(headword);
-          if (normalizedHeadword != headword) {
-            results = await _dbHelper.searchWords(
-              headwordQuery: normalizedHeadword,
-              headwordMode: settings.headwordSearchMode,
-              limit: settings.searchResultLimit,
+          hDebugPrint(
+            'HomeScreen: No results for "$headword", trying diacritic-insensitive search',
+          );
+
+          // Search with a broader pattern that could match
+          final searchPrefix = normalizedHeadword.length > 2
+              ? normalizedHeadword.substring(0, 3)
+              : normalizedHeadword;
+
+          final broadResults = await _dbHelper.searchWords(
+            headwordQuery: searchPrefix,
+            headwordMode: SearchMode.prefix,
+            limit: settings.searchResultLimit * 2,
+          );
+
+          if (broadResults.isNotEmpty) {
+            // Filter results where normalized form of entry matches search term
+            results = broadResults.where((r) {
+              final word = r['word'] as String? ?? '';
+              return removeDiacritics(word).startsWith(normalizedHeadword);
+            }).toList();
+            hDebugPrint(
+              'HomeScreen: Diacritic-insensitive found ${results.length} results',
             );
           }
         }
@@ -746,16 +764,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               headwordQuery: headword,
               headwordMode: SearchMode.exact,
             );
-            // Try normalized if still empty
-            if (ignoreDiacritics && results.isEmpty) {
-              final normalizedHeadword = removeDiacritics(headword);
-              if (normalizedHeadword != headword) {
-                results = await _dbHelper.searchWords(
-                  headwordQuery: normalizedHeadword,
-                  headwordMode: SearchMode.exact,
-                );
-              }
-            }
           }
 
           // 2. Try longest prefix match (like popup logic)
@@ -768,17 +776,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 headwordMode: SearchMode.prefix,
                 limit: settings.searchResultLimit,
               );
-              // Try normalized if still empty
-              if (ignoreDiacritics && results.isEmpty) {
-                final normalizedPrefix = removeDiacritics(prefix);
-                if (normalizedPrefix != prefix) {
-                  results = await _dbHelper.searchWords(
-                    headwordQuery: normalizedPrefix,
-                    headwordMode: SearchMode.prefix,
-                    limit: settings.searchResultLimit,
-                  );
-                }
-              }
               if (results.isNotEmpty) break;
             }
           }
