@@ -45,10 +45,10 @@ packages:
     dependency: "direct main"
     description:
       name: audio_session
-      sha256: "2b7fff16a552486d078bfc09a8cde19f426dc6d6329262b684182597bec5b1ac"
+      sha256: "7217b229db57cc4dc577a8abb56b7429a5a212b978517a5be578704bfe5e568b"
       url: "https://pub.dev"
     source: hosted
-    version: "0.1.25"
+    version: "0.2.3"
   blockchain_utils:
     dependency: "direct main"
     description:
@@ -1058,10 +1058,10 @@ packages:
     dependency: "direct main"
     description:
       name: sqlite3_flutter_libs
-      sha256: eeb9e3a45207649076b808f8a5a74d68770d0b7f26ccef6d5f43106eee5375ad
+      sha256: "3ed7553eee7bb368f8950f58ba29f634e06e813c029aff6a0d60862b96de8454"
       url: "https://pub.dev"
     source: hosted
-    version: "0.5.42"
+    version: "0.6.0+eol"
   stack_trace:
     dependency: transitive
     description:
