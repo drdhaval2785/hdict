@@ -899,11 +899,13 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
               child: FutureBuilder<List<Map<String, dynamic>>>(
                 future: () async {
                   // 1. Try exact match first
+                  final ignoreDiacritics = settings.isIgnoreDiacriticsEnabled;
 
                   List<Map<String, dynamic>> candidates = await _dbHelper
                       .searchWords(
                         headwordQuery: searchWord,
                         headwordMode: SearchMode.exact,
+                        ignoreDiacritics: ignoreDiacritics,
                       );
 
                   // 2. Fallback to prefix if exact fails
@@ -911,6 +913,7 @@ class _FlashCardsScreenState extends State<FlashCardsScreen>
                     candidates = await _dbHelper.searchWords(
                       headwordQuery: searchWord,
                       headwordMode: SearchMode.prefix,
+                      ignoreDiacritics: ignoreDiacritics,
                     );
                   }
                   // 3. Parallel fetch & pre-process

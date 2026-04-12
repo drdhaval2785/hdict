@@ -724,37 +724,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           headwordQuery: headword,
           headwordMode: settings.headwordSearchMode,
           limit: settings.searchResultLimit,
+          ignoreDiacritics: ignoreDiacritics,
         );
-
-        // If diacritics enabled and no results, try matching normalized form
-        if (ignoreDiacritics && results.isEmpty) {
-          final normalizedHeadword = removeDiacritics(headword);
-          hDebugPrint(
-            'HomeScreen: No results for "$headword", trying diacritic-insensitive search',
-          );
-
-          // Search with a broader pattern that could match
-          final searchPrefix = normalizedHeadword.length > 2
-              ? normalizedHeadword.substring(0, 3)
-              : normalizedHeadword;
-
-          final broadResults = await _dbHelper.searchWords(
-            headwordQuery: searchPrefix,
-            headwordMode: SearchMode.prefix,
-            limit: settings.searchResultLimit * 2,
-          );
-
-          if (broadResults.isNotEmpty) {
-            // Filter results where normalized form of entry matches search term
-            results = broadResults.where((r) {
-              final word = r['word'] as String? ?? '';
-              return removeDiacritics(word).startsWith(normalizedHeadword);
-            }).toList();
-            hDebugPrint(
-              'HomeScreen: Diacritic-insensitive found ${results.length} results',
-            );
-          }
-        }
 
         // If robust mode is on and we found nothing, try fallbacks
         if (isRobust && results.isEmpty) {
@@ -763,6 +734,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             results = await _dbHelper.searchWords(
               headwordQuery: headword,
               headwordMode: SearchMode.exact,
+              ignoreDiacritics: ignoreDiacritics,
             );
           }
 
@@ -775,6 +747,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 headwordQuery: prefix,
                 headwordMode: SearchMode.prefix,
                 limit: settings.searchResultLimit,
+                ignoreDiacritics: ignoreDiacritics,
               );
               if (results.isNotEmpty) break;
             }
@@ -2489,6 +2462,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         .searchWords(
                           headwordQuery: searchWord,
                           headwordMode: SearchMode.exact,
+                          ignoreDiacritics: ignoreDiacritics,
                         );
 
                     // 2. Fallback to user setting or prefix if exact fails
@@ -2496,6 +2470,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       candidates = await _dbHelper.searchWords(
                         headwordQuery: searchWord,
                         headwordMode: settings.headwordSearchMode,
+                        ignoreDiacritics: ignoreDiacritics,
                       );
                     }
 
@@ -2507,6 +2482,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         candidates = await _dbHelper.searchWords(
                           headwordQuery: prefix,
                           headwordMode: SearchMode.prefix,
+                          ignoreDiacritics: ignoreDiacritics,
                         );
                         if (candidates.isNotEmpty) break;
                       }

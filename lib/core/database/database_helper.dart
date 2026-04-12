@@ -11,6 +11,7 @@ import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'dart:math';
 import 'package:hdict/features/settings/settings_provider.dart';
 import 'package:hdict/core/parser/dict_reader.dart';
+import 'package:diacritic/diacritic.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -100,7 +101,13 @@ class DatabaseHelper {
   }
 
   Future<Database> get database async {
-    if (_database != null) return _database!;
+    if (_database != null) {
+      hDebugPrint(
+        'DatabaseHelper: database getter - returning cached instance',
+      );
+      return _database!;
+    }
+    hDebugPrint('DatabaseHelper: database getter - initializing new database');
     _database = await _initDatabase();
     return _database!;
   }
@@ -112,6 +119,8 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDatabase() async {
+    hDebugPrint('DatabaseHelper: _initDatabase called');
+
     String path;
     if (kIsWeb) {
       path = 'hdict_v4.db'; // Incremented version for stability
@@ -125,6 +134,10 @@ class DatabaseHelper {
       }
     }
 
+    hDebugPrint(
+      'DatabaseHelper: Opening database at path: $path with version 34',
+    );
+
     // Verify factory is initialized
     try {
       databaseFactory;
@@ -136,14 +149,26 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       version:
-          33, // Version 33: Add saf_scan_cache table for persistent SAF folder structure
+          34, // Version 34: Add word_normalized column for diacritic-insensitive search
       onCreate: _onCreate,
+      onUpgrade: (db, oldVersion, newVersion) async {
+        hDebugPrint(
+          '==========================================================',
+        );
+        hDebugPrint(
+          'DatabaseHelper: onUpgrade callback triggered - oldVersion=$oldVersion, newVersion=$newVersion',
+        );
+        hDebugPrint(
+          '==========================================================',
+        );
+        await _onUpgrade(db, oldVersion, newVersion);
+        hDebugPrint('DatabaseHelper: onUpgrade completed');
+      },
       onConfigure: (db) async {
         try {
-          // Use rawQuery for PRAGMAs that return results to avoid "not an error" on Darwin
           await db.rawQuery('PRAGMA journal_mode = WAL;');
           await db.rawQuery('PRAGMA synchronous = NORMAL;');
-          await db.rawQuery('PRAGMA cache_size = -64000'); // 64MB cache
+          await db.rawQuery('PRAGMA cache_size = -64000');
           hDebugPrint(
             'DatabaseHelper: Performance PRAGMAs applied (WAL mode, 64MB cache)',
           );
@@ -151,11 +176,9 @@ class DatabaseHelper {
           hDebugPrint(
             'DatabaseHelper: Failed to apply performance PRAGMAs: $e',
           );
-          // We don't rethrow here so the database can still open in default mode
         }
       },
       onOpen: _onOpen,
-      onUpgrade: _onUpgrade,
     );
   }
 
@@ -266,6 +289,7 @@ class DatabaseHelper {
           CREATE TABLE IF NOT EXISTS word_metadata(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             word TEXT COLLATE NOCASE,
+            word_normalized TEXT,
             dict_id INTEGER,
             offset INTEGER,
             length INTEGER
@@ -279,6 +303,9 @@ class DatabaseHelper {
         );
         await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_metadata_dict_word ON word_metadata(dict_id, word COLLATE NOCASE)',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_word_normalized ON word_metadata(word_normalized)',
         );
 
         hDebugPrint(
@@ -329,6 +356,35 @@ class DatabaseHelper {
     hDebugPrint(
       'DatabaseHelper: _onOpen called - checking FTS5 availability and word_index table',
     );
+
+    // Check if word_normalized column exists, run migration if not
+    try {
+      final tableInfo = await db.rawQuery("PRAGMA table_info('word_metadata')");
+      bool hasNormalizedColumn = false;
+      for (final row in tableInfo) {
+        if (row['name'] == 'word_normalized') {
+          hasNormalizedColumn = true;
+          break;
+        }
+      }
+      if (!hasNormalizedColumn) {
+        hDebugPrint(
+          'DatabaseHelper: word_normalized column missing in _onOpen, running migration',
+        );
+        await db.execute(
+          'ALTER TABLE word_metadata ADD COLUMN word_normalized TEXT',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_word_normalized ON word_metadata(word_normalized)',
+        );
+        hDebugPrint('DatabaseHelper: word_normalized column added in _onOpen');
+      } else {
+        hDebugPrint('DatabaseHelper: word_normalized column already exists');
+      }
+    } catch (e) {
+      hDebugPrint('DatabaseHelper: Error checking/adding word_normalized: $e');
+    }
+
     await _ensureWordIndexTable(db);
     // Cache FTS5 availability for the lifetime of this DB session.
     // Note: _ensureWordIndexTable is static so we call _checkFts5Available here too.
@@ -424,6 +480,10 @@ class DatabaseHelper {
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    hDebugPrint(
+      'DatabaseHelper: _onUpgrade called - oldVersion=$oldVersion, newVersion=$newVersion',
+    );
+
     if (oldVersion < 7) {
       await db.execute('''
         CREATE TABLE IF NOT EXISTS files (
@@ -732,6 +792,7 @@ class DatabaseHelper {
             CREATE TABLE IF NOT EXISTS word_metadata(
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               word TEXT COLLATE NOCASE,
+              word_normalized TEXT,
               dict_id INTEGER,
               offset INTEGER,
               length INTEGER
@@ -742,6 +803,9 @@ class DatabaseHelper {
           );
           await db.execute(
             'CREATE INDEX IF NOT EXISTS idx_metadata_word ON word_metadata(word)',
+          );
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_word_normalized ON word_metadata(word_normalized)',
           );
         }
         hDebugPrint('Database migration to v22 complete.');
@@ -922,6 +986,22 @@ class DatabaseHelper {
         ''');
       } catch (e) {
         hDebugPrint('Migration error (version 33): $e');
+      }
+
+      // Version 34: Add word_normalized column for diacritic-insensitive search
+      if (oldVersion < 34) {
+        try {
+          hDebugPrint('DatabaseHelper: Running migration to version 34');
+          await db.execute(
+            'ALTER TABLE word_metadata ADD COLUMN word_normalized TEXT',
+          );
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_word_normalized ON word_metadata(word_normalized)',
+          );
+          hDebugPrint('DatabaseHelper: Migration to version 34 completed');
+        } catch (e) {
+          hDebugPrint('Migration error (version 34): $e');
+        }
       }
     }
   } // end _onUpgrade
@@ -1742,14 +1822,64 @@ class DatabaseHelper {
         hDebugPrint('[MEMORY] batchInsertWords: Inserting into word_metadata');
         final metaBatch = txn.batch();
         for (final word in words) {
+          final originalWord = word['word'] as String? ?? '';
           metaBatch.insert('word_metadata', {
-            'word': word['word'],
+            'word': originalWord,
+            'word_normalized': removeDiacritics(originalWord),
             'dict_id': dictId,
             'offset': word['offset'],
             'length': word['length'],
           });
         }
-        final metaResults = await metaBatch.commit(noResult: false);
+
+        List<Object?> metaResults;
+        try {
+          metaResults = await metaBatch.commit(noResult: false);
+        } catch (e) {
+          // If word_normalized column doesn't exist (pre-migration), retry without it
+          if (e.toString().contains('no column named word_normalized')) {
+            hDebugPrint(
+              'DatabaseHelper: word_normalized column missing, retrying without it',
+            );
+            final retryBatch = txn.batch();
+            for (final word in words) {
+              final originalWord = word['word'] as String? ?? '';
+              retryBatch.insert('word_metadata', {
+                'word': originalWord,
+                'dict_id': dictId,
+                'offset': word['offset'],
+                'length': word['length'],
+              });
+            }
+            metaResults = await retryBatch.commit(noResult: false);
+          } else {
+            rethrow;
+          }
+        }
+
+        try {
+          await metaBatch.commit(noResult: false);
+        } catch (e) {
+          // If word_normalized column doesn't exist (pre-migration), retry without it
+          if (e.toString().contains('no column named word_normalized')) {
+            hDebugPrint(
+              'DatabaseHelper: word_normalized column missing, retrying without it',
+            );
+            final retryBatch = txn.batch();
+            for (final word in words) {
+              final originalWord = word['word'] as String? ?? '';
+              retryBatch.insert('word_metadata', {
+                'word': originalWord,
+                'dict_id': dictId,
+                'offset': word['offset'],
+                'length': word['length'],
+              });
+            }
+            await retryBatch.commit(noResult: false);
+          } else {
+            rethrow;
+          }
+        }
 
         hDebugPrint(
           '[MEMORY] batchInsertWords: Inserting into word_index (FTS5)',
@@ -1788,14 +1918,39 @@ class DatabaseHelper {
 
         final metaBatch = txn.batch();
         for (final word in words) {
+          final originalWord = word['word'] as String? ?? '';
           metaBatch.insert('word_metadata', {
-            'word': word['word'],
+            'word': originalWord,
+            'word_normalized': removeDiacritics(originalWord),
             'dict_id': dictId,
             'offset': word['offset'],
             'length': word['length'],
           });
         }
-        final metaResults = await metaBatch.commit(noResult: false);
+
+        List<Object?> metaResults;
+        try {
+          metaResults = await metaBatch.commit(noResult: false);
+        } catch (e) {
+          if (e.toString().contains('no column named word_normalized')) {
+            hDebugPrint(
+              'DatabaseHelper: word_normalized column missing, retrying without it',
+            );
+            final retryBatch = txn.batch();
+            for (final word in words) {
+              final originalWord = word['word'] as String? ?? '';
+              retryBatch.insert('word_metadata', {
+                'word': originalWord,
+                'dict_id': dictId,
+                'offset': word['offset'],
+                'length': word['length'],
+              });
+            }
+            metaResults = await retryBatch.commit(noResult: false);
+          } else {
+            rethrow;
+          }
+        }
 
         final idxBatch = txn.batch();
         for (int i = 0; i < words.length; i++) {
@@ -1821,14 +1976,38 @@ class DatabaseHelper {
         );
         final batch = txn.batch();
         for (final word in words) {
+          final originalWord = word['word'] as String? ?? '';
           batch.insert('word_metadata', {
-            'word': word['word'],
+            'word': originalWord,
+            'word_normalized': removeDiacritics(originalWord),
             'dict_id': dictId,
             'offset': word['offset'],
             'length': word['length'],
           });
         }
-        await batch.commit(noResult: true);
+
+        try {
+          await batch.commit(noResult: true);
+        } catch (e) {
+          if (e.toString().contains('no column named word_normalized')) {
+            hDebugPrint(
+              'DatabaseHelper: word_normalized column missing, retrying without it',
+            );
+            final retryBatch = txn.batch();
+            for (final word in words) {
+              final originalWord = word['word'] as String? ?? '';
+              retryBatch.insert('word_metadata', {
+                'word': originalWord,
+                'dict_id': dictId,
+                'offset': word['offset'],
+                'length': word['length'],
+              });
+            }
+            await retryBatch.commit(noResult: true);
+          } else {
+            rethrow;
+          }
+        }
       }
       return (startId: newStartId, duplicateCount: duplicateCount);
     });
@@ -2035,11 +2214,12 @@ class DatabaseHelper {
     SearchMode definitionMode = SearchMode.substring,
     int? dictId,
     int limit = 50,
+    bool ignoreDiacritics = false,
   }) async {
     // Check cache FIRST before any DB calls - use simple cache key
     // (dictOrderKey affects result ordering but not results themselves)
     final String cacheKey =
-        '$headwordQuery|$headwordMode|$definitionQuery|$definitionMode|$dictId|$limit';
+        '$headwordQuery|$headwordMode|$definitionQuery|$definitionMode|$dictId|$limit|$ignoreDiacritics';
     final cachedResults = _getFromQueryCache(cacheKey);
     if (cachedResults != null) {
       HPerf.record('searchWords_CacheHit', 0);
@@ -2061,6 +2241,7 @@ class DatabaseHelper {
           headwordMode: headwordMode,
           dictId: dictId,
           limit: limit,
+          ignoreDiacritics: ignoreDiacritics,
         );
         _addToQueryCache(cacheKey, res);
         HPerf.end(dbWatch, 'searchWords_TotalExecution');
@@ -2272,6 +2453,7 @@ class DatabaseHelper {
     required SearchMode headwordMode,
     int? dictId,
     required int limit,
+    bool ignoreDiacritics = false,
   }) async {
     final db = await database;
     final String hq = headwordQuery?.trim() ?? '';
@@ -2293,16 +2475,63 @@ class DatabaseHelper {
 
     final String likePattern;
     final String operator;
+    final String columnName;
 
-    if (headwordMode == SearchMode.prefix) {
-      operator = 'LIKE';
-      likePattern = '$translatedHq%';
-    } else if (hasWildcards) {
-      operator = 'LIKE';
-      likePattern = translatedHq;
+    if (ignoreDiacritics) {
+      // Check if word_normalized column exists, fall back to word if not
+      bool columnExists = false;
+      try {
+        final result = await db.rawQuery("PRAGMA table_info(word_metadata)");
+        for (final row in result) {
+          if (row['name'] == 'word_normalized') {
+            columnExists = true;
+            break;
+          }
+        }
+      } catch (_) {}
+
+      if (columnExists) {
+        columnName = 'word_normalized';
+        // Normalize the search query too for diacritic-insensitive search
+        final normalizedHq = removeDiacritics(hq);
+        final translatedNormalizedHq = _translateWildcards(normalizedHq);
+
+        if (headwordMode == SearchMode.prefix) {
+          operator = 'LIKE';
+          likePattern = '$translatedNormalizedHq%';
+        } else if (hasWildcards) {
+          operator = 'LIKE';
+          likePattern = translatedNormalizedHq;
+        } else {
+          operator = '=';
+          likePattern = normalizedHq;
+        }
+      } else {
+        // Fallback: just use regular word column (diacritic feature unavailable)
+        columnName = 'word';
+        if (headwordMode == SearchMode.prefix) {
+          operator = 'LIKE';
+          likePattern = '$translatedHq%';
+        } else if (hasWildcards) {
+          operator = 'LIKE';
+          likePattern = translatedHq;
+        } else {
+          operator = '=';
+          likePattern = hq;
+        }
+      }
     } else {
-      operator = '=';
-      likePattern = hq;
+      columnName = 'word';
+      if (headwordMode == SearchMode.prefix) {
+        operator = 'LIKE';
+        likePattern = '$translatedHq%';
+      } else if (hasWildcards) {
+        operator = 'LIKE';
+        likePattern = translatedHq;
+      } else {
+        operator = '=';
+        likePattern = hq;
+      }
     }
 
     // 2. Build dict_id -> display_order map for sorting
@@ -2318,7 +2547,7 @@ class DatabaseHelper {
     const cap = 10000;
 
     var results = await db.rawQuery(
-      'SELECT word, dict_id, offset, length FROM word_metadata WHERE dict_id IN ($dictIdList) AND word $operator ? LIMIT ?',
+      'SELECT word, dict_id, offset, length FROM word_metadata WHERE dict_id IN ($dictIdList) AND $columnName $operator ? LIMIT ?',
       [likePattern, cap],
     );
 
