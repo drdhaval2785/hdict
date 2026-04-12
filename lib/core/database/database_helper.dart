@@ -2478,19 +2478,23 @@ class DatabaseHelper {
     final String columnName;
 
     if (ignoreDiacritics) {
-      // Check if word_normalized column exists, fall back to word if not
-      bool columnExists = false;
+      // Check if word_normalized column exists and has data, fall back to word if not
+      bool columnHasData = false;
       try {
         final result = await db.rawQuery("PRAGMA table_info(word_metadata)");
         for (final row in result) {
           if (row['name'] == 'word_normalized') {
-            columnExists = true;
+            // Column exists, now check if it has any non-null data
+            final countResult = await db.rawQuery(
+              "SELECT COUNT(*) as cnt FROM word_metadata WHERE word_normalized IS NOT NULL AND word_normalized != '' LIMIT 1",
+            );
+            columnHasData = (countResult.first['cnt'] as int? ?? 0) > 0;
             break;
           }
         }
       } catch (_) {}
 
-      if (columnExists) {
+      if (columnHasData) {
         columnName = 'word_normalized';
         // Normalize the search query too for diacritic-insensitive search
         final normalizedHq = removeDiacritics(hq);
@@ -2507,18 +2511,24 @@ class DatabaseHelper {
           likePattern = normalizedHq;
         }
       } else {
-        // Fallback: just use regular word column (diacritic feature unavailable)
+        // Fallback: use word column with normalized query (diacritic feature unavailable)
         columnName = 'word';
+        final normalizedHq = removeDiacritics(hq);
+        final translatedNormalizedHq = _translateWildcards(normalizedHq);
+
         if (headwordMode == SearchMode.prefix) {
           operator = 'LIKE';
-          likePattern = '$translatedHq%';
+          likePattern = '$translatedNormalizedHq%';
         } else if (hasWildcards) {
           operator = 'LIKE';
-          likePattern = translatedHq;
+          likePattern = translatedNormalizedHq;
         } else {
           operator = '=';
-          likePattern = hq;
+          likePattern = normalizedHq;
         }
+        hDebugPrint(
+          'DatabaseHelper: word_normalized has no data, using fallback with word column',
+        );
       }
     } else {
       columnName = 'word';
