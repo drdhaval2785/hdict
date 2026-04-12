@@ -664,7 +664,7 @@ class _DictionaryManagementScreenState
       if (Platform.isAndroid) {
         folderPath = await BookmarkManager.pickDirectory();
       } else {
-        folderPath = await FilePicker.platform.getDirectoryPath();
+        folderPath = await FilePicker.getDirectoryPath();
       }
     } catch (e) {
       debugPrint('Error picking folder: $e');
