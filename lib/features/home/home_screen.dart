@@ -23,7 +23,6 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_review/in_app_review.dart';
 import 'package:chewie/chewie.dart';
-import 'package:diacritic/diacritic.dart';
 
 enum SuggestionTarget { none, headword, definition }
 
@@ -2416,11 +2415,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final settings = context.read<SettingsProvider>();
     final ignoreDiacritics = settings.isIgnoreDiacriticsEnabled;
 
-    String searchWord = word;
-    if (ignoreDiacritics) {
-      searchWord = removeDiacritics(word);
-    }
-
     await _dbHelper.addSearchHistory(word, searchType: 'Pop-up Search');
     if (!mounted) {
       hDebugPrint('HomeScreen._showWordPopup: NOT mounted, returning');
@@ -2508,7 +2502,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     // 1. Try exact match first for popups
                     List<Map<String, dynamic>> candidates = await _dbHelper
                         .searchWords(
-                          headwordQuery: searchWord,
+                          headwordQuery: word,
                           headwordMode: SearchMode.exact,
                           ignoreDiacritics: ignoreDiacritics,
                         );
@@ -2516,7 +2510,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     // 2. Fallback to user setting or prefix if exact fails
                     if (candidates.isEmpty) {
                       candidates = await _dbHelper.searchWords(
-                        headwordQuery: searchWord,
+                        headwordQuery: word,
                         headwordMode: settings.headwordSearchMode,
                         ignoreDiacritics: ignoreDiacritics,
                       );
@@ -2524,7 +2518,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
                     // 3. Last fallback: longest prefix match
                     if (candidates.isEmpty) {
-                      String prefix = searchWord;
+                      String prefix = word;
                       while (prefix.length > 2) {
                         prefix = prefix.substring(0, prefix.length - 1);
                         candidates = await _dbHelper.searchWords(
