@@ -1866,30 +1866,6 @@ class DatabaseHelper {
           }
         }
 
-        try {
-          await metaBatch.commit(noResult: false);
-        } catch (e) {
-          // If word_normalized column doesn't exist (pre-migration), retry without it
-          if (e.toString().contains('no column named word_normalized')) {
-            hDebugPrint(
-              'DatabaseHelper: word_normalized column missing, retrying without it',
-            );
-            final retryBatch = txn.batch();
-            for (final word in words) {
-              final originalWord = word['word'] as String? ?? '';
-              retryBatch.insert('word_metadata', {
-                'word': originalWord,
-                'dict_id': dictId,
-                'offset': word['offset'],
-                'length': word['length'],
-              });
-            }
-            await retryBatch.commit(noResult: false);
-          } else {
-            rethrow;
-          }
-        }
-
         hDebugPrint(
           '[MEMORY] batchInsertWords: Inserting into word_index (FTS5)',
         );

@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.14] - 2026-04-12
+
+### Added
+
+- **Ignore Diacritics in Search**: New toggle in Settings below "Search As You Type" (default ON). Allows searching without diacritical marks - e.g., searching "cafe" will find entries like "café", "cafetière", "école" will find "école". Uses SQLite `word_normalized` column for efficient database-level matching.
+- **Database Migration Notice**: Users upgrading from older database versions see a one-time notice explaining how to enable diacritic-insensitive search by reindexing their dictionaries.
+
+### Fixed
+
+- **Performance**: Diacritic-insensitive search now works at SQLite level instead of Dart-level filtering, providing much faster search results.
+- **Fallback Support**: Search gracefully falls back to normalized query on regular `word` column when `word_normalized` data hasn't been populated (for dictionaries that haven't been reindexed).
+
+### Changed
+
+- **Database Version**: Incremented to 34 to support `word_normalized` column for diacritic-insensitive search.
+
 ## [1.5.13] - 2026-04-04
 
 ### Added
