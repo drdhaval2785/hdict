@@ -24,6 +24,9 @@ class DatabaseHelper {
   /// Cached app documents directory to avoid redundant platform channel calls.
   static Directory? _appDocDir;
 
+  /// Whether a migration from pre-v34 database happened (for showing notice to user)
+  static bool didMigrateFromOldVersion = false;
+
   /// Whether the user just upgraded from version 16 and needs a notice.
   static bool needsMigrationAlert = false;
 
@@ -351,11 +354,13 @@ class DatabaseHelper {
   }
 
   /// Called every time the database is opened (after onCreate/onUpgrade).
-  /// Ensures word_index is usable on this device's SQLite build.
-  Future<void> _onOpen(Database db) async {
+  /// Returns true if this was a migration from old database (pre-v34).
+  Future<bool> _onOpen(Database db) async {
     hDebugPrint(
       'DatabaseHelper: _onOpen called - checking FTS5 availability and word_index table',
     );
+
+    bool isMigration = false;
 
     // Check if word_normalized column exists, run migration if not
     try {
@@ -378,6 +383,9 @@ class DatabaseHelper {
           'CREATE INDEX IF NOT EXISTS idx_word_normalized ON word_metadata(word_normalized)',
         );
         hDebugPrint('DatabaseHelper: word_normalized column added in _onOpen');
+        isMigration = true;
+        didMigrateFromOldVersion = true;
+        hDebugPrint('DatabaseHelper: Set didMigrateFromOldVersion=true');
       } else {
         hDebugPrint('DatabaseHelper: word_normalized column already exists');
       }
@@ -392,6 +400,7 @@ class DatabaseHelper {
     hDebugPrint(
       'DatabaseHelper: _onOpen complete - _fts5Available=$_fts5Available',
     );
+    return isMigration;
   }
 
   Future<void> _onCreate(Database db, int version) async {

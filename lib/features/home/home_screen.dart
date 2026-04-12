@@ -1113,6 +1113,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         _showMigrationNotice();
       }
 
+      // Check for diacritic migration notice
+      hDebugPrint(
+        'HomeScreen: didMigrateFromOldVersion=${DatabaseHelper.didMigrateFromOldVersion}',
+      );
+      if (DatabaseHelper.didMigrateFromOldVersion) {
+        final settings = context.read<SettingsProvider>();
+        hDebugPrint(
+          'HomeScreen: diacriticMigrationNoticeShown=${settings.diacriticMigrationNoticeShown}, isIgnoreDiacriticsEnabled=${settings.isIgnoreDiacriticsEnabled}',
+        );
+        if (!settings.diacriticMigrationNoticeShown &&
+            settings.isIgnoreDiacriticsEnabled) {
+          _showDiacriticMigrationNotice();
+          settings.setDiacriticMigrationNoticeShown(true);
+        }
+      }
+
       _checkAndPromptReview();
 
       if (widget.initialWord != null) {
@@ -1231,6 +1247,38 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDiacriticMigrationNotice() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Search Improvement Available'),
+        content: const Text(
+          'You can now search without diacritics (e.g., search "cafe" to find "café").\n\n'
+          'To enable this feature, please reindex your dictionaries from '
+          '"Manage Dictionaries" > Select dictionary > Reindex.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const DictionaryManagementScreen(),
+                ),
+              );
+            },
+            child: const Text('Go to Dictionaries'),
           ),
         ],
       ),

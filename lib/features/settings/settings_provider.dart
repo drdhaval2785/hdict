@@ -60,6 +60,8 @@ class SettingsProvider with ChangeNotifier {
   static const String _keyShowSearchSuggestions = 'show_search_suggestions';
   static const String _keySearchAsYouType = 'search_as_you_type';
   static const String _keyIgnoreDiacritics = 'ignore_diacritics';
+  static const String _keyDiacriticMigrationNoticeShown =
+      'diacritic_migration_notice_shown';
 
   AppThemeMode _appThemeMode = AppThemeMode.light;
   String _fontFamily = 'Roboto';
@@ -87,6 +89,7 @@ class SettingsProvider with ChangeNotifier {
   bool _isShowSearchSuggestionsEnabled = true;
   bool _isSearchAsYouTypeEnabled = true;
   bool _isIgnoreDiacriticsEnabled = true;
+  bool _diacriticMigrationNoticeShown = false;
 
   AppThemeMode get appThemeMode => _appThemeMode;
   String get fontFamily => _fontFamily;
@@ -114,6 +117,7 @@ class SettingsProvider with ChangeNotifier {
   bool get isShowSearchSuggestionsEnabled => _isShowSearchSuggestionsEnabled;
   bool get isSearchAsYouTypeEnabled => _isSearchAsYouTypeEnabled;
   bool get isIgnoreDiacriticsEnabled => _isIgnoreDiacriticsEnabled;
+  bool get diacriticMigrationNoticeShown => _diacriticMigrationNoticeShown;
 
   /// Returns the background color, adapting to the theme if it's set to the default white.
   Color getEffectiveBackgroundColor(BuildContext context) {
@@ -200,6 +204,8 @@ class SettingsProvider with ChangeNotifier {
         prefs.getBool(_keyShowSearchSuggestions) ?? true;
     _isSearchAsYouTypeEnabled = prefs.getBool(_keySearchAsYouType) ?? true;
     _isIgnoreDiacriticsEnabled = prefs.getBool(_keyIgnoreDiacritics) ?? true;
+    _diacriticMigrationNoticeShown =
+        prefs.getBool(_keyDiacriticMigrationNoticeShown) ?? false;
     notifyListeners();
   }
 
@@ -381,6 +387,13 @@ class SettingsProvider with ChangeNotifier {
     _isIgnoreDiacriticsEnabled = enabled;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyIgnoreDiacritics, enabled);
+    notifyListeners();
+  }
+
+  Future<void> setDiacriticMigrationNoticeShown(bool shown) async {
+    _diacriticMigrationNoticeShown = shown;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyDiacriticMigrationNoticeShown, shown);
     notifyListeners();
   }
 }
