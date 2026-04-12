@@ -676,16 +676,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       HPerf.reset();
       final settings = context.read<SettingsProvider>();
 
-      String normalizedHeadword = headword;
-      String normalizedDefinition = definition;
-      if (settings.isIgnoreDiacriticsEnabled) {
-        if (headword.isNotEmpty) {
-          normalizedHeadword = removeDiacritics(headword);
-        }
-        if (definition.isNotEmpty) {
-          normalizedDefinition = removeDiacritics(definition);
-        }
-      }
+      final bool ignoreDiacritics = settings.isIgnoreDiacriticsEnabled;
 
       final totalWatch = HPerf.start('Search_Total');
       final sqliteWatch = HPerf.start('Search_SQLite');
@@ -695,9 +686,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       if (headword.isNotEmpty && definition.isNotEmpty) {
         // Combined: search with BOTH headword AND definition
         results = await _dbHelper.searchWords(
-          headwordQuery: normalizedHeadword,
+          headwordQuery: headword,
           headwordMode: settings.headwordSearchMode,
-          definitionQuery: normalizedDefinition,
+          definitionQuery: definition,
           definitionMode: settings.definitionSearchMode,
           limit: settings.searchResultLimit,
         );
@@ -706,20 +697,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         if (isRobust && results.isEmpty) {
           if (settings.headwordSearchMode != SearchMode.exact) {
             results = await _dbHelper.searchWords(
-              headwordQuery: normalizedHeadword,
+              headwordQuery: headword,
               headwordMode: SearchMode.exact,
-              definitionQuery: normalizedDefinition,
+              definitionQuery: definition,
               definitionMode: settings.definitionSearchMode,
             );
           }
           if (results.isEmpty) {
-            String prefix = normalizedHeadword;
+            String prefix = headword;
             while (prefix.length > 2) {
               prefix = prefix.substring(0, prefix.length - 1);
               results = await _dbHelper.searchWords(
                 headwordQuery: prefix,
                 headwordMode: SearchMode.prefix,
-                definitionQuery: normalizedDefinition,
+                definitionQuery: definition,
                 definitionMode: settings.definitionSearchMode,
                 limit: settings.searchResultLimit,
               );
@@ -730,24 +721,46 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       } else if (headword.isNotEmpty) {
         // Headword only search
         results = await _dbHelper.searchWords(
-          headwordQuery: normalizedHeadword,
+          headwordQuery: headword,
           headwordMode: settings.headwordSearchMode,
           limit: settings.searchResultLimit,
         );
+
+        // If diacritics enabled and no results, try normalized query
+        if (ignoreDiacritics && results.isEmpty) {
+          final normalizedHeadword = removeDiacritics(headword);
+          if (normalizedHeadword != headword) {
+            results = await _dbHelper.searchWords(
+              headwordQuery: normalizedHeadword,
+              headwordMode: settings.headwordSearchMode,
+              limit: settings.searchResultLimit,
+            );
+          }
+        }
 
         // If robust mode is on and we found nothing, try fallbacks
         if (isRobust && results.isEmpty) {
           // 1. Try exact match if preferred mode wasn't already exact
           if (settings.headwordSearchMode != SearchMode.exact) {
             results = await _dbHelper.searchWords(
-              headwordQuery: normalizedHeadword,
+              headwordQuery: headword,
               headwordMode: SearchMode.exact,
             );
+            // Try normalized if still empty
+            if (ignoreDiacritics && results.isEmpty) {
+              final normalizedHeadword = removeDiacritics(headword);
+              if (normalizedHeadword != headword) {
+                results = await _dbHelper.searchWords(
+                  headwordQuery: normalizedHeadword,
+                  headwordMode: SearchMode.exact,
+                );
+              }
+            }
           }
 
           // 2. Try longest prefix match (like popup logic)
           if (results.isEmpty) {
-            String prefix = normalizedHeadword;
+            String prefix = headword;
             while (prefix.length > 2) {
               prefix = prefix.substring(0, prefix.length - 1);
               results = await _dbHelper.searchWords(
@@ -755,13 +768,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 headwordMode: SearchMode.prefix,
                 limit: settings.searchResultLimit,
               );
+              // Try normalized if still empty
+              if (ignoreDiacritics && results.isEmpty) {
+                final normalizedPrefix = removeDiacritics(prefix);
+                if (normalizedPrefix != prefix) {
+                  results = await _dbHelper.searchWords(
+                    headwordQuery: normalizedPrefix,
+                    headwordMode: SearchMode.prefix,
+                    limit: settings.searchResultLimit,
+                  );
+                }
+              }
               if (results.isNotEmpty) break;
             }
           }
         }
       } else if (definition.isNotEmpty) {
         results = await _dbHelper.searchWords(
-          definitionQuery: normalizedDefinition,
+          definitionQuery: definition,
           definitionMode: settings.definitionSearchMode,
           limit: settings.searchResultLimit,
         );
@@ -2372,9 +2396,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void _showWordPopup(String word) async {
     hDebugPrint('HomeScreen._showWordPopup: START for word="$word"');
     final settings = context.read<SettingsProvider>();
+    final ignoreDiacritics = settings.isIgnoreDiacriticsEnabled;
 
     String searchWord = word;
-    if (settings.isIgnoreDiacriticsEnabled) {
+    if (ignoreDiacritics) {
       searchWord = removeDiacritics(word);
     }
 
