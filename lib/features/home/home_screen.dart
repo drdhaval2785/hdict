@@ -21,7 +21,7 @@ import 'package:video_player/video_player.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/foundation.dart';
-import 'package:in_app_review/in_app_review.dart';
+import 'package:hdict/core/utils/review_helper.dart';
 import 'package:chewie/chewie.dart';
 
 enum SuggestionTarget { none, headword, definition }
@@ -1176,63 +1176,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     // In Debug Mode, we always bypass most checks so you can test the UI,
     // but we still respect the session flag and we don't spam if already given.
-    if (!kDebugMode) {
-      if (settings.hasGivenReview || settings.reviewPromptCount >= 5) {
-        return;
-      }
-    } else {
-      // In debug, if they already manually said they gave review, maybe stop?
-      // But user said "for the session if the user avoids giving feedback in debug app mode"
-    }
-
-    await settings.initAppFirstLaunchDateIfNeeded();
-
-    final now = DateTime.now().millisecondsSinceEpoch;
-    // Date check is also bypassed in Debug Mode
-    if (kDebugMode || now >= settings.nextReviewPromptDate) {
-      if (!mounted) return;
-
-      final InAppReview inAppReview = InAppReview.instance;
-      if (await inAppReview.isAvailable()) {
-        // Mark as prompted for this session BEFORE showing, so returning to home doesn't trigger it again
-        settings.setReviewPromptedThisSession(true);
-
-        await settings.incrementReviewPromptCountAndSetNextDate();
-        await inAppReview.requestReview();
-      } else if (Platform.isLinux) {
-        // Fallback for platforms where in-app review is not available natively e.g Linux (Snap Store)
-        if (!mounted) return;
-        settings.setReviewPromptedThisSession(true);
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Enjoying hdict?'),
-            content: const Text(
-              'If you find this app useful, please consider giving it a rating or review on the Snap Store.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  settings.incrementReviewPromptCountAndSetNextDate();
-                },
-                child: const Text('Later'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  if (!kDebugMode) {
-                    settings.setHasGivenReview(true);
-                  }
-                  launchUrl(Uri.parse('https://snapcraft.io/hdict'));
-                },
-                child: const Text('Rate on Snap Store'),
-              ),
-            ],
-          ),
-        );
-      }
-    }
+    await ReviewHelper.maybeRequestReview(context, settings);
   }
 
   void _showMigrationNotice() {

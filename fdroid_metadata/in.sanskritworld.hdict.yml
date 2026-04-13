@@ -31,6 +31,8 @@ Builds:
       - windows
     prebuild: |
       sed -i -e '/org.gradle.java.home/d' android/gradle.properties
+      sed -i -e '/in_app_review:/d' pubspec.yaml
+      printf "import 'package:flutter/material.dart';\nimport 'package:hdict/features/settings/settings_provider.dart';\nclass ReviewHelper {\n  static Future<void> maybeRequestReview(BuildContext context, SettingsProvider settings) async {}\n}" > lib/core/utils/review_helper.dart
       unset JAVA_HOME
       ../srclib/flutter/bin/flutter config --no-analytics
       ../srclib/flutter/bin/flutter pub get
