@@ -37,4 +37,4 @@ Builds:
     build: |
       unset JAVA_HOME
       ../srclib/flutter/bin/flutter build apk --flavor fdroid --release
-    output: build/app/outputs/apk/fdroid/release/app-fdroid-release.apk
+    output: build/app/outputs/flutter-apk/app-fdroid-release.apk
