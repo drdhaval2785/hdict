@@ -15,7 +15,7 @@ Repo: https://github.com/drdhaval2785/hdict
 Builds:
   - versionName: 1.5.15
     versionCode: 39
-    commit: 270b4a3860ff3164ac575bd5577c514824c8400f
+    commit: bf84cef1fb39d24f94b87077ff71f13c40dd0174
     output: build/app/outputs/flutter-apk/app-fdroid-release.apk
     srclibs:
       - flutter@stable
@@ -27,7 +27,8 @@ Builds:
       - windows
     prebuild:
       - sed -i -e '/org.gradle.java.home/d' android/gradle.properties
-      - sed -i -e '/in_app_review:/d' pubspec.yaml
+      - sed -i -e '/^[[:space:]]*in_app_review:/d' pubspec.yaml
+      - rm -f pubspec.lock
       - sed -i -e '/import.*in_app_review.dart/d' lib/features/home/home_screen.dart
       - sed -i -e 's/InAppReview/dynamic/g' lib/features/home/home_screen.dart
       - sed -i -e 's/dynamic.instance/null/g' lib/features/home/home_screen.dart
