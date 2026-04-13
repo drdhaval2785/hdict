@@ -21,6 +21,8 @@ Builds:
     versionCode: 39
     commit: v1.5.15
     subdir: .
+    srclibs:
+      - flutter@stable
     rm:
       - ios
       - linux
@@ -28,8 +30,8 @@ Builds:
       - web
       - windows
     prebuild: |
-      flutter config --no-analytics
+      .flutter/bin/flutter config --no-analytics
+      .flutter/bin/flutter pub get
     build: |
-      flutter pub get
-      flutter build apk --flavor fdroid --release
+      .flutter/bin/flutter build apk --flavor fdroid --release
     output: build/app/outputs/apk/fdroid/release/app-fdroid-release.apk
