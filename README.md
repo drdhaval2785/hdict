@@ -10,6 +10,9 @@
   <a href="https://snapcraft.io/hdict">
     <img src="https://snapcraft.io/static/images/badges/en/snap-store-black.svg" alt="Get it from the Snap Store" height="40">
   </a>
+  <a href="https://f-droid.org/packages/in.sanskritworld.hdict/">
+    <img src="https://f-droid.org/badge/get-it-on.png" alt="Get it on F-Droid" height="60">
+  </a>
 </p>
 
 A high-performance, feature-rich dictionary application built with Flutter. Optimized for speed, highly customizable, and designed for a premium user experience across all platforms.

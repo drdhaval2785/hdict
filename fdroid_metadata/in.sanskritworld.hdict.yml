@@ -1,0 +1,30 @@
+Categories:
+  - Books and Reference
+  - Dictionaries
+License: GPL-3.0-or-later
+AuthorName: Dhaval Patel
+AuthorEmail: drdhaval2785@gmail.com
+WebSite: https://github.com/drdhaval2785/hdict
+SourceCode: https://github.com/drdhaval2785/hdict
+
+AutoUpdateMode: Version %v
+UpdateCheckMode: Tags
+UpdateCheckData: pubspec.yaml|version:\s.+\+(\d+)|.|version:\s(.+)\+
+
+CurrentVersion: 1.5.14
+CurrentVersionCode: 38
+
+Builds:
+  - versionName: 1.5.14
+    versionCode: 38
+    commit: v1.5.14
+    subdir: .
+    prebuild: |
+      rm -fr ios
+    build: |
+      export PATH=$flutter/bin:$PATH
+      flutter build apk --flavor fdroid --release
+    output: build/app/outputs/apk/fdroid/release/app-fdroid-release.apk
+
+# For reproducible builds - using upstream signed APK
+Binaries: https://github.com/drdhaval2785/hdict/releases/download/v%v/hdict-%v-fdroid.apk

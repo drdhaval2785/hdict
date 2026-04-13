@@ -27,6 +27,11 @@ android {
         jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
+
     signingConfigs {
         create("release") {
             keyAlias = keyProperties["keyAlias"] as String
@@ -56,6 +61,14 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+    }
+
+    flavorDimensions += "deploy"
+    productFlavors {
+        create("fdroid") {
+            dimension = "deploy"
+            signingConfig = null
         }
     }
 }

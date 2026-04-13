@@ -1,0 +1,1 @@
+A high-performance, feature-rich dictionary application built with Flutter. Supports multiple dictionary formats including StarDict, MDict, Slob, and DICTD. Offers advanced search, tap-to-lookup, flash cards for learning, and deep customization options.

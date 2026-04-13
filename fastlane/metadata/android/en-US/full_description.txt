@@ -1,0 +1,34 @@
+hdict is a high-performance, feature-rich dictionary application built with Flutter. Optimized for speed, highly customizable, and designed for a premium user experience across all platforms.
+
+## Key Features
+
+### Advanced & Fast Search
+- Multi-Dictionary Search: Display results from multiple dictionaries simultaneously in a tabbed interface.
+- Wildcard & Prefix Search: Supports wildcard operators like * and ? as well as prefix search for powerful lookups.
+- Definition Search: Dive deeper by searching for words directly within definitions.
+- Lightning Fast Lookup: Powered by optimized queries using SQLite FTS5, batch processing, and database vacuuming.
+- Deduplication: Automatically detects and skips duplicate dictionaries using MD5 checksums.
+
+### Universal Word Lookup & Native Tap-to-Search
+- Tap-on-Meaning: Every word in a definition is interactive using native hit-testing. Tap any word to instantly look it up.
+- Language Agnostic: Built with Unicode support for English, Hindi, Vietnamese, and any other languages.
+- Nested Lookups: Lookup results open in a full-width bottom popup.
+
+### Massive Dictionary Support
+- Browse and download from around 1800 FreeDict dictionaries organized by language.
+- Supports StarDict (.dict/.dict.dz, .idx, .ifo), MDict (.mdx, .mdd), Slob (.slob), and DICTD formats.
+- Archive extracting: Native ingestion of .zip, .tar.gz, .tar.xz, .bz2, and .7z formats.
+
+### Flash Cards & Learning
+- Truly Random Quizzes: Pull random words from selected dictionaries.
+- Adjustable Results: Mark words as correct or incorrect during review.
+- Score History: Track progress over time.
+
+### Deep Customization
+- Modern Aesthetics: Dynamic light/dark mode support.
+- Custom Theme: Set colors for background, headings, and body text.
+- Typography: Choose fonts and adjust sizes.
+
+## License
+
+This project is licensed under GNU General Public License v3.0 (GPL v3.0).
