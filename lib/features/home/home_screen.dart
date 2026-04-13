@@ -327,7 +327,10 @@ class HomeScreen extends StatefulWidget {
         processed = processed.replaceAll(RegExp(r'\s+'), ' ');
       }
 
-      final result = formatLists(addBlockquoteColors(processed.trim()));
+      // Collapse multiple consecutive <br> tags to prevent visual blank lines
+      String result = processed.trim();
+      result = result.replaceAll(RegExp(r'(<br\s*/?>\s*)+'), '<br>');
+      result = formatLists(addBlockquoteColors(result));
       if (showHtmlProcessing) {
         hDebugPrint('normalizeWhitespace (HTML): Result: [$result]');
       }
