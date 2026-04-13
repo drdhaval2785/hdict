@@ -78,3 +78,11 @@ android {
 flutter {
     source = "../.."
 }
+
+// Only exclude non-free libraries when building the fdroid flavor.
+if (gradle.startParameter.taskNames.any { it.contains("fdroid", ignoreCase = true) }) {
+    configurations.all {
+        exclude(group = "com.google.android.play")
+        exclude(group = "com.google.android.gms")
+    }
+}
