@@ -11,13 +11,13 @@ AutoUpdateMode: Version %v
 UpdateCheckMode: Tags
 UpdateCheckData: pubspec.yaml|version:\s.+\+(\d+)|.|version:\s(.+)\+
 
-CurrentVersion: 1.5.14
-CurrentVersionCode: 38
+CurrentVersion: 1.5.15
+CurrentVersionCode: 39
 
 Builds:
-  - versionName: 1.5.14
-    versionCode: 38
-    commit: v1.5.14
+  - versionName: 1.5.15
+    versionCode: 39
+    commit: v1.5.15
     subdir: .
     prebuild: |
       rm -fr ios

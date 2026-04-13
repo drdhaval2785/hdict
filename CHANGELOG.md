@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.15] - 2026-04-13
+
+### Added
+
+- **F-Droid Support**: Added F-Droid compatible build with `fdroid` flavor. Users can now install hdict from F-Droid store. APK builds are reproducible and use null signing for F-Droid builds.
+- **Package Updates**: Updated all Flutter dependencies to their latest versions for improved stability and performance.
+
+### Changed
+
+- **Build Configuration**: Added F-Droid product flavor to build.gradle.kts for F-Droid-specific builds. Added dependenciesInfo block to disable dependency metadata for reproducible builds.
+
 ## [1.5.14] - 2026-04-12
 
 ### Added
