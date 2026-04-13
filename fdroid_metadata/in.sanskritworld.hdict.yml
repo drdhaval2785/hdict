@@ -34,9 +34,11 @@ Builds:
       - sed -i -e 's/await inAppReview.isAvailable()/false/g' lib/features/home/home_screen.dart
       - mkdir -p lib/core/utils
       - echo "import 'package:flutter/material.dart';" > lib/core/utils/review_helper.dart
-      - echo "import 'package:hdict/features/settings/settings_provider.dart';" >> lib/core/utils/review_helper.dart
+      - echo "import 'package:hdict/features/settings/settings_provider.dart';" >>
+        lib/core/utils/review_helper.dart
       - echo "class ReviewHelper {" >> lib/core/utils/review_helper.dart
-      - echo "  static Future<void> maybeRequestReview(BuildContext context, SettingsProvider settings) async {}" >> lib/core/utils/review_helper.dart
+      - echo "  static Future<void> maybeRequestReview(BuildContext context, SettingsProvider
+        settings) async {}" >> lib/core/utils/review_helper.dart
       - echo "}" >> lib/core/utils/review_helper.dart
       - unset JAVA_HOME
       - ../srclib/flutter/bin/flutter config --no-analytics
