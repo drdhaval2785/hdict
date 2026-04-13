@@ -6,6 +6,8 @@ AuthorName: Dhaval Patel
 AuthorEmail: drdhaval2785@gmail.com
 WebSite: https://github.com/drdhaval2785/hdict
 SourceCode: https://github.com/drdhaval2785/hdict
+RepoType: git
+Repo: https://github.com/drdhaval2785/hdict
 
 AutoUpdateMode: Version %v
 UpdateCheckMode: Tags
@@ -19,12 +21,15 @@ Builds:
     versionCode: 39
     commit: v1.5.15
     subdir: .
+    rm:
+      - ios
+      - linux
+      - macos
+      - web
+      - windows
     prebuild: |
-      rm -fr ios
+      flutter config --no-analytics
     build: |
-      export PATH=$flutter/bin:$PATH
+      flutter pub get
       flutter build apk --flavor fdroid --release
     output: build/app/outputs/apk/fdroid/release/app-fdroid-release.apk
-
-# For reproducible builds - using upstream signed APK
-Binaries: https://github.com/drdhaval2785/hdict/releases/download/v%v/hdict-%v-fdroid.apk
