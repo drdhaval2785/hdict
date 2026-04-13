@@ -3,6 +3,15 @@ allprojects {
         google()
         mavenCentral()
     }
+    // Only exclude non-free libraries when building the fdroid flavor.
+    // This allows local development builds to compile normally while ensuring
+    // the F-Droid build remains clean.
+    if (gradle.startParameter.taskNames.any { it.contains("fdroid", ignoreCase = true) }) {
+        configurations.all {
+            exclude(group = "com.google.android.play", module = "core")
+            exclude(group = "com.google.android.gms")
+        }
+    }
 }
 
 val newBuildDir: Directory =
