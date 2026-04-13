@@ -19,7 +19,7 @@ CurrentVersionCode: 39
 Builds:
   - versionName: 1.5.15
     versionCode: 39
-    commit: v1.5.15
+    commit: main
     subdir: .
     srclibs:
       - flutter@stable
@@ -32,6 +32,11 @@ Builds:
     prebuild: |
       sed -i -e '/org.gradle.java.home/d' android/gradle.properties
       sed -i -e '/in_app_review:/d' pubspec.yaml
+      sed -i -e '/import.*in_app_review.dart/d' lib/features/home/home_screen.dart
+      sed -i -e 's/InAppReview/dynamic/g' lib/features/home/home_screen.dart
+      sed -i -e 's/dynamic.instance/null/g' lib/features/home/home_screen.dart
+      sed -i -e 's/await inAppReview.isAvailable()/false/g' lib/features/home/home_screen.dart
+      mkdir -p lib/core/utils
       printf "import 'package:flutter/material.dart';\nimport 'package:hdict/features/settings/settings_provider.dart';\nclass ReviewHelper {\n  static Future<void> maybeRequestReview(BuildContext context, SettingsProvider settings) async {}\n}" > lib/core/utils/review_helper.dart
       unset JAVA_HOME
       ../srclib/flutter/bin/flutter config --no-analytics
