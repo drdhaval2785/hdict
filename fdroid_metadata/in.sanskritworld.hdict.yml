@@ -1,6 +1,6 @@
 Categories:
-  - Translation & Dictionary
   - Reading
+  - Translation & Dictionary
 License: GPL-3.0-or-later
 AuthorName: Dhaval Patel
 AuthorEmail: drdhaval2785@gmail.com
@@ -16,7 +16,7 @@ Builds:
   - versionName: 1.5.15
     versionCode: 39
     commit: 3f039f6270fc162adf55ab5509c6605ab448c6ca
-    subdir: .
+    subdir: ./
     output: build/app/outputs/flutter-apk/app-fdroid-release.apk
     srclibs:
       - flutter@stable
@@ -26,23 +26,21 @@ Builds:
       - macos
       - web
       - windows
-    prebuild: |
-      sed -i -e '/org.gradle.java.home/d' android/gradle.properties
-      sed -i -e '/in_app_review:/d' pubspec.yaml
-      sed -i -e '/import.*in_app_review.dart/d' lib/features/home/home_screen.dart
-      sed -i -e 's/InAppReview/dynamic/g' lib/features/home/home_screen.dart
-      sed -i -e 's/dynamic.instance/null/g' lib/features/home/home_screen.dart
-      sed -i -e 's/await inAppReview.isAvailable()/false/g' lib/features/home/home_screen.dart
-      mkdir -p lib/core/utils
-      printf "import 'package:flutter/material.dart';\nimport 'package:hdict/features/settings/settings_provider.dart';\nclass ReviewHelper {\n  static Future<void> maybeRequestReview(BuildContext context, SettingsProvider settings) async {}\n}" > lib/core/utils/review_helper.dart
-      unset JAVA_HOME
-      ../srclib/flutter/bin/flutter config --no-analytics
-      ../srclib/flutter/bin/flutter pub get
-    build: |
-      unset JAVA_HOME
-      ../srclib/flutter/bin/flutter build apk --flavor fdroid --release
+    prebuild: "sed -i -e '/org.gradle.java.home/d' android/gradle.properties\nsed
+      -i -e '/in_app_review:/d' pubspec.yaml\nsed -i -e '/import.*in_app_review.dart/d'
+      lib/features/home/home_screen.dart\nsed -i -e 's/InAppReview/dynamic/g' lib/features/home/home_screen.dart\n
+      sed -i -e 's/dynamic.instance/null/g' lib/features/home/home_screen.dart\nsed
+      -i -e 's/await inAppReview.isAvailable()/false/g' lib/features/home/home_screen.dart\n
+      mkdir -p lib/core/utils\nprintf \"import 'package:flutter/material.dart';\\
+      nimport 'package:hdict/features/settings/settings_provider.dart';\\nclass ReviewHelper
+      {\\n  static Future<void> maybeRequestReview(BuildContext context, SettingsProvider
+      settings) async {}\\n}\" > lib/core/utils/review_helper.dart\nunset JAVA_HOME\n
+      ../srclib/flutter/bin/flutter config --no-analytics\n../srclib/flutter/bin/flutter
+      pub get\n"
+    build: "unset JAVA_HOME\n../srclib/flutter/bin/flutter build apk --flavor fdroid
+      --release\n"
 
-AutoUpdateMode: Version %v
+AutoUpdateMode: Version
 UpdateCheckMode: Tags
 UpdateCheckData: pubspec.yaml|version:\s.+\+(\d+)|.|version:\s(.+)\+
 CurrentVersion: 1.5.15
