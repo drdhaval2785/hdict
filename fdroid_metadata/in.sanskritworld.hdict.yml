@@ -16,7 +16,6 @@ Builds:
   - versionName: 1.5.15
     versionCode: 39
     commit: 3f039f6270fc162adf55ab5509c6605ab448c6ca
-    subdir: ./
     output: build/app/outputs/flutter-apk/app-fdroid-release.apk
     srclibs:
       - flutter@stable
