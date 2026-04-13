@@ -1,6 +1,6 @@
 Categories:
-  - Books and Reference
-  - Dictionaries
+  - Translation & Dictionary
+  - Reading
 License: GPL-3.0-or-later
 AuthorName: Dhaval Patel
 AuthorEmail: drdhaval2785@gmail.com
@@ -15,7 +15,7 @@ Repo: https://github.com/drdhaval2785/hdict
 Builds:
   - versionName: 1.5.15
     versionCode: 39
-    commit: main
+    commit: 3f039f6270fc162adf55ab5509c6605ab448c6ca
     subdir: .
     output: build/app/outputs/flutter-apk/app-fdroid-release.apk
     srclibs:
