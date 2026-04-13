@@ -15,7 +15,7 @@ Repo: https://github.com/drdhaval2785/hdict
 Builds:
   - versionName: 1.5.15
     versionCode: 39
-    commit: df5b7689cc0e13f2e5c83343c4b1af7960f7844f
+    commit: 270b4a3860ff3164ac575bd5577c514824c8400f
     output: build/app/outputs/flutter-apk/app-fdroid-release.apk
     srclibs:
       - flutter@stable
@@ -25,25 +25,25 @@ Builds:
       - macos
       - web
       - windows
-    prebuild: |
-      sed -i -e '/org.gradle.java.home/d' android/gradle.properties
-      sed -i -e '/in_app_review:/d' pubspec.yaml
-      sed -i -e '/import.*in_app_review.dart/d' lib/features/home/home_screen.dart
-      sed -i -e 's/InAppReview/dynamic/g' lib/features/home/home_screen.dart
-      sed -i -e 's/dynamic.instance/null/g' lib/features/home/home_screen.dart
-      sed -i -e 's/await inAppReview.isAvailable()/false/g' lib/features/home/home_screen.dart
-      mkdir -p lib/core/utils
-      echo "import 'package:flutter/material.dart';" > lib/core/utils/review_helper.dart
-      echo "import 'package:hdict/features/settings/settings_provider.dart';" >> lib/core/utils/review_helper.dart
-      echo "class ReviewHelper {" >> lib/core/utils/review_helper.dart
-      echo "  static Future<void> maybeRequestReview(BuildContext context, SettingsProvider settings) async {}" >> lib/core/utils/review_helper.dart
-      echo "}" >> lib/core/utils/review_helper.dart
-      unset JAVA_HOME
-      ../srclib/flutter/bin/flutter config --no-analytics
-      ../srclib/flutter/bin/flutter pub get
-    build: |
-      unset JAVA_HOME
-      ../srclib/flutter/bin/flutter build apk --flavor fdroid --release
+    prebuild:
+      - sed -i -e '/org.gradle.java.home/d' android/gradle.properties
+      - sed -i -e '/in_app_review:/d' pubspec.yaml
+      - sed -i -e '/import.*in_app_review.dart/d' lib/features/home/home_screen.dart
+      - sed -i -e 's/InAppReview/dynamic/g' lib/features/home/home_screen.dart
+      - sed -i -e 's/dynamic.instance/null/g' lib/features/home/home_screen.dart
+      - sed -i -e 's/await inAppReview.isAvailable()/false/g' lib/features/home/home_screen.dart
+      - mkdir -p lib/core/utils
+      - echo "import 'package:flutter/material.dart';" > lib/core/utils/review_helper.dart
+      - echo "import 'package:hdict/features/settings/settings_provider.dart';" >> lib/core/utils/review_helper.dart
+      - echo "class ReviewHelper {" >> lib/core/utils/review_helper.dart
+      - echo "  static Future<void> maybeRequestReview(BuildContext context, SettingsProvider settings) async {}" >> lib/core/utils/review_helper.dart
+      - echo "}" >> lib/core/utils/review_helper.dart
+      - unset JAVA_HOME
+      - ../srclib/flutter/bin/flutter config --no-analytics
+      - ../srclib/flutter/bin/flutter pub get
+    build:
+      - unset JAVA_HOME
+      - ../srclib/flutter/bin/flutter build apk --flavor fdroid --release
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
