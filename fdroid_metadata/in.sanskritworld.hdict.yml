@@ -6,21 +6,18 @@ AuthorName: Dhaval Patel
 AuthorEmail: drdhaval2785@gmail.com
 WebSite: https://github.com/drdhaval2785/hdict
 SourceCode: https://github.com/drdhaval2785/hdict
+
+AutoName: hdict
+
 RepoType: git
 Repo: https://github.com/drdhaval2785/hdict
-
-AutoUpdateMode: Version %v
-UpdateCheckMode: Tags
-UpdateCheckData: pubspec.yaml|version:\s.+\+(\d+)|.|version:\s(.+)\+
-
-CurrentVersion: 1.5.15
-CurrentVersionCode: 39
 
 Builds:
   - versionName: 1.5.15
     versionCode: 39
     commit: main
     subdir: .
+    output: build/app/outputs/flutter-apk/app-fdroid-release.apk
     srclibs:
       - flutter@stable
     rm:
@@ -44,4 +41,9 @@ Builds:
     build: |
       unset JAVA_HOME
       ../srclib/flutter/bin/flutter build apk --flavor fdroid --release
-    output: build/app/outputs/flutter-apk/app-fdroid-release.apk
+
+AutoUpdateMode: Version %v
+UpdateCheckMode: Tags
+UpdateCheckData: pubspec.yaml|version:\s.+\+(\d+)|.|version:\s(.+)\+
+CurrentVersion: 1.5.15
+CurrentVersionCode: 39
