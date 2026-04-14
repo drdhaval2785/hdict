@@ -1,0 +1,61 @@
+name: Windows Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Cache Flutter dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            build/windows/x64
+          key: ${{ runner.os }}-flutter-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      - name: Get version from pubspec.yaml
+        id: version
+        run: |
+          $version = (Get-Content -Path "pubspec.yaml" | Select-String -Pattern "^version:").Line -replace "version: ",""
+          $version = $version.Trim()
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      - name: Create distribution folder
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $distFolder = "hdict-windows-$version"
+          New-Item -ItemType Directory -Path $distFolder -Force | Out-Null
+          Copy-Item "build\windows\x64\Release\*" -Destination $distFolder -Recurse -Force
+
+      - name: Create zip archive
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          Compress-Archive -Path "hdict-windows-$version\*" -DestinationPath "hdict-windows-$version.zip" -Force
+        shell: pwsh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hdict-windows-${{ steps.version.outputs.version }}
+          path: hdict-windows-*.zip
+          retention-days: 90
