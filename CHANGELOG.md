@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.16] - 2026-04-14
+
+### Added
+
+- **F-Droid Support**: Fdroid build now passes. 
+
 ## [1.5.15] - 2026-04-13
 
 ### Added
