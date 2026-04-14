@@ -25,6 +25,7 @@ Builds:
       - macos
       - web
       - windows
+      - snap
     prebuild:
       - sed -i -e '/org.gradle.java.home/d' android/gradle.properties
       - sed -i -e '/^[[:space:]]*in_app_review:/d' pubspec.yaml
@@ -46,7 +47,7 @@ Builds:
       - ../srclib/flutter/bin/flutter pub get
     build:
       - unset JAVA_HOME
-      - ../srclib/flutter/bin/flutter build apk --flavor fdroid --release --no-deferred-components
+      - ../srclib/flutter/bin/flutter build apk --flavor fdroid --release
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
