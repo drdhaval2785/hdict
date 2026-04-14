@@ -15,7 +15,7 @@ Repo: https://github.com/drdhaval2785/hdict
 Builds:
   - versionName: 1.5.15
     versionCode: 39
-    commit: bf84cef1fb39d24f94b87077ff71f13c40dd0174
+    commit: d009ceb6ee2b59f24a1160b60a4ba4dd36c69ac1
     output: build/app/outputs/flutter-apk/app-fdroid-release.apk
     srclibs:
       - flutter@stable
@@ -46,7 +46,7 @@ Builds:
       - ../srclib/flutter/bin/flutter pub get
     build:
       - unset JAVA_HOME
-      - ../srclib/flutter/bin/flutter build apk --flavor fdroid --release
+      - ../srclib/flutter/bin/flutter build apk --flavor fdroid --release --no-deferred-components
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
