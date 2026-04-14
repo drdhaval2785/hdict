@@ -13,9 +13,9 @@ RepoType: git
 Repo: https://github.com/drdhaval2785/hdict
 
 Builds:
-  - versionName: 1.5.15
-    versionCode: 39
-    commit: fa53376d6054c5f8bba46a8ec23d8b32800f3705
+  - versionName: 1.5.16
+    versionCode: 40
+    commit: v1.5.16
     output: build/app/outputs/flutter-apk/app-fdroid-release.apk
     srclibs:
       - flutter@stable
@@ -52,5 +52,5 @@ Builds:
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
 UpdateCheckData: pubspec.yaml|version:\s.+\+(\d+)|.|version:\s(.+)\+
-CurrentVersion: 1.5.15
-CurrentVersionCode: 39
+CurrentVersion: 1.5.16
+CurrentVersionCode: 40
