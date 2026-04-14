@@ -40,12 +40,22 @@ jobs:
           echo "version=$version" >> $env:GITHUB_OUTPUT
         shell: pwsh
 
+      - name: Find release folder
+        id: find
+        run: |
+          $releasePath = Get-ChildItem -Path "build\windows\x64" -Recurse -Filter "hdict.exe" | Select-Object -First 1 | Select-Object -ExpandProperty DirectoryName
+          Write-Output "Found release folder: $releasePath"
+          Write-Output "release=$releasePath" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
       - name: Create distribution folder
         run: |
           $version = "${{ steps.version.outputs.version }}"
+          $releasePath = "${{ steps.find.outputs.release }}"
           $distFolder = "hdict-windows-$version"
           New-Item -ItemType Directory -Path $distFolder -Force | Out-Null
-          Copy-Item "build\windows\x64\Release\*" -Destination $distFolder -Recurse -Force
+          Copy-Item "$releasePath\*" -Destination $distFolder -Recurse -Force
+        shell: pwsh
 
       - name: Create zip archive
         run: |
