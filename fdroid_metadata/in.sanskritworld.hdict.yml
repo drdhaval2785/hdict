@@ -15,7 +15,7 @@ Repo: https://github.com/drdhaval2785/hdict
 Builds:
   - versionName: 1.5.15
     versionCode: 39
-    commit: d009ceb6ee2b59f24a1160b60a4ba4dd36c69ac1
+    commit: fa53376d6054c5f8bba46a8ec23d8b32800f3705
     output: build/app/outputs/flutter-apk/app-fdroid-release.apk
     srclibs:
       - flutter@stable
