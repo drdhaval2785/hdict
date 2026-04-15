@@ -42,12 +42,12 @@ Builds:
       - echo "  static Future<void> maybeRequestReview(BuildContext context, SettingsProvider
         settings) async {}" >> lib/core/utils/review_helper.dart
       - echo "}" >> lib/core/utils/review_helper.dart
-      - unset JAVA_HOME
-      - ../srclib/flutter/bin/flutter config --no-analytics
-      - ../srclib/flutter/bin/flutter pub get
+      - export PUB_CACHE=$(pwd)/.pub-cache
+      - $$flutter$$/bin/flutter config --no-analytics
+      - $$flutter$$/bin/flutter pub get
     build:
-      - unset JAVA_HOME
-      - ../srclib/flutter/bin/flutter build apk --flavor fdroid --release
+      - export PUB_CACHE=$(pwd)/.pub-cache
+      - $$flutter$$/bin/flutter build apk --flavor fdroid --release
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
