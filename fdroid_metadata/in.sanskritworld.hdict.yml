@@ -29,7 +29,7 @@ Builds:
     prebuild:
       - sed -i -e '/org.gradle.java.home/d' android/gradle.properties
       - sed -i -e '/^[[:space:]]*in_app_review:/d' pubspec.yaml
-      - rm -f pubspec.lock
+      - sed -i -e '/in_app_review/,/version:/d' pubspec.lock
       - sed -i -e '/import.*in_app_review.dart/d' lib/features/home/home_screen.dart
       - sed -i -e 's/InAppReview/dynamic/g' lib/features/home/home_screen.dart
       - sed -i -e 's/dynamic.instance/null/g' lib/features/home/home_screen.dart
