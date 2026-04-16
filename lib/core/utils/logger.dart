@@ -8,7 +8,7 @@ bool enableDebugLogs = true;
 bool showHtmlProcessing = true;
 
 /// Flag to control multimedia processing debug logs (images, audio, video).
-bool showMultimediaProcessing = false;
+bool showMultimediaProcessing = true;
 
 /// Flag to control sorting debug logs (SQLite vs Dart sort verification).
 bool showSorting = false;

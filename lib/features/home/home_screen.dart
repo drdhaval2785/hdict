@@ -116,9 +116,15 @@ class HomeScreen extends StatefulWidget {
         'dict_name': dictName,
         'format': format,
         'type_sequence': typeSequence,
+        'css': dictMeta?['css'], // Add CSS to consolidated result
         'word': allHeadwords.join(' | '),
         'definitions': definitionsList,
       });
+      if (dictMeta?['css'] != null) {
+        hDebugPrint(
+          '[Home] Added css to consolidated result for dict_id=$dictId, css length=${(dictMeta!['css'] as String).length}',
+        );
+      }
     }
     return consolidated;
   }
@@ -2506,6 +2512,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             ) ??
                             '';
 
+                        hDebugPrint(
+                          '[Home fetch] dictId=$dictId, dict css value: ${dict['css'] != null ? "present" : "null"}',
+                        );
+
                         return {
                           'id': dictId,
                           'word': wordValue,
@@ -2517,6 +2527,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         };
                       }),
                     );
+                    // Debug: check one of the results
+                    if (results.isNotEmpty && results.first != null) {
+                      hDebugPrint(
+                        '[Home] first result dict_id=${results.first!['id']}, css key exists: ${results.first!.containsKey('css')}, css value: ${results.first!['css'] != null ? "present" : "null"}',
+                      );
+                    }
                     HPerf.end(fetchAllDefsWatch, 'fetchAllDefs_Wall');
 
                     final Map<int, Map<String, List<Map<String, dynamic>>>>
@@ -2956,6 +2972,7 @@ class _MdictDefinitionContent extends StatefulWidget {
 class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
   bool _isProcessing = false;
   late List<Map<String, dynamic>> _rawDefinitions;
+  Map<String, Style>? _customCssStyles;
 
   @override
   void initState() {
@@ -2980,10 +2997,25 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
     }
 
     // Combine external CSS (from defMap) with internal CSS (from mdictReader)
-    // External CSS takes priority if both exist
+    // External CSS takes priority over MDD CSS
     final externalCss = widget.defMap['css'] as String?;
-    // Use external CSS as base, MDD CSS overrides it when available
-    final combinedCss = mdictReader.cssContent ?? externalCss;
+
+    hDebugPrint('[CSS Debug] defMap keys: ${widget.defMap.keys.toList()}');
+    hDebugPrint('[CSS Debug] dictId: ${widget.dictId}');
+
+    // Use external CSS as base, MDD CSS overrides it when available (per entry-specific overrides)
+    final combinedCss = externalCss ?? mdictReader.cssContent;
+
+    hDebugPrint(
+      '[CSS] externalCss from db: ${externalCss != null ? "present (${externalCss.length} chars)" : "null"}',
+    );
+    hDebugPrint(
+      '[CSS] mdictReader.cssContent (from mdd): ${mdictReader.cssContent != null ? "present (${mdictReader.cssContent!.length} chars)" : "null"}',
+    );
+    hDebugPrint(
+      '[CSS] combinedCss being used: ${combinedCss != null ? "present (${combinedCss.length} chars)" : "null"}',
+    );
+
     final mpWithCss = MultimediaProcessor(mdictReader, combinedCss);
     final format = widget.defMap['format'] as String? ?? 'mdict';
     final typeSequence = widget.defMap['type_sequence'] as String?;
@@ -3006,8 +3038,27 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
 
       processed = await mpWithCss.processHtmlWithInlineVideo(processed);
 
+      hDebugPrint(
+        '[CSS] processedHtml length: ${processed.length}, has style tag: ${processed.contains('<style type="text/css">')}',
+      );
+
       final headwordHtml = defData['headwordHtml'] as String;
       defData['processedHtml'] = '$headwordHtml\n$processed';
+    }
+
+    // Parse combined CSS into flutter_html Style objects for proper precedence
+    if (combinedCss != null && combinedCss.isNotEmpty) {
+      try {
+        _customCssStyles = Style.fromCss(combinedCss, (error, trace) {
+          hDebugPrint('[CSS] CSS parse error: $error');
+          return null; // OnCssParseError returns String?
+        });
+        hDebugPrint(
+          '[CSS] Parsed custom CSS into Style objects: ${_customCssStyles!.keys.length} selectors',
+        );
+      } catch (e) {
+        hDebugPrint('[CSS] Failed to parse CSS: $e');
+      }
     }
 
     if (mounted) {
@@ -3050,6 +3101,60 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
             Brightness.dark
         ? '#ff9900'
         : '#ffeb3b';
+
+    // Build style map: custom CSS from dictionary takes precedence over app theme
+    // Note: addAll REPLACES existing keys, so we must add theme styles FIRST,
+    // then custom CSS will override them for the same selectors
+    final Map<String, Style> mergedStyle = {};
+
+    // Add app theme styles as base
+    mergedStyle.addAll({
+      "body": Style(
+        fontSize: FontSize(settings.fontSize),
+        lineHeight: LineHeight.em(1.5),
+        margin: Margins.zero,
+        padding: HtmlPaddings.zero,
+        color: settings.getEffectiveTextColor(context),
+        fontFamily: settings.fontFamily,
+      ),
+      "a": Style(
+        color: theme.colorScheme.primary,
+        textDecoration: TextDecoration.underline,
+      ),
+      "mark": Style(
+        backgroundColor: Color(
+          int.parse(highlightCol.replaceFirst('#', '0xFF')),
+        ),
+        color: Colors.black,
+      ),
+      ".dict-word": Style(
+        color: settings.textColor,
+        textDecoration: TextDecoration.none,
+      ),
+      ".headword": Style(
+        color: settings.getEffectiveHeadwordColor(context),
+        fontWeight: FontWeight.bold,
+      ),
+      "hr": Style(
+        margin: Margins.zero,
+        padding: HtmlPaddings.zero,
+        border: Border(
+          bottom: BorderSide(color: theme.colorScheme.outline, width: 1),
+        ),
+      ),
+      "blockquote": Style(
+        margin: Margins.only(left: 6),
+        padding: HtmlPaddings.only(left: 4),
+      ),
+    });
+
+    // Now add custom CSS from dictionary - this overrides theme styles for same selectors
+    if (_customCssStyles != null) {
+      mergedStyle.addAll(_customCssStyles!);
+      hDebugPrint(
+        '[CSS] Using custom CSS with ${_customCssStyles!.keys.length} selectors, merged with app theme',
+      );
+    }
 
     return Container(
       color: settings.getEffectiveBackgroundColor(context),
@@ -3173,54 +3278,7 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
                             behavior: HitTestBehavior.translucent,
                             child: Html(
                               data: definitionHtml,
-                              style: {
-                                "body": Style(
-                                  fontSize: FontSize(settings.fontSize),
-                                  lineHeight: LineHeight.em(1.5),
-                                  margin: Margins.zero,
-                                  padding: HtmlPaddings.zero,
-                                  color: settings.getEffectiveTextColor(
-                                    context,
-                                  ),
-                                  fontFamily: settings.fontFamily,
-                                ),
-                                "a": Style(
-                                  color: theme.colorScheme.primary,
-                                  textDecoration: TextDecoration.underline,
-                                ),
-                                "mark": Style(
-                                  backgroundColor: Color(
-                                    int.parse(
-                                      highlightCol.replaceFirst('#', '0xFF'),
-                                    ),
-                                  ),
-                                  color: Colors.black,
-                                ),
-                                ".dict-word": Style(
-                                  color: settings.textColor,
-                                  textDecoration: TextDecoration.none,
-                                ),
-                                ".headword": Style(
-                                  color: settings.getEffectiveHeadwordColor(
-                                    context,
-                                  ),
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                "hr": Style(
-                                  margin: Margins.zero,
-                                  padding: HtmlPaddings.zero,
-                                  border: Border(
-                                    bottom: BorderSide(
-                                      color: theme.colorScheme.outline,
-                                      width: 1,
-                                    ),
-                                  ),
-                                ),
-                                "blockquote": Style(
-                                  margin: Margins.only(left: 6),
-                                  padding: HtmlPaddings.only(left: 4),
-                                ),
-                              },
+                              style: mergedStyle,
                               extensions: [
                                 MddVideoHtmlExtension(
                                   dictId: defMap['dict_id'] as int? ?? 0,

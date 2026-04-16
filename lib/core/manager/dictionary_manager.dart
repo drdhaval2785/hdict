@@ -3543,7 +3543,9 @@ class DictionaryManager {
         try {
           if (await File(cssPath).exists()) {
             cssContent = await File(cssPath).readAsString();
-            hDebugPrint('[MDict Link] Found external CSS file: $cssPath');
+            hDebugPrint(
+              '[MDict Link] Found external CSS file: $cssPath (${cssContent?.length ?? 0} chars)',
+            );
           }
         } catch (e) {
           hDebugPrint('[MDict Link] Could not read CSS file: $e');
@@ -4620,6 +4622,8 @@ class DictionaryManager {
       }
       await reader.open();
 
+      hDebugPrint('[MDict Import] mdxPath = $mdxPath');
+
       final checksum = await _calculateChecksum(mdxPath);
       final existing = await _dbHelper.getDictionaryByChecksum(checksum);
       if (existing != null) {
@@ -4662,20 +4666,57 @@ class DictionaryManager {
         await File(mddSourcePath).copy(finalMddPath);
       }
 
-      // Also copy external .css file if it exists
-      final cssSourcePath = mdxPath.replaceAll(
-        RegExp(r'\.mdx$', caseSensitive: false),
-        '.css',
+      // Also copy external .css files from the same directory as the MDX file
+      // Store all CSS files found - they may be referenced by different entries
+      final mdxDir = p.dirname(mdxPath);
+      hDebugPrint('[MDict Import] Looking for CSS files in: $mdxDir');
+      final List<String> cssFilesFound = [];
+      final List<String> cssContents = [];
+
+      try {
+        final dir = Directory(mdxDir);
+        if (await dir.exists()) {
+          await for (final entity in dir.list()) {
+            hDebugPrint('[MDict Import] Found file in dir: ${entity.path}');
+            if (entity is File && entity.path.toLowerCase().endsWith('.css')) {
+              cssFilesFound.add(entity.path);
+              cssContents.add(await entity.readAsString());
+              hDebugPrint('[MDict Import] Found CSS file: ${entity.path}');
+            }
+          }
+        } else {
+          hDebugPrint('[MDict Import] Directory does not exist: $mdxDir');
+        }
+      } catch (e) {
+        hDebugPrint('[MDict Import] Error scanning for CSS files: $e');
+      }
+
+      hDebugPrint(
+        '[MDict Import] CSS files found: ${cssFilesFound.length} - $cssFilesFound',
       );
-      String? cssContent;
-      if (await File(cssSourcePath).exists()) {
+
+      // Combine all CSS content into one string (separate with newlines)
+      final combinedCss = cssContents.isNotEmpty
+          ? cssContents.join('\n\n')
+          : null;
+
+      hDebugPrint(
+        '[MDict Import] combinedCss: ${combinedCss != null ? "present (${combinedCss.length} chars)" : "null"}',
+      );
+
+      // Copy all CSS files to permanent storage
+      for (int i = 0; i < cssFilesFound.length; i++) {
         final cssDestPath = p.join(
           permanentDir.path,
-          p.basename(cssSourcePath),
+          p.basename(cssFilesFound[i]),
         );
-        await File(cssSourcePath).copy(cssDestPath);
-        cssContent = await File(cssDestPath).readAsString();
-        hDebugPrint('[MDict Import] Found external CSS file: $cssSourcePath');
+        await File(cssFilesFound[i]).copy(cssDestPath);
+      }
+
+      if (combinedCss != null) {
+        hDebugPrint(
+          '[MDict Import] Combined ${cssFilesFound.length} CSS files, total size: ${combinedCss.length} chars',
+        );
       }
 
       await reader.close();
@@ -4690,7 +4731,7 @@ class DictionaryManager {
         checksum: checksum,
         sourceUrl: _currentImportSourceUrl,
         mddPath: finalMddPath,
-        css: cssContent,
+        css: combinedCss,
       );
 
       yield ImportProgress(message: 'Indexing headwords...', value: 0.5);

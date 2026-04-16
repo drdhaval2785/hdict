@@ -1624,13 +1624,31 @@ class DatabaseHelper {
   }
 
   Future<List<Map<String, dynamic>>> getDictionaries() async {
-    if (_dictionaryCache != null) return _dictionaryCache!;
+    if (_dictionaryCache != null) {
+      // Check if any dictionary has CSS stored
+      for (final d in _dictionaryCache!) {
+        if (d['css'] != null && (d['css'] as String).isNotEmpty) {
+          hDebugPrint(
+            '[DB] getDictionaries: dict_id=${d['id']}, name=${d['name']}, css length=${(d['css'] as String).length}',
+          );
+        }
+      }
+      return _dictionaryCache!;
+    }
     try {
       final db = await database;
       _dictionaryCache = await db.query(
         'dictionaries',
         orderBy: 'display_order ASC',
       );
+      // Debug: check for CSS
+      for (final d in _dictionaryCache!) {
+        if (d['css'] != null && (d['css'] as String).isNotEmpty) {
+          hDebugPrint(
+            '[DB] getDictionaries: dict_id=${d['id']}, name=${d['name']}, css length=${(d['css'] as String).length}',
+          );
+        }
+      }
       return _dictionaryCache!;
     } catch (e) {
       hDebugPrint('Error getting dictionaries: $e');
@@ -1699,7 +1717,15 @@ class DatabaseHelper {
 
   Future<Map<String, dynamic>?> getDictionaryById(int id) async {
     await _ensureDictionaryMapCache();
-    return _dictionaryMapCache?[id];
+    final dict = _dictionaryMapCache?[id];
+    if (dict != null &&
+        dict['css'] != null &&
+        (dict['css'] as String).isNotEmpty) {
+      hDebugPrint(
+        '[DB] getDictionaryById: id=$id, name=${dict['name']}, css length=${(dict['css'] as String).length}',
+      );
+    }
+    return dict;
   }
 
   Future<Map<String, dynamic>?> getDictionaryByChecksum(String checksum) async {
