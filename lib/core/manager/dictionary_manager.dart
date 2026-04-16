@@ -3533,6 +3533,23 @@ class DictionaryManager {
           ? safUris['mdd']!
           : mdxPath.replaceAll(RegExp(r'\.mdx$', caseSensitive: false), '.mdd');
 
+      // Detect external CSS file
+      String? cssContent;
+      if (!kIsWeb) {
+        final cssPath = mdxPath.replaceAll(
+          RegExp(r'\.mdx$', caseSensitive: false),
+          '.css',
+        );
+        try {
+          if (await File(cssPath).exists()) {
+            cssContent = await File(cssPath).readAsString();
+            hDebugPrint('[MDict Link] Found external CSS file: $cssPath');
+          }
+        } catch (e) {
+          hDebugPrint('[MDict Link] Could not read CSS file: $e');
+        }
+      }
+
       final reader = isSaf
           ? await MdictReader.fromUri(mdxPath, mddPath: mddPath)
           : await MdictReader.fromLinkedSource(
@@ -3565,6 +3582,7 @@ class DictionaryManager {
         sourceBookmark: bookmark,
         checksum: checksum,
         mddPath: mddPath,
+        css: cssContent,
       );
 
       final receivePort = ReceivePort();
@@ -4644,6 +4662,22 @@ class DictionaryManager {
         await File(mddSourcePath).copy(finalMddPath);
       }
 
+      // Also copy external .css file if it exists
+      final cssSourcePath = mdxPath.replaceAll(
+        RegExp(r'\.mdx$', caseSensitive: false),
+        '.css',
+      );
+      String? cssContent;
+      if (await File(cssSourcePath).exists()) {
+        final cssDestPath = p.join(
+          permanentDir.path,
+          p.basename(cssSourcePath),
+        );
+        await File(cssSourcePath).copy(cssDestPath);
+        cssContent = await File(cssDestPath).readAsString();
+        hDebugPrint('[MDict Import] Found external CSS file: $cssSourcePath');
+      }
+
       await reader.close();
 
       yield ImportProgress(message: 'Registering dictionary...', value: 0.3);
@@ -4656,6 +4690,7 @@ class DictionaryManager {
         checksum: checksum,
         sourceUrl: _currentImportSourceUrl,
         mddPath: finalMddPath,
+        css: cssContent,
       );
 
       yield ImportProgress(message: 'Indexing headwords...', value: 0.5);

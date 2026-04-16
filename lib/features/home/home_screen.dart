@@ -2513,6 +2513,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           'raw_content': content,
                           'format': dict['format'],
                           'type_sequence': dict['type_sequence'],
+                          'css': dict['css'],
                         };
                       }),
                     );
@@ -2978,7 +2979,11 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
       return;
     }
 
-    final mp = MultimediaProcessor(mdictReader, mdictReader.cssContent);
+    // Combine external CSS (from defMap) with internal CSS (from mdictReader)
+    // External CSS takes priority if both exist
+    final externalCss = widget.defMap['css'] as String?;
+    final combinedCss = externalCss ?? mdictReader.cssContent;
+    final mpWithCss = MultimediaProcessor(mdictReader, combinedCss);
     final format = widget.defMap['format'] as String? ?? 'mdict';
     final typeSequence = widget.defMap['type_sequence'] as String?;
 
@@ -2998,7 +3003,7 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
         underlineQuery: widget.highlightDefinition,
       );
 
-      processed = await mp.processHtmlWithInlineVideo(processed);
+      processed = await mpWithCss.processHtmlWithInlineVideo(processed);
 
       final headwordHtml = defData['headwordHtml'] as String;
       defData['processedHtml'] = '$headwordHtml\n$processed';

@@ -1128,6 +1128,7 @@ class DatabaseHelper {
     String?
     companionUri, // Pre-resolved companion file URI (e.g. SAF .dict URI)
     String? mddPath, // Path to the associated MDD file
+    String? css, // CSS content from external .css file
   }) async {
     final db = await database;
 
@@ -1161,7 +1162,7 @@ class DatabaseHelper {
       'index_definitions': indexDefinitions ? 1 : 0,
       'format': format,
       'type_sequence': typeSequence,
-      'css': null,
+      'css': css,
       'checksum': checksum,
       'source_url': sourceUrl,
       'source_type': sourceType,
