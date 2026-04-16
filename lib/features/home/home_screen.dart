@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:hdict/core/database/database_helper.dart';
 import 'package:hdict/core/manager/dictionary_manager.dart';
 import 'package:flutter_html/flutter_html.dart';
+import 'package:flutter_html_table/flutter_html_table.dart';
 import 'package:flutter/services.dart';
 import 'package:hdict/core/utils/html_lookup_wrapper.dart';
 import 'package:hdict/core/utils/multimedia_processor.dart';
@@ -2200,12 +2201,38 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                       margin: Margins.only(left: 6),
                                       padding: HtmlPaddings.only(left: 4),
                                     ),
+                                    "table": Style(
+                                      border: Border.all(
+                                        color: Colors.grey.shade400,
+                                      ),
+                                    ),
+                                    "tr": Style(
+                                      border: Border(
+                                        bottom: BorderSide(
+                                          color: Colors.grey.shade300,
+                                        ),
+                                      ),
+                                    ),
+                                    "td": Style(
+                                      padding: HtmlPaddings.all(4),
+                                      border: Border.all(
+                                        color: Colors.grey.shade300,
+                                      ),
+                                    ),
+                                    "th": Style(
+                                      padding: HtmlPaddings.all(4),
+                                      fontWeight: FontWeight.bold,
+                                      border: Border.all(
+                                        color: Colors.grey.shade300,
+                                      ),
+                                    ),
                                   },
                                   extensions: [
                                     MddVideoHtmlExtension(
                                       dictId: defMap['dict_id'] as int? ?? 0,
                                     ),
                                     const AnchorIdExtension(),
+                                    const TableHtmlExtension(),
                                   ],
                                   onLinkTap: (url, attributes, element) async {
                                     hDebugPrint(
@@ -2888,12 +2915,30 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           ),
                         ),
                       ),
+                      "table": Style(
+                        border: Border.all(color: Colors.grey.shade400),
+                      ),
+                      "tr": Style(
+                        border: Border(
+                          bottom: BorderSide(color: Colors.grey.shade300),
+                        ),
+                      ),
+                      "td": Style(
+                        padding: HtmlPaddings.all(4),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      "th": Style(
+                        padding: HtmlPaddings.all(4),
+                        fontWeight: FontWeight.bold,
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
                     },
                     extensions: [
                       MddVideoHtmlExtension(
                         dictId: defMap['dict_id'] as int? ?? 0,
                       ),
                       const AnchorIdExtension(),
+                      const TableHtmlExtension(),
                     ],
                     onLinkTap: (url, attributes, element) async {
                       if (url != null && settings.isOpenPopupOnTap) {
@@ -3127,6 +3172,19 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
       "blockquote": Style(
         margin: Margins.only(left: 6),
         padding: HtmlPaddings.only(left: 4),
+      ),
+      "table": Style(border: Border.all(color: Colors.grey.shade400)),
+      "tr": Style(
+        border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+      ),
+      "td": Style(
+        padding: HtmlPaddings.all(4),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      "th": Style(
+        padding: HtmlPaddings.all(4),
+        fontWeight: FontWeight.bold,
+        border: Border.all(color: Colors.grey.shade300),
       ),
     });
 
@@ -3696,6 +3754,23 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
                       "blockquote": Style(
                         margin: Margins.only(left: 6),
                         padding: HtmlPaddings.only(left: 4),
+                      ),
+                      "table": Style(
+                        border: Border.all(color: Colors.grey.shade400),
+                      ),
+                      "tr": Style(
+                        border: Border(
+                          bottom: BorderSide(color: Colors.grey.shade300),
+                        ),
+                      ),
+                      "td": Style(
+                        padding: HtmlPaddings.all(4),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      "th": Style(
+                        padding: HtmlPaddings.all(4),
+                        fontWeight: FontWeight.bold,
+                        border: Border.all(color: Colors.grey.shade300),
                       ),
                     },
                     extensions: [

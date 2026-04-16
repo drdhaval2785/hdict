@@ -37,6 +37,7 @@ dependencies:
   archive: ^4.0.9
   crypto: ^3.0.7
   flutter_html: ^3.0.0
+  flutter_html_table: ^3.0.0
   file_selector: ^1.1.0
   blockchain_utils: ^6.0.0
   charset: ^2.0.1
