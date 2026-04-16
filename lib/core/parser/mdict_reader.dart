@@ -169,13 +169,15 @@ class MdictReader {
 
   bool get hasMdd => _mddReader != null;
 
+  bool get mddReady => _mddReader != null && _mddReader!.isInitialized;
+
   Future<List<int>?> getMddResource(String key) async {
-    if (_mddReader == null) return null;
+    if (_mddReader == null || !_mddReader!.isInitialized) return null;
     return _mddReader!.getResource(key);
   }
 
   Future<Uint8List?> getMddResourceBytes(String key) async {
-    if (_mddReader == null) return null;
+    if (_mddReader == null || !_mddReader!.isInitialized) return null;
     return _mddReader!.getResourceAsBytes(key);
   }
 

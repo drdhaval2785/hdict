@@ -82,18 +82,27 @@ class MultimediaProcessor {
             final cssFileName = html.substring(hrefValueStart, hrefValueEnd);
             if (cssFileName.toLowerCase().endsWith('.css')) {
               // Try to load from MDD resources
-              if (_mddReader != null) {
-                final mddCssBytes = await _mddReader.getMddResourceBytes(
-                  cssFileName,
-                );
-                if (mddCssBytes != null) {
-                  cssOverrides[cssFileName] = utf8.decode(
-                    mddCssBytes,
-                    allowMalformed: true,
+              // Only attempt if MddReader is available and properly initialized
+              if (_mddReader != null && _mddReader.mddReady) {
+                try {
+                  final mddCssBytes = await _mddReader.getMddResourceBytes(
+                    cssFileName,
                   );
+                  if (mddCssBytes != null) {
+                    cssOverrides[cssFileName] = utf8.decode(
+                      mddCssBytes,
+                      allowMalformed: true,
+                    );
+                    if (showMultimediaProcessing) {
+                      hDebugPrint(
+                        'MultimediaProcessor: Loaded CSS from MDD: $cssFileName',
+                      );
+                    }
+                  }
+                } catch (e) {
                   if (showMultimediaProcessing) {
                     hDebugPrint(
-                      'MultimediaProcessor: Loaded CSS from MDD: $cssFileName',
+                      'MultimediaProcessor: Failed to load CSS from MDD: $e',
                     );
                   }
                 }
@@ -204,7 +213,9 @@ class MultimediaProcessor {
           );
         }
         if (resourceKey != null) {
-          final bytes = await _mddReader!.getMddResourceBytes(resourceKey);
+          final bytes = (_mddReader != null && _mddReader.mddReady)
+              ? await _mddReader.getMddResourceBytes(resourceKey)
+              : null;
           if (showMultimediaProcessing) {
             hDebugPrint('MultimediaProcessor: Got bytes: ${bytes?.length}');
           }
@@ -362,12 +373,12 @@ class MultimediaProcessor {
   }
 
   Future<Uint8List?> getAudioResource(String key) async {
-    if (_mddReader == null) return null;
+    if (_mddReader == null || !_mddReader.mddReady) return null;
     return _mddReader.getMddResourceBytes(key);
   }
 
   Future<Uint8List?> getVideoResource(String key) async {
-    if (_mddReader == null) return null;
+    if (_mddReader == null || !_mddReader.mddReady) return null;
     return _mddReader.getMddResourceBytes(key);
   }
 }
