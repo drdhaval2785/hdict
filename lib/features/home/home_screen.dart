@@ -2141,6 +2141,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                 },
                                 child: Html(
                                   data: definitionHtml,
+                                  shrinkWrap: true,
                                   style: {
                                     "body": Style(
                                       fontSize: FontSize(settings.fontSize),
@@ -2218,6 +2219,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                       border: Border.all(
                                         color: Colors.grey.shade300,
                                       ),
+                                    ),
+                                    "th": Style(
+                                      padding: HtmlPaddings.all(4),
+                                      border: Border.all(
+                                        color: Colors.grey.shade300,
+                                      ),
+                                      textAlign: TextAlign.justify,
                                     ),
                                     "th": Style(
                                       padding: HtmlPaddings.all(4),
@@ -2870,6 +2878,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   },
                   child: Html(
                     data: definitionHtml,
+                    shrinkWrap: true,
                     style: {
                       "body": Style(
                         fontSize: FontSize(settings.fontSize),
@@ -3315,6 +3324,7 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
                             behavior: HitTestBehavior.translucent,
                             child: Html(
                               data: definitionHtml,
+                              shrinkWrap: true,
                               style: mergedStyle,
                               extensions: [
                                 MddVideoHtmlExtension(
@@ -3706,6 +3716,7 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
                   },
                   child: Html(
                     data: definitionHtml,
+                    shrinkWrap: true,
                     style: {
                       "body": Style(
                         fontSize: FontSize(settings.fontSize),
@@ -3757,6 +3768,7 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
                       ),
                       "table": Style(
                         border: Border.all(color: Colors.grey.shade400),
+                        width: Width.auto(),
                       ),
                       "tr": Style(
                         border: Border(
