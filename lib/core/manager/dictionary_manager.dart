@@ -4138,7 +4138,13 @@ class DictionaryManager {
       final ifoParser = IfoParser();
       ifoParser.parseContent(ifoContent);
 
-      final bookName = ifoParser.bookName ?? 'Unknown Web Dictionary';
+      final bookName =
+          ifoParser.bookName ??
+          (_currentImportSourceUrl != null
+              ? p.basenameWithoutExtension(
+                  _currentImportSourceUrl!.split('/').last,
+                )
+              : 'Unknown Web Dictionary');
       final basePath = p.withoutExtension(ifoName);
 
       // Find required components in the map
@@ -4432,6 +4438,13 @@ class DictionaryManager {
 
   Future<void> toggleDictionaryEnabled(int id, bool isEnabled) async {
     await _dbHelper.updateDictionaryEnabled(id, isEnabled);
+  }
+
+  Future<void> renameDictionary(int id, String newName) async {
+    if (newName.trim().isEmpty) {
+      throw Exception('Dictionary name cannot be empty');
+    }
+    await _dbHelper.updateDictionaryName(id, newName.trim());
   }
 
   Future<void> updateDictionaryIndexDefinitions(

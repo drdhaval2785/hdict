@@ -1359,9 +1359,22 @@ class _DictionaryManagementScreenState
                                     _showReindexDialog(dict);
                                   } else if (value == 'delete') {
                                     _showDeleteDialog(dict);
+                                  } else if (value == 'rename') {
+                                    _showRenameDialog(dict);
                                   }
                                 },
                                 itemBuilder: (BuildContext context) => [
+                                  const PopupMenuItem(
+                                    value: 'rename',
+                                    child: ListTile(
+                                      leading: Icon(
+                                        Icons.edit,
+                                        color: Colors.orange,
+                                      ),
+                                      title: Text('Rename'),
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                  ),
                                   const PopupMenuItem(
                                     value: 'reindex',
                                     child: ListTile(
@@ -1787,5 +1800,65 @@ class _DictionaryManagementScreenState
         ],
       ),
     );
+  }
+
+  Future<void> _showRenameDialog(Map<String, dynamic> dict) async {
+    final currentName = dict['name'] as String;
+    final textController = TextEditingController(text: currentName);
+
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rename Dictionary'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Current name: $currentName'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: textController,
+              decoration: const InputDecoration(
+                labelText: 'New name',
+                border: OutlineInputBorder(),
+                hintText: 'Enter new dictionary name',
+              ),
+              autofocus: true,
+              onSubmitted: (value) => Navigator.pop(context, value),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, textController.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (newName != null &&
+        newName.trim().isNotEmpty &&
+        newName != currentName) {
+      try {
+        await _dictionaryManager.renameDictionary(dict['id'], newName.trim());
+        await _loadDictionaries();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Dictionary renamed successfully')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Failed to rename: $e')));
+        }
+      }
+    }
   }
 }

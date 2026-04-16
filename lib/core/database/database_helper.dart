@@ -1674,6 +1674,18 @@ class DatabaseHelper {
     clearDictionaryCache();
   }
 
+  Future<void> updateDictionaryName(int id, String newName) async {
+    final db = await database;
+    await db.update(
+      'dictionaries',
+      {'name': newName},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    clearDictionaryCache();
+    clearQueryCache();
+  }
+
   Future<void> _ensureDictionaryMapCache() async {
     if (_dictionaryMapCache != null) return;
     final dicts = await getDictionaries();
