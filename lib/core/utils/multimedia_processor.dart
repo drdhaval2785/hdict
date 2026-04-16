@@ -5,11 +5,11 @@ import 'package:hdict/core/utils/logger.dart';
 
 class MultimediaProcessor {
   final MdictReader? _mddReader;
-  final String? _cssContent;
+  final String? _externalCssContent;
 
-  MultimediaProcessor(this._mddReader, this._cssContent);
+  MultimediaProcessor(this._mddReader, this._externalCssContent);
 
-  String? get cssContent => _cssContent;
+  String? get cssContent => _externalCssContent;
 
   Future<String> processHtmlWithMedia(String html) async {
     String processed = html;
@@ -33,7 +33,7 @@ class MultimediaProcessor {
       );
     }
 
-    processed = injectCss(processed);
+    processed = await injectCssWithReferences(processed);
 
     return processed;
   }
@@ -45,8 +45,112 @@ class MultimediaProcessor {
     return processed;
   }
 
+  /// Injects CSS into HTML, handling both base external CSS and per-entry CSS references.
+  /// CSS references in HTML (from MDD or external) override the base external CSS.
+  Future<String> injectCssWithReferences(String html) async {
+    // Start with base external CSS if available
+    final baseCss = _externalCssContent;
+    final Map<String, String> cssOverrides = {};
+
+    // If we have base external CSS, use it as starting point
+    if (baseCss != null && baseCss.isNotEmpty) {
+      cssOverrides[''] = baseCss; // empty key = base/default
+    }
+
+    // Parse HTML for <link> tags referencing CSS files
+    final linkPattern = '<link';
+    final relPattern = 'stylesheet';
+    final hrefPattern = 'href="';
+
+    int pos = 0;
+    while (pos < html.length) {
+      final linkStart = html.indexOf(linkPattern, pos);
+      if (linkStart == -1) break;
+
+      final linkEnd = html.indexOf('>', linkStart);
+      if (linkEnd == -1) break;
+
+      final linkTag = html.substring(linkStart, linkEnd + 1);
+
+      // Check if it's a stylesheet
+      if (linkTag.toLowerCase().contains(relPattern)) {
+        final hrefStart = html.indexOf(hrefPattern, linkStart);
+        if (hrefStart != -1 && hrefStart < linkEnd) {
+          final hrefValueStart = hrefStart + hrefPattern.length;
+          final hrefValueEnd = html.indexOf('"', hrefValueStart);
+          if (hrefValueEnd != -1 && hrefValueEnd < linkEnd) {
+            final cssFileName = html.substring(hrefValueStart, hrefValueEnd);
+            if (cssFileName.toLowerCase().endsWith('.css')) {
+              // Try to load from MDD resources
+              if (_mddReader != null) {
+                final mddCssBytes = await _mddReader.getMddResourceBytes(
+                  cssFileName,
+                );
+                if (mddCssBytes != null) {
+                  cssOverrides[cssFileName] = utf8.decode(
+                    mddCssBytes,
+                    allowMalformed: true,
+                  );
+                  if (showMultimediaProcessing) {
+                    hDebugPrint(
+                      'MultimediaProcessor: Loaded CSS from MDD: $cssFileName',
+                    );
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      pos = linkEnd + 1;
+    }
+
+    // Build combined CSS string: base first, then overrides
+    final allCss = StringBuffer();
+    for (final entry in cssOverrides.entries) {
+      if (entry.key.isNotEmpty) {
+        // Named CSS files override
+        allCss.writeln('/* CSS: ${entry.key} */');
+        allCss.writeln(entry.value);
+      } else {
+        // Base CSS
+        allCss.writeln(entry.value);
+      }
+    }
+
+    final combinedCss = allCss.toString();
+    if (combinedCss.isEmpty) return html;
+
+    final styleTag = '<style type="text/css">$combinedCss</style>';
+
+    if (html.toLowerCase().contains('<html')) {
+      final headMatch = RegExp(
+        r'<head([^>]*)>',
+        caseSensitive: false,
+      ).firstMatch(html);
+      if (headMatch != null) {
+        final headEnd = html.indexOf('>', headMatch.start);
+        return '${html.substring(0, headEnd + 1)}$styleTag${html.substring(headEnd + 1)}';
+      }
+    }
+
+    if (html.toLowerCase().contains('<body')) {
+      final bodyMatch = RegExp(
+        r'<body([^>]*)>',
+        caseSensitive: false,
+      ).firstMatch(html);
+      if (bodyMatch != null) {
+        final bodyEnd = html.indexOf('>', bodyMatch.start);
+        return '${html.substring(0, bodyEnd + 1)}$styleTag${html.substring(bodyEnd + 1)}';
+      }
+    }
+
+    return '$styleTag$html';
+  }
+
+  /// Legacy single CSS injection - kept for backward compatibility
   String injectCss(String html) {
-    final css = _cssContent;
+    final css = _externalCssContent;
     if (css == null || css.isEmpty) return html;
 
     final styleTag = '<style type="text/css">$css</style>';
@@ -252,7 +356,7 @@ class MultimediaProcessor {
     }
     processed = _addMediaTapHandlers(processed, inlineVideo: true);
 
-    processed = injectCss(processed);
+    processed = await injectCssWithReferences(processed);
 
     return processed;
   }

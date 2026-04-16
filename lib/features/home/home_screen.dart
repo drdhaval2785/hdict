@@ -2982,7 +2982,8 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
     // Combine external CSS (from defMap) with internal CSS (from mdictReader)
     // External CSS takes priority if both exist
     final externalCss = widget.defMap['css'] as String?;
-    final combinedCss = externalCss ?? mdictReader.cssContent;
+    // Use external CSS as base, MDD CSS overrides it when available
+    final combinedCss = mdictReader.cssContent ?? externalCss;
     final mpWithCss = MultimediaProcessor(mdictReader, combinedCss);
     final format = widget.defMap['format'] as String? ?? 'mdict';
     final typeSequence = widget.defMap['type_sequence'] as String?;
