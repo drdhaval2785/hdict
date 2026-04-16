@@ -57,14 +57,21 @@ jobs:
           Copy-Item "$releasePath\*" -Destination $distFolder -Recurse -Force
         shell: pwsh
 
-      - name: Download sqlite3 DLL
+      - name: Copy sqlite3 from Flutter cache
         run: |
-          $url = "https://www.sqlite.org/2024/sqlite-dll-win-x64-3460000.zip"
-          Invoke-WebRequest -Uri $url -OutFile "sqlite3.zip"
-          Expand-Archive -Path "sqlite3.zip" -DestinationPath "sqlite3_temp" -Force
-          Copy-Item "sqlite3_temp\sqlite3.dll" -Destination "hdict-windows-${{ steps.version.outputs.version }}\sqlite3.dll" -Force
-          Remove-Item "sqlite3.zip" -Force
-          Remove-Item "sqlite3_temp" -Recurse -Force
+          $sqlitePath = Get-ChildItem -Path "$env:USERPROFILE\.pub-cache\hosted\pub.dev\sqlite3-*" -Recurse -Filter "sqlite3.dll" | Select-Object -First 1
+          if ($sqlitePath) {
+            Copy-Item $sqlitePath.FullName -Destination "hdict-windows-${{ steps.version.outputs.version }}\sqlite3.dll" -Force
+            Write-Output "Copied sqlite3.dll from pub cache"
+          } else {
+            Write-Output "sqlite3.dll not found in pub cache, downloading..."
+            $url = "https://www.sqlite.org/2024/sqlite-dll-win-x64-3460000.zip"
+            Invoke-WebRequest -Uri $url -OutFile "sqlite3.zip"
+            Expand-Archive -Path "sqlite3.zip" -DestinationPath "sqlite3_temp" -Force
+            Copy-Item "sqlite3_temp\sqlite3.dll" -Destination "hdict-windows-${{ steps.version.outputs.version }}\sqlite3.dll" -Force
+            Remove-Item "sqlite3.zip" -Force
+            Remove-Item "sqlite3_temp" -Recurse -Force
+          }
         shell: pwsh
 
       - name: Create zip archive (flat - files in root of zip)
