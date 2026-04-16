@@ -77,7 +77,7 @@ class DictReader {
   /// This enables faster I/O by avoiding disk reads.
   /// [fileName] is used to detect file type (.mdx or .mdd).
   DictReader.fromBytes(Uint8List bytes, {String? fileName})
-      : _path = fileName ?? 'memory.mdx' {
+    : _path = fileName ?? 'memory.mdx' {
     _mdx = _path.toLowerCase().endsWith('.mdx');
     _data = bytes;
   }
@@ -89,8 +89,9 @@ class DictReader {
   Future<Uint8List> _readBytes(int offset, int length) async {
     if (_data != null) {
       if (offset >= _data!.length) return Uint8List(0);
-      final end =
-          (offset + length > _data!.length) ? _data!.length : offset + length;
+      final end = (offset + length > _data!.length)
+          ? _data!.length
+          : offset + length;
       return _data!.sublist(offset, end);
     }
     if (_f != null) {
@@ -455,13 +456,10 @@ class DictReader {
   /// This method can be used to get the content of a key after initialization.
   /// Returns `null` if the key is not found.
   Future<RecordOffsetInfo?> locate(String key) async {
-    final keyIndex = binarySearch(
-        _keyList,
-        (
-          0,
-          key,
-        ),
-        compare: (a, b) => a.$2.compareTo(b.$2));
+    final keyIndex = binarySearch(_keyList, (
+      0,
+      key,
+    ), compare: (a, b) => a.$2.compareTo(b.$2));
 
     if (keyIndex < 0) {
       return null;
@@ -472,8 +470,9 @@ class DictReader {
         ? _keyList[keyIndex + 1].$1
         : -1; // -1 indicates the last record
 
-    final actualRecordEnd =
-        (recordEnd == -1) ? _totalDecompressedSize! : recordEnd;
+    final actualRecordEnd = (recordEnd == -1)
+        ? _totalDecompressedSize!
+        : recordEnd;
 
     // Locate the correct block
     int accumulatedDecompressedSize = 0;
@@ -514,13 +513,10 @@ class DictReader {
   Future<List<RecordOffsetInfo>> locateAll(String key) async {
     final results = <RecordOffsetInfo>[];
     // Use lowerBound to find the first potential match.
-    var keyIndex = lowerBound(
-        _keyList,
-        (
-          0,
-          key,
-        ),
-        compare: (a, b) => a.$2.compareTo(b.$2));
+    var keyIndex = lowerBound(_keyList, (
+      0,
+      key,
+    ), compare: (a, b) => a.$2.compareTo(b.$2));
 
     if (keyIndex == _keyList.length || _keyList[keyIndex].$2 != key) {
       return [];
@@ -533,8 +529,9 @@ class DictReader {
           ? _keyList[keyIndex + 1].$1
           : -1; // -1 indicates the last record
 
-      final actualRecordEnd =
-          (recordEnd == -1) ? _totalDecompressedSize! : recordEnd;
+      final actualRecordEnd = (recordEnd == -1)
+          ? _totalDecompressedSize!
+          : recordEnd;
 
       // Locate the correct block
       int accumulatedDecompressedSize = 0;
@@ -579,13 +576,10 @@ class DictReader {
   /// Returns an empty list if the key is not found.
   List<String> search(String key, {int? limit}) {
     // Use lowerBound to find the first potential match.
-    final firstMatchIndex = lowerBound(
-        _keyList,
-        (
-          0,
-          key,
-        ),
-        compare: (a, b) => a.$2.compareTo(b.$2));
+    final firstMatchIndex = lowerBound(_keyList, (
+      0,
+      key,
+    ), compare: (a, b) => a.$2.compareTo(b.$2));
 
     return _collectMatches(_keyList, key, firstMatchIndex, limit);
   }
@@ -594,13 +588,10 @@ class DictReader {
   ///
   /// Returns `true` if the key is found, otherwise `false`.
   bool exist(String key) {
-    final keyIndex = binarySearch(
-        _keyList,
-        (
-          0,
-          key,
-        ),
-        compare: (a, b) => a.$2.compareTo(b.$2));
+    final keyIndex = binarySearch(_keyList, (
+      0,
+      key,
+    ), compare: (a, b) => a.$2.compareTo(b.$2));
     return keyIndex >= 0;
   }
 
@@ -674,7 +665,8 @@ class DictReader {
         final key = RIPEMD128.hash(
           keyBlockInfoCompressed.sublist(4, 8) + [149, 54, 0, 0],
         );
-        keyBlockInfoCompressed = keyBlockInfoCompressed.sublist(0, 8) +
+        keyBlockInfoCompressed =
+            keyBlockInfoCompressed.sublist(0, 8) +
             _fastDecrypt(
               Uint8List.fromList(keyBlockInfoCompressed.sublist(8)),
               Uint8List.fromList(key),
@@ -847,6 +839,11 @@ class DictReader {
   }
 
   Future<List<(int, String)>> _readKeys() async {
+    // For in-memory mode, use bytes-based reading
+    if (_data != null) {
+      return _readKeysFromBytes();
+    }
+
     final f = _f!;
     await f.setPosition(_keyBlockOffset);
 
@@ -882,6 +879,51 @@ class DictReader {
     mergeSort(keyList, compare: (a, b) => a.$2.compareTo(b.$2));
 
     _recordBlockOffset = await f.position();
+
+    return keyList;
+  }
+
+  /// Read keys from in-memory bytes
+  Future<List<(int, String)>> _readKeysFromBytes() async {
+    _currentOffset = _keyBlockOffset;
+
+    // number of key blocks
+    await _readNumbererFromBytes();
+
+    // number of entries
+    numEntries = await _readNumbererFromBytes();
+
+    // number of bytes of key block info after decompression
+    if (_version >= 2.0) {
+      await _readNumbererFromBytes();
+    }
+
+    // number of bytes of key block info
+    final keyBlockInfoSize = await _readNumbererFromBytes();
+    // number of bytes of key block
+    final keyBlockSize = await _readNumbererFromBytes();
+
+    if (_version >= 2.0) {
+      _currentOffset += 4;
+    }
+
+    final bytes = await _readBytes(_currentOffset, keyBlockInfoSize);
+    _currentOffset += keyBlockInfoSize;
+    List<int> keyBlockInfoList = _decodeKeyBlockInfo(bytes);
+
+    // read key block
+    final keyBlockCompressed = await _readBytes(_currentOffset, keyBlockSize);
+    _currentOffset += keyBlockSize;
+
+    // extract key block
+    final keyList = _decodeKeyBlock(
+      keyBlockCompressed.toList(),
+      keyBlockInfoList,
+    );
+
+    mergeSort(keyList, compare: (a, b) => a.$2.compareTo(b.$2));
+
+    _recordBlockOffset = _currentOffset;
 
     return keyList;
   }
@@ -965,7 +1007,8 @@ class DictReader {
       int startOffset,
       int endOffset,
       int compressedSize,
-    ) recordProcessor,
+    )
+    recordProcessor,
   ) async* {
     final f = _f!;
     await f.setPosition(_recordBlockOffset);
@@ -1058,9 +1101,11 @@ class DictReader {
 
       late int keyEndIndex;
 
-      for (var i = keyStartIndex + _numberWidth;
-          i < keyBlock.length;
-          i += width) {
+      for (
+        var i = keyStartIndex + _numberWidth;
+        i < keyBlock.length;
+        i += width
+      ) {
         final sublist = keyBlock.sublist(i, i + width);
         if (sublist.first == 0 && sublist.last == 0) {
           keyEndIndex = i;
@@ -1246,8 +1291,9 @@ Map<String, dynamic> _exportCacheIsolate(
     'keyList': keyList.map((e) => [e.$1, e.$2]).toList(),
     'numEntries': numEntries,
     'recordBlockOffset': recordBlockOffset,
-    'recordBlockInfoList':
-        recordBlockInfoList?.map((e) => [e.$1, e.$2]).toList(),
+    'recordBlockInfoList': recordBlockInfoList
+        ?.map((e) => [e.$1, e.$2])
+        .toList(),
     'totalDecompressedSize': totalDecompressedSize,
   };
 }
