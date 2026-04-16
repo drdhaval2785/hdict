@@ -3605,6 +3605,7 @@ class DictionaryManager {
     Map<String, String>? safUris,
   }) async* {
     yield ImportProgress(message: 'Linking Slob...', value: 0.1);
+    SlobReader? reader;
     try {
       final isSaf = Platform.isAndroid && slobPath.startsWith('content://');
       final String folderPath =
@@ -3614,7 +3615,23 @@ class DictionaryManager {
       final String? bookmark = await BookmarkManager.createBookmark(folderPath);
       if (bookmark == null) throw Exception('Failed to create bookmark');
 
-      final bookName = p.basenameWithoutExtension(slobPath);
+      reader = isSaf
+          ? await SlobReader.fromUri(slobPath)
+          : await SlobReader.fromLinkedSource(bookmark, actualPath: slobPath);
+      await reader.open();
+
+      final slobLabel = reader.bookName;
+      final bookName = slobLabel.isNotEmpty
+          ? slobLabel
+          : p.basenameWithoutExtension(slobPath);
+
+      hDebugPrint(
+        '[Slob Link] file=$slobPath, internal_label="$slobLabel", bookName="$bookName"',
+      );
+
+      await reader.close();
+      reader = null;
+
       final checksum = await _calculateChecksum(slobPath);
       final existing = await _dbHelper.getDictionaryByChecksum(checksum);
       if (existing != null) {
@@ -3657,6 +3674,7 @@ class DictionaryManager {
         if (progress.isCompleted) break;
       }
     } catch (e) {
+      await reader?.close();
       yield ImportProgress(
         message: 'Link error: $e',
         value: 0.0,
@@ -4884,6 +4902,10 @@ class DictionaryManager {
       final bookName = reader.bookName.isNotEmpty
           ? reader.bookName
           : p.basenameWithoutExtension(slobPath);
+
+      hDebugPrint(
+        '[Slob Import] file=$slobPath, internal_label="${reader.bookName}", bookName="$bookName"',
+      );
 
       yield ImportProgress(
         message: 'Copying to permanent storage...',
