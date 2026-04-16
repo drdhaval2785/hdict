@@ -3544,7 +3544,7 @@ class DictionaryManager {
           if (await File(cssPath).exists()) {
             cssContent = await File(cssPath).readAsString();
             hDebugPrint(
-              '[MDict Link] Found external CSS file: $cssPath (${cssContent?.length ?? 0} chars)',
+              '[MDict Link] Found external CSS file: $cssPath (${cssContent.length} chars)',
             );
           }
         } catch (e) {

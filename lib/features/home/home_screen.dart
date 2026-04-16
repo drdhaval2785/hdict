@@ -2262,13 +2262,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                     ),
                                     "th": Style(
                                       padding: HtmlPaddings.all(4),
-                                      border: Border.all(
-                                        color: Colors.grey.shade300,
-                                      ),
-                                      textAlign: TextAlign.justify,
-                                    ),
-                                    "th": Style(
-                                      padding: HtmlPaddings.all(4),
                                       fontWeight: FontWeight.bold,
                                       border: Border.all(
                                         color: Colors.grey.shade300,
