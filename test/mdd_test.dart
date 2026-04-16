@@ -331,5 +331,21 @@ void main() {
       expect(result, contains('jp-play'));
       expect(result, contains('prove.mp3'));
     });
+
+    test('injectCssWithReferences injects CSS into HTML', () async {
+      final processor = MultimediaProcessor(null, 'body { color: red; }');
+      final html = '<html><body>Test</body></html>';
+      final result = await processor.injectCssWithReferences(html);
+      expect(result, contains('<style type="text/css">'));
+      expect(result, contains('body { color: red; }'));
+    });
+
+    test('injectCssWithReferences handles HTML without head tag', () async {
+      final processor = MultimediaProcessor(null, 'p { color: blue; }');
+      final html = '<p>Test paragraph</p>';
+      final result = await processor.injectCssWithReferences(html);
+      expect(result, contains('<style type="text/css">'));
+      expect(result, contains('p { color: blue; }'));
+    });
   });
 }

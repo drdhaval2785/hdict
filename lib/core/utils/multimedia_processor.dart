@@ -52,12 +52,14 @@ class MultimediaProcessor {
     final baseCss = _externalCssContent;
     final Map<String, String> cssOverrides = {};
 
-    hDebugPrint(
-      '[injectCss] baseCss (external): ${baseCss != null && baseCss.isNotEmpty ? "present (${baseCss.length} chars)" : "null/empty"}',
-    );
-    hDebugPrint(
-      '[injectCss] HTML has <link: ${html.toLowerCase().contains('<link')}',
-    );
+    if (showMultimediaProcessing) {
+      hDebugPrint(
+        '[injectCss] baseCss (external): ${baseCss != null && baseCss.isNotEmpty ? "present (${baseCss.length} chars)" : "null/empty"}',
+      );
+      hDebugPrint(
+        '[injectCss] HTML has <link: ${html.toLowerCase().contains('<link')}',
+      );
+    }
 
     // If we have base external CSS, use it as starting point
     if (baseCss != null && baseCss.isNotEmpty) {
@@ -135,16 +137,20 @@ class MultimediaProcessor {
     }
 
     final combinedCss = allCss.toString();
-    hDebugPrint('[injectCss] combinedCss length: ${combinedCss.length}');
-    hDebugPrint(
-      '[injectCss] combinedCss first 200 chars: ${combinedCss.substring(0, combinedCss.length > 200 ? 200 : combinedCss.length)}',
-    );
+    if (showMultimediaProcessing) {
+      hDebugPrint('[injectCss] combinedCss length: ${combinedCss.length}');
+      hDebugPrint(
+        '[injectCss] combinedCss first 200 chars: ${combinedCss.substring(0, combinedCss.length > 200 ? 200 : combinedCss.length)}',
+      );
+    }
     if (combinedCss.isEmpty) return html;
 
     final styleTag = '<style type="text/css">$combinedCss</style>';
-    hDebugPrint(
-      '[injectCss] styleTag being injected (first 200): ${styleTag.substring(0, styleTag.length > 200 ? 200 : styleTag.length)}',
-    );
+    if (showMultimediaProcessing) {
+      hDebugPrint(
+        '[injectCss] styleTag being injected (first 200): ${styleTag.substring(0, styleTag.length > 200 ? 200 : styleTag.length)}',
+      );
+    }
 
     if (html.toLowerCase().contains('<html')) {
       final headMatch = RegExp(

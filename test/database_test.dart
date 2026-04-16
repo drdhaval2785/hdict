@@ -396,5 +396,34 @@ void main() {
         expect(suggestions.isEmpty, isTrue);
       },
     );
+
+    test('Update Dictionary Name', () async {
+      // Insert a dictionary
+      final id = await dbHelper.insertDictionary('Old Name', '/path/dict');
+
+      // Update the name
+      await dbHelper.updateDictionaryName(id, 'New Name');
+
+      // Verify the name was updated
+      final dicts = await dbHelper.getDictionaries();
+      final updated = dicts.firstWhere((d) => d['id'] == id);
+      expect(updated['name'], 'New Name');
+    });
+
+    test('Insert Dictionary with CSS', () async {
+      final cssContent =
+          '.body { color: red; } .headword { font-weight: bold; }';
+
+      final id = await dbHelper.insertDictionary(
+        'Test Dict with CSS',
+        '/path/dict',
+        css: cssContent,
+      );
+
+      // Verify CSS is stored
+      final dicts = await dbHelper.getDictionaries();
+      final dict = dicts.firstWhere((d) => d['id'] == id);
+      expect(dict['css'], cssContent);
+    });
   });
 }
