@@ -337,6 +337,22 @@ class HomeScreen extends StatefulWidget {
       // Collapse multiple consecutive <br> tags to prevent visual blank lines
       String result = processed.trim();
       result = result.replaceAll(RegExp(r'(<br\s*/?>\s*)+'), '<br>');
+
+      // Remove <br> that appears right before </p> (causes double line breaks)
+      result = result.replaceAll(
+        RegExp(r'<br>\s*</p>', caseSensitive: false),
+        '</p>',
+      );
+
+      // Remove <br> after block-level closing tags
+      result = result.replaceAllMapped(
+        RegExp(
+          r'</(p|div|h[1-6]|ul|ol|li|table|tr)>\s*<br>',
+          caseSensitive: false,
+        ),
+        (m) => '</${m[1]}>',
+      );
+
       result = formatLists(addBlockquoteColors(result));
       if (showHtmlProcessing) {
         hDebugPrint('normalizeWhitespace (HTML): Result: [$result]');
@@ -2202,6 +2218,30 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                       margin: Margins.only(left: 6),
                                       padding: HtmlPaddings.only(left: 4),
                                     ),
+                                    "p": Style(margin: Margins.only(bottom: 4)),
+                                    "div": Style(margin: Margins.zero),
+                                    "span": Style(padding: HtmlPaddings.zero),
+                                    "h1": Style(
+                                      margin: Margins.only(bottom: 8),
+                                      padding: HtmlPaddings.zero,
+                                    ),
+                                    "h2": Style(
+                                      margin: Margins.only(bottom: 6),
+                                      padding: HtmlPaddings.zero,
+                                    ),
+                                    "h3": Style(
+                                      margin: Margins.only(bottom: 4),
+                                      padding: HtmlPaddings.zero,
+                                    ),
+                                    "ol": Style(
+                                      margin: Margins.only(bottom: 4),
+                                    ),
+                                    "ul": Style(
+                                      margin: Margins.only(bottom: 4),
+                                    ),
+                                    "li": Style(
+                                      margin: Margins.only(bottom: 2),
+                                    ),
                                     "table": Style(
                                       border: Border.all(
                                         color: Colors.grey.shade400,
@@ -2924,6 +2964,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           ),
                         ),
                       ),
+                      "p": Style(margin: Margins.only(bottom: 4)),
+                      "div": Style(margin: Margins.zero),
+                      "span": Style(padding: HtmlPaddings.zero),
+                      "h1": Style(
+                        margin: Margins.only(bottom: 8),
+                        padding: HtmlPaddings.zero,
+                      ),
+                      "h2": Style(
+                        margin: Margins.only(bottom: 6),
+                        padding: HtmlPaddings.zero,
+                      ),
+                      "h3": Style(
+                        margin: Margins.only(bottom: 4),
+                        padding: HtmlPaddings.zero,
+                      ),
+                      "ol": Style(margin: Margins.only(bottom: 4)),
+                      "ul": Style(margin: Margins.only(bottom: 4)),
+                      "li": Style(margin: Margins.only(bottom: 2)),
                       "table": Style(
                         border: Border.all(color: Colors.grey.shade400),
                       ),
@@ -3182,6 +3240,16 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
         margin: Margins.only(left: 6),
         padding: HtmlPaddings.only(left: 4),
       ),
+      // Reduce spacing for block elements to minimize blank lines
+      "p": Style(margin: Margins.only(bottom: 4)),
+      "div": Style(margin: Margins.zero),
+      "span": Style(padding: HtmlPaddings.zero),
+      "h1": Style(margin: Margins.only(bottom: 8), padding: HtmlPaddings.zero),
+      "h2": Style(margin: Margins.only(bottom: 6), padding: HtmlPaddings.zero),
+      "h3": Style(margin: Margins.only(bottom: 4), padding: HtmlPaddings.zero),
+      "ol": Style(margin: Margins.only(bottom: 4)),
+      "ul": Style(margin: Margins.only(bottom: 4)),
+      "li": Style(margin: Margins.only(bottom: 2)),
       "table": Style(border: Border.all(color: Colors.grey.shade400)),
       "tr": Style(
         border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
@@ -3766,6 +3834,24 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
                         margin: Margins.only(left: 6),
                         padding: HtmlPaddings.only(left: 4),
                       ),
+                      "p": Style(margin: Margins.only(bottom: 4)),
+                      "div": Style(margin: Margins.zero),
+                      "span": Style(padding: HtmlPaddings.zero),
+                      "h1": Style(
+                        margin: Margins.only(bottom: 8),
+                        padding: HtmlPaddings.zero,
+                      ),
+                      "h2": Style(
+                        margin: Margins.only(bottom: 6),
+                        padding: HtmlPaddings.zero,
+                      ),
+                      "h3": Style(
+                        margin: Margins.only(bottom: 4),
+                        padding: HtmlPaddings.zero,
+                      ),
+                      "ol": Style(margin: Margins.only(bottom: 4)),
+                      "ul": Style(margin: Margins.only(bottom: 4)),
+                      "li": Style(margin: Margins.only(bottom: 2)),
                       "table": Style(
                         border: Border.all(color: Colors.grey.shade400),
                         width: Width.auto(),
