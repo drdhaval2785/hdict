@@ -3006,16 +3006,6 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
     // Use external CSS as base, MDD CSS overrides it when available (per entry-specific overrides)
     final combinedCss = externalCss ?? mdictReader.cssContent;
 
-    hDebugPrint(
-      '[CSS] externalCss from db: ${externalCss != null ? "present (${externalCss.length} chars)" : "null"}',
-    );
-    hDebugPrint(
-      '[CSS] mdictReader.cssContent (from mdd): ${mdictReader.cssContent != null ? "present (${mdictReader.cssContent!.length} chars)" : "null"}',
-    );
-    hDebugPrint(
-      '[CSS] combinedCss being used: ${combinedCss != null ? "present (${combinedCss.length} chars)" : "null"}',
-    );
-
     final mpWithCss = MultimediaProcessor(mdictReader, combinedCss);
     final format = widget.defMap['format'] as String? ?? 'mdict';
     final typeSequence = widget.defMap['type_sequence'] as String?;
@@ -3038,10 +3028,6 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
 
       processed = await mpWithCss.processHtmlWithInlineVideo(processed);
 
-      hDebugPrint(
-        '[CSS] processedHtml length: ${processed.length}, has style tag: ${processed.contains('<style type="text/css">')}',
-      );
-
       final headwordHtml = defData['headwordHtml'] as String;
       defData['processedHtml'] = '$headwordHtml\n$processed';
     }
@@ -3050,14 +3036,10 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
     if (combinedCss != null && combinedCss.isNotEmpty) {
       try {
         _customCssStyles = Style.fromCss(combinedCss, (error, trace) {
-          hDebugPrint('[CSS] CSS parse error: $error');
-          return null; // OnCssParseError returns String?
+          return null;
         });
-        hDebugPrint(
-          '[CSS] Parsed custom CSS into Style objects: ${_customCssStyles!.keys.length} selectors',
-        );
       } catch (e) {
-        hDebugPrint('[CSS] Failed to parse CSS: $e');
+        // CSS parsing failed, will use theme defaults
       }
     }
 
@@ -3151,9 +3133,6 @@ class _MdictDefinitionContentState extends State<_MdictDefinitionContent> {
     // Now add custom CSS from dictionary - this overrides theme styles for same selectors
     if (_customCssStyles != null) {
       mergedStyle.addAll(_customCssStyles!);
-      hDebugPrint(
-        '[CSS] Using custom CSS with ${_customCssStyles!.keys.length} selectors, merged with app theme',
-      );
     }
 
     return Container(
