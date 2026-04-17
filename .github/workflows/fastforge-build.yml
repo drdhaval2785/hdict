@@ -49,10 +49,17 @@ jobs:
           sed -i -e 's/await inAppReview.isAvailable()/false/g' lib/features/home/home_screen.dart || true
           mkdir -p lib/core/utils
           printf "import 'package:flutter/material.dart';\nimport 'package:hdict/features/settings/settings_provider.dart';\nclass ReviewHelper {\n  static Future<void> maybeRequestReview(BuildContext context, SettingsProvider settings) async {}\n}\n" > lib/core/utils/review_helper.dart
+          rm -f pubspec.lock
         shell: bash
 
       - name: Install dependencies after fdroid patches
         run: flutter pub get
+
+      - name: Get app version
+        id: version
+        run: |
+          VERSION=$(grep "^version:" pubspec.yaml | cut -d' ' -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Build Android APK
         run: flutter build apk --release
@@ -63,11 +70,12 @@ jobs:
       - name: Clean up keystore
         run: rm -f android/upload-keystore.jks
 
-      - name: Copy artifacts
+      - name: Copy and rename artifacts
         run: |
+          VERSION=${{ steps.version.outputs.version }}
           mkdir -p dist
-          cp build/app/outputs/flutter-apk/*.apk dist/
-          cp build/app/outputs/bundle/release/*.aab dist/
+          cp build/app/outputs/flutter-apk/*.apk dist/hdict-$VERSION-android.apk
+          cp build/app/outputs/bundle/release/*.aab dist/hdict-$VERSION-android.aab
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -114,17 +122,26 @@ jobs:
           chmod +x appimagetool
           sudo mv appimagetool /usr/local/bin/
 
+      - name: Get app version
+        id: version
+        run: |
+          VERSION=$(grep "^version:" pubspec.yaml | cut -d' ' -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+        shell: bash
+
       - name: Build Linux
         run: fastforge package --platform=linux --targets=appimage,deb,rpm,zip,pacman
 
-      - name: Rename Linux artifacts
+      - name: Rename output directory
         run: |
-          cd dist/1.5.16+40
-          for f in *.AppImage; do mv "$f" "hdict-1.5.16+40-linux-x64.AppImage"; done
-          for f in *.deb; do mv "$f" "hdict-1.5.16+40-linux-amd64.deb"; done
-          for f in *.rpm; do mv "$f" "hdict-1.5.16+40-linux-x86_64.rpm"; done
-          for f in *.tar.gz; do mv "$f" "hdict-1.5.16+40-linux.tar.gz"; done
-          cd ../..
+          VERSION=${{ steps.version.outputs.version }}
+          # Rename the version folder from 1.5.16+40 to hdict-{version}
+          for dir in dist/*/; do
+            if [ -d "$dir" ]; then
+              mv "$dir" "dist/hdict-$VERSION"
+            fi
+          done
+        shell: bash
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -157,25 +174,31 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Install FastForge
-        run: dart pub global activate fastforge
+      - name: Get app version
+        id: version
+        run: |
+          VERSION=$(grep "^version:" pubspec.yaml | cut -d' ' -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+        shell: bash
 
       - name: Build Windows EXE
         run: flutter build windows --release
 
       - name: Download sqlite3.dll
         run: |
-          Invoke-WebRequest -Uri "https://www.sqlite.org/2024/sqlite-dll-win-x64-3460000.zip" -OutFile "sqlite.zip"
-          Expand-Archive -Path "sqlite.zip" -DestinationPath "sqlite_temp"
-          Copy-Item "sqlite_temp/x64/sqlite3.dll" "build/windows/x64/release/bundle/"
-          Remove-Item "sqlite.zip" -Force
-          Remove-Item "sqlite_temp" -Recurse -Force
-        shell: pwsh
+          # Fetch the latest version from SQLite download page
+          VERSION=$(curl -s https://www.sqlite.org/download.html | grep -oP 'sqlite-dll-win-x64-\K[0-9]+(?=\.zip)' | head -1)
+          curl -L -o sqlite.zip "https://www.sqlite.org/2024/sqlite-dll-win-x64-${VERSION}.zip"
+          unzip -o sqlite.zip -d sqlite_temp
+          cp sqlite_temp/sqlite3.dll build/windows/x64/release/bundle/
+          rm -rf sqlite.zip sqlite_temp
+        shell: bash
 
       - name: Rename and zip Windows artifacts
         run: |
+          VERSION=${{ steps.version.outputs.version }}
           cd build/windows/x64/release/bundle
-          7z a -tzip hdict-1.5.16+40-windows.zip *
+          7z a -tzip hdict-$VERSION-windows.zip *
         shell: pwsh
 
       - name: Upload artifacts
