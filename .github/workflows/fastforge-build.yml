@@ -31,8 +31,17 @@ jobs:
       - name: Install FastForge
         run: dart pub global activate fastforge
 
-      - name: Build Android
-        run: fastforge package --platform=android --targets=aab,apk
+      - name: Build Android APK
+        run: flutter build apk --release
+
+      - name: Build Android AAB
+        run: flutter build appbundle --release
+
+      - name: Copy artifacts
+        run: |
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/*.apk dist/
+          cp build/app/outputs/bundle/release/*.aab dist/
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
