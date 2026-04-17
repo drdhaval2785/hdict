@@ -191,29 +191,40 @@ jobs:
       - name: Build Windows EXE
         run: flutter build windows --release
 
-      - name: Download sqlite3.dll
+      - name: Download sqlite3.dll and Package
         run: |
-          # Capture full relative path (e.g. 2025/sqlite-dll-win-x64-3530000.zip) in one match
+          # 1. Find the actual build output directory dynamically
+          $exePath = Get-ChildItem -Path build\windows -Filter hdict.exe -Recurse -File | Select-Object -First 1
+          if (-not $exePath) { Write-Error "hdict.exe not found. Build failed?"; exit 1 }
+          $buildDir = $exePath.Directory.FullName
+          Write-Host "Found Windows build directory at: $buildDir"
+          
+          # 2. Download latest sqlite3.dll for x64
           $page = Invoke-WebRequest -Uri 'https://www.sqlite.org/download.html' -UseBasicParsing
           $match = [regex]::Match($page.Content, '(\d{4}/sqlite-dll-win-x64-\d+\.zip)')
           if (-not $match.Success) { Write-Error 'Could not find sqlite3 download path'; exit 1 }
           $path = $match.Groups[1].Value
           Invoke-WebRequest -Uri "https://www.sqlite.org/$path" -OutFile sqlite.zip
           Expand-Archive -Path sqlite.zip -DestinationPath sqlite_temp -Force
-          Copy-Item sqlite_temp\sqlite3.dll build\windows\x64\release\bundle\
+          
+          # 3. Inject dll into the active build directory
+          Copy-Item sqlite_temp\sqlite3.dll "$buildDir\"
           Remove-Item -Recurse -Force sqlite.zip, sqlite_temp
-        shell: pwsh
-
-      - name: Rename and zip Windows artifacts
-        run: |
-          VERSION=${{ steps.version.outputs.version }}
-          cd build/windows/x64/release/bundle
-          7z a -tzip hdict-$VERSION-windows.zip *
+          
+          # 4. Zip the entire application bundle
+          $version = "${{ steps.version.outputs.version }}"
+          Set-Location -Path $buildDir
+          7z a -tzip "hdict-$version-windows.zip" *
+          
+          # 5. Move zip to a predictable folder for GitHub artifact upload
+          Set-Location -Path $env:GITHUB_WORKSPACE
+          New-Item -ItemType Directory -Force -Path dist-windows
+          Move-Item -Path "$buildDir\hdict-$version-windows.zip" -Destination dist-windows\
         shell: pwsh
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-builds
-          path: build/windows/x64/release/bundle/*.zip
+          path: dist-windows/*.zip
           retention-days: 7
