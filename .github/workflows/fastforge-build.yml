@@ -100,7 +100,7 @@ jobs:
           sudo mv appimagetool /usr/local/bin/
 
       - name: Build Linux
-        run: fastforge package --platform=linux --targets=appimage,deb,rpm,pacman,zip
+        run: fastforge package --platform=linux --targets=appimage,deb,rpm,zip,pacman
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -170,16 +170,16 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Install FastForge
-        run: dart pub global activate fastforge
-
       - name: Install OHOS tools
         run: |
           sudo apt-get update
           sudo apt-get install -y unzip xz-utils
 
-      - name: Build OpenHarmony
-        run: fastforge package --platform=ohos --targets=app, hap
+      - name: Build OpenHarmony APP
+        run: flutter build app --release -o dist/
+
+      - name: Build OpenHarmony HAP
+        run: flutter build hap --release -o dist/
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
