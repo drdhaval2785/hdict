@@ -170,13 +170,12 @@ jobs:
 
       - name: Download sqlite3.dll
         run: |
-          # Fetch the latest SQLite version number from the download page
+          # Capture full relative path (e.g. 2025/sqlite-dll-win-x64-3530000.zip) in one match
           $page = Invoke-WebRequest -Uri 'https://www.sqlite.org/download.html' -UseBasicParsing
-          $match = [regex]::Match($page.Content, 'sqlite-dll-win-x64-(\d+)\.zip')
-          if (-not $match.Success) { Write-Error 'Could not find sqlite3 version'; exit 1 }
-          $ver = $match.Groups[1].Value
-          $year = [regex]::Match($page.Content, '/([0-9]{4})/sqlite-dll-win-x64').Groups[1].Value
-          Invoke-WebRequest -Uri "https://www.sqlite.org/$year/sqlite-dll-win-x64-$ver.zip" -OutFile sqlite.zip
+          $match = [regex]::Match($page.Content, '(\d{4}/sqlite-dll-win-x64-\d+\.zip)')
+          if (-not $match.Success) { Write-Error 'Could not find sqlite3 download path'; exit 1 }
+          $path = $match.Groups[1].Value
+          Invoke-WebRequest -Uri "https://www.sqlite.org/$path" -OutFile sqlite.zip
           Expand-Archive -Path sqlite.zip -DestinationPath sqlite_temp -Force
           Copy-Item sqlite_temp\sqlite3.dll build\windows\x64\release\bundle\
           Remove-Item -Recurse -Force sqlite.zip, sqlite_temp
