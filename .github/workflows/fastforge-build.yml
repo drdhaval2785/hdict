@@ -140,15 +140,14 @@ jobs:
           fi
 
 
-      - name: Rename output directory
+      - name: Flatten and Clean Artifacts
         run: |
           VERSION=${{ steps.version.outputs.version }}
-          # Rename the version folder from 1.5.16+40 to hdict-{version}
-          for dir in dist/*/; do
-            if [ -d "$dir" ]; then
-              mv "$dir" "dist/hdict-$VERSION"
-            fi
-          done
+          # Move all generated files (AppImage, zsync, deb, rpm, etc.) to the root of dist/
+          # This ensures they are easily accessible and not nested in subfolders
+          find dist -type f -exec mv -t dist/ {} +
+          # Remove now-empty directories
+          find dist -type d -empty -delete
         shell: bash
 
       - name: Upload artifacts
