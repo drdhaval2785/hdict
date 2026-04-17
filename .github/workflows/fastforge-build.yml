@@ -117,6 +117,15 @@ jobs:
       - name: Build Linux
         run: fastforge package --platform=linux --targets=appimage,deb,rpm,zip,pacman
 
+      - name: Rename Linux artifacts
+        run: |
+          cd dist/1.5.16+40
+          for f in *.AppImage; do mv "$f" "hdict-1.5.16+40-linux-x64.AppImage"; done
+          for f in *.deb; do mv "$f" "hdict-1.5.16+40-linux-amd64.deb"; done
+          for f in *.rpm; do mv "$f" "hdict-1.5.16+40-linux-x86_64.rpm"; done
+          for f in *.tar.gz; do mv "$f" "hdict-1.5.16+40-linux.tar.gz"; done
+          cd ../..
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -151,12 +160,27 @@ jobs:
       - name: Install FastForge
         run: dart pub global activate fastforge
 
-      - name: Build Windows
-        run: fastforge package --platform=windows --targets=exe,zip
+      - name: Build Windows EXE
+        run: flutter build windows --release
+
+      - name: Download sqlite3.dll
+        run: |
+          Invoke-WebRequest -Uri "https://www.sqlite.org/2024/sqlite-dll-win-x64-3460000.zip" -OutFile "sqlite.zip"
+          Expand-Archive -Path "sqlite.zip" -DestinationPath "sqlite_temp"
+          Copy-Item "sqlite_temp/x64/sqlite3.dll" "build/windows/x64/release/bundle/"
+          Remove-Item "sqlite.zip" -Force
+          Remove-Item "sqlite_temp" -Recurse -Force
+        shell: pwsh
+
+      - name: Rename and zip Windows artifacts
+        run: |
+          cd build/windows/x64/release/bundle
+          7z a -tzip hdict-1.5.16+40-windows.zip *
+        shell: pwsh
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-builds
-          path: dist/
+          path: build/windows/x64/release/bundle/*.zip
           retention-days: 7
