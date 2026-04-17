@@ -12,7 +12,7 @@ class _StoreUrls {
   static const microsoftStore =
       'https://apps.microsoft.com/detail/hdict';
   static const appStore =
-      'https://apps.apple.com/app/hdict/id0000000000'; // update with real ID
+      'https://apps.apple.com/in/app/hdict/id6759493062';
 }
 
 class ReviewHelper {
