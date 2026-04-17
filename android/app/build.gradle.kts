@@ -70,19 +70,18 @@ android {
     productFlavors {
         create("fdroid") {
             dimension = "deploy"
-            signingConfig = null
+            signingConfig = signingConfigs.getByName("release")
+            // Only exclude Google Play dependencies when building fdroid explicitly
+            if (gradle.startParameter.taskNames.any { it.contains("fdroid", ignoreCase = true) }) {
+                configurations.all {
+                    exclude(group = "com.google.android.play")
+                    exclude(group = "com.google.android.gms")
+                }
+            }
         }
     }
 }
 
 flutter {
     source = "../.."
-}
-
-// Only exclude non-free libraries when building the fdroid flavor.
-if (gradle.startParameter.taskNames.any { it.contains("fdroid", ignoreCase = true) }) {
-    configurations.all {
-        exclude(group = "com.google.android.play")
-        exclude(group = "com.google.android.gms")
-    }
 }

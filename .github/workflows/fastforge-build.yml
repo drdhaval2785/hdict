@@ -39,6 +39,21 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 -d > android/upload-keystore.jks
         shell: bash
 
+      - name: Prepare fdroid build (remove in_app_review dependency)
+        run: |
+          sed -i -e '/in_app_review/d' pubspec.yaml || true
+          sed -i -e '/in_app_review/d' pubspec.lock || true
+          sed -i -e '/in_app_review/d' lib/features/home/home_screen.dart || true
+          sed -i -e 's/InAppReview/dynamic/g' lib/features/home/home_screen.dart || true
+          sed -i -e 's/dynamic.instance/null/g' lib/features/home/home_screen.dart || true
+          sed -i -e 's/await inAppReview.isAvailable()/false/g' lib/features/home/home_screen.dart || true
+          mkdir -p lib/core/utils
+          printf "import 'package:flutter/material.dart';\nimport 'package:hdict/features/settings/settings_provider.dart';\nclass ReviewHelper {\n  static Future<void> maybeRequestReview(BuildContext context, SettingsProvider settings) async {}\n}\n" > lib/core/utils/review_helper.dart
+        shell: bash
+
+      - name: Install dependencies after fdroid patches
+        run: flutter pub get
+
       - name: Build Android APK
         run: flutter build apk --release
 
@@ -143,47 +158,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-builds
-          path: dist/
-          retention-days: 7
-
-  build-ohos:
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-
-      - name: Cache Flutter dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.pub-cache
-          key: ${{ runner.os }}-flutter-${{ hashFiles('**/pubspec.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-flutter-
-
-      - name: Install dependencies
-        run: flutter pub get
-
-      - name: Install OHOS tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y unzip xz-utils
-
-      - name: Build OpenHarmony APP
-        run: flutter build app -o dist/
-
-      - name: Build OpenHarmony HAP
-        run: flutter build hap -o dist/
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ohos-builds
           path: dist/
           retention-days: 7
