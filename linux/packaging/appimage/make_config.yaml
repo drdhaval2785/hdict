@@ -1,6 +1,12 @@
 display_name: hdict
 icon: assets/hdict_logo.png
-generic_name: Hindi Dictionary
+generic_name: Dictionary Reader
+keywords:
+  - Dictionary
+  - StarDict
+  - Dictd
+  - Slob
+  - Mdict
 categories:
   - Utility
 startup_notify: true

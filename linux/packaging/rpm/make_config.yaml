@@ -1,8 +1,17 @@
 icon: assets/hdict_logo.png
-summary: Hindi Dictionary App
+summary: Dictionary Reader App for StarDict, Dictd, Slob and Mdict dictionaries
+group: Application
 vendor: Dhaval
-license: MIT
+license: GPL-3.0
 url: https://github.com/drdhaval2785/hdict
 display_name: hdict
+keywords:
+  - Dictionary
+  - StarDict
+  - Dictd
+  - Slob
+  - Mdict
+generic_name: Dictionary Reader
 categories:
   - Utility
+startup_notify: true
