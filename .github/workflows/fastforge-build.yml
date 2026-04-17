@@ -114,7 +114,31 @@ jobs:
         shell: bash
 
       - name: Build Linux
-        run: fastforge package --platform=linux --targets=appimage,deb,rpm,zip,pacman
+        run: |
+          fastforge package --platform=linux --targets=appimage,deb,rpm,zip,pacman
+          
+          # Extract and re-pack AppImage with update info to enable delta updates
+          VERSION=${{ steps.version.outputs.version }}
+          # Find the generated AppImage (FastForge puts it in a version-named subdir in dist)
+          APPIMAGE=$(find dist -name "*.AppImage" | head -n 1)
+          
+          if [ -f "$APPIMAGE" ]; then
+            echo "Found AppImage at $APPIMAGE. Re-packing with update info..."
+            chmod +x "$APPIMAGE"
+            ./"$APPIMAGE" --appimage-extract
+            
+            # Use appimagetool to build it again with update information
+            # This will also generate the .zsync file automatically
+            appimagetool -u "gh-releases-zsync|drdhaval2785|hdict|latest|hdict-*-x86_64.AppImage.zsync" \
+              squashfs-root/ \
+              "$APPIMAGE"
+              
+            # Clean up extracted dir
+            rm -rf squashfs-root
+          else
+            echo "Warning: AppImage not found for re-packing."
+          fi
+
 
       - name: Rename output directory
         run: |
