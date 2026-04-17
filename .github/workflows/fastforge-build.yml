@@ -91,7 +91,7 @@ jobs:
       - name: Install Linux build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build libgtk-3-dev liblzma-dev libstdc++-12-dev locate rpm patchelf bsdtar
+          sudo apt-get install -y clang cmake ninja-build libgtk-3-dev liblzma-dev libstdc++-12-dev locate rpm patchelf libarchive-tools
 
       - name: Install appimagetool
         run: |
@@ -176,10 +176,10 @@ jobs:
           sudo apt-get install -y unzip xz-utils
 
       - name: Build OpenHarmony APP
-        run: flutter build app --release -o dist/
+        run: flutter build app -o dist/
 
       - name: Build OpenHarmony HAP
-        run: flutter build hap --release -o dist/
+        run: flutter build hap -o dist/
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
