@@ -1,20 +1,17 @@
 display_name: hdict
 package_name: hdict
-icon: assets/hdict_logo.png
-summary: Dictionary Reader App for StarDict, Dictd, Slob and Mdict dictionaries
-licenses:
-  - GPL-3.0
-url: https://github.com/drdhaval2785/hdict
-architecture:
-  - x86_64
 maintainer:
   name: Dr. Dhaval Patel
   email: drdhaval2785@gmail.com
-groups: []
-provides: []
-depends: []
-optdepends: []
-conflicts: []
-replaces: []
-backup: []
+installed_size: 6604
+icon: assets/hdict_logo.png
+keywords:
+  - Dictionary
+  - StarDict
+  - Dictd
+  - Slob
+  - Mdict
+generic_name: Dictionary Reader
+categories:
+  - Utility
 startup_notify: true
