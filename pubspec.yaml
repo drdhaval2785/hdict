@@ -62,7 +62,6 @@ dependencies:
   docman: ^1.2.0
   saf_stream: ^2.0.0
   flutter_markdown_plus: ^1.0.7
-  in_app_review: ^2.0.11
   file_picker: ^11.0.2
   collection: ^1.19.1
   diacritic: ^0.1.6
