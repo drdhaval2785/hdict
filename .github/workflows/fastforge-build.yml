@@ -39,22 +39,6 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 -d > android/upload-keystore.jks
         shell: bash
 
-      - name: Prepare fdroid build (remove in_app_review dependency)
-        run: |
-          sed -i -e '/in_app_review/d' pubspec.yaml || true
-          sed -i -e '/in_app_review/d' pubspec.lock || true
-          sed -i -e '/in_app_review/d' lib/features/home/home_screen.dart || true
-          sed -i -e 's/InAppReview/dynamic/g' lib/features/home/home_screen.dart || true
-          sed -i -e 's/dynamic.instance/null/g' lib/features/home/home_screen.dart || true
-          sed -i -e 's/await inAppReview.isAvailable()/false/g' lib/features/home/home_screen.dart || true
-          mkdir -p lib/core/utils
-          printf "import 'package:flutter/material.dart';\nimport 'package:hdict/features/settings/settings_provider.dart';\nclass ReviewHelper {\n  static Future<void> maybeRequestReview(BuildContext context, SettingsProvider settings) async {}\n}\n" > lib/core/utils/review_helper.dart
-          rm -f pubspec.lock
-        shell: bash
-
-      - name: Install dependencies after fdroid patches
-        run: flutter pub get
-
       - name: Get app version
         id: version
         run: |
@@ -62,10 +46,10 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Build Android APK
-        run: flutter build apk --release
+        run: flutter build apk --release --flavor play
 
       - name: Build Android AAB
-        run: flutter build appbundle --release
+        run: flutter build appbundle --release --flavor play
 
       - name: Clean up keystore
         run: rm -f android/upload-keystore.jks
@@ -74,8 +58,8 @@ jobs:
         run: |
           VERSION=${{ steps.version.outputs.version }}
           mkdir -p dist
-          cp build/app/outputs/flutter-apk/*.apk dist/hdict-$VERSION-android.apk
-          cp build/app/outputs/bundle/release/*.aab dist/hdict-$VERSION-android.aab
+          cp build/app/outputs/flutter-apk/app-play-release.apk dist/hdict-$VERSION-android.apk
+          cp build/app/outputs/bundle/playRelease/app-play-release.aab dist/hdict-$VERSION-android.aab
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -186,13 +170,17 @@ jobs:
 
       - name: Download sqlite3.dll
         run: |
-          # Fetch the latest version from SQLite download page
-          VERSION=$(curl -s https://www.sqlite.org/download.html | grep -oP 'sqlite-dll-win-x64-\K[0-9]+(?=\.zip)' | head -1)
-          curl -L -o sqlite.zip "https://www.sqlite.org/2024/sqlite-dll-win-x64-${VERSION}.zip"
-          unzip -o sqlite.zip -d sqlite_temp
-          cp sqlite_temp/sqlite3.dll build/windows/x64/release/bundle/
-          rm -rf sqlite.zip sqlite_temp
-        shell: bash
+          # Fetch the latest SQLite version number from the download page
+          $page = Invoke-WebRequest -Uri 'https://www.sqlite.org/download.html' -UseBasicParsing
+          $match = [regex]::Match($page.Content, 'sqlite-dll-win-x64-(\d+)\.zip')
+          if (-not $match.Success) { Write-Error 'Could not find sqlite3 version'; exit 1 }
+          $ver = $match.Groups[1].Value
+          $year = [regex]::Match($page.Content, '/([0-9]{4})/sqlite-dll-win-x64').Groups[1].Value
+          Invoke-WebRequest -Uri "https://www.sqlite.org/$year/sqlite-dll-win-x64-$ver.zip" -OutFile sqlite.zip
+          Expand-Archive -Path sqlite.zip -DestinationPath sqlite_temp -Force
+          Copy-Item sqlite_temp\sqlite3.dll build\windows\x64\release\bundle\
+          Remove-Item -Recurse -Force sqlite.zip, sqlite_temp
+        shell: pwsh
 
       - name: Rename and zip Windows artifacts
         run: |

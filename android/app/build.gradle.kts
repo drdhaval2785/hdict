@@ -68,15 +68,17 @@ android {
 
     flavorDimensions += "deploy"
     productFlavors {
+        create("play") {
+            dimension = "deploy"
+            signingConfig = signingConfigs.getByName("release")
+        }
         create("fdroid") {
             dimension = "deploy"
             signingConfig = signingConfigs.getByName("release")
-            // Only exclude Google Play dependencies when building fdroid explicitly
-            if (gradle.startParameter.taskNames.any { it.contains("fdroid", ignoreCase = true) }) {
-                configurations.all {
-                    exclude(group = "com.google.android.play")
-                    exclude(group = "com.google.android.gms")
-                }
+            // Exclude Google Play dependencies for F-Droid builds
+            configurations.all {
+                exclude(group = "com.google.android.play")
+                exclude(group = "com.google.android.gms")
             }
         }
     }
