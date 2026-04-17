@@ -1,7 +1,7 @@
 icon: assets/hdict_logo.png
 summary: Dictionary Reader App for StarDict, Dictd, Slob and Mdict dictionaries
 group: Application
-vendor: Dhaval
+vendor: Dr. Dhaval Patel
 license: GPL-3.0
 url: https://github.com/drdhaval2785/hdict
 display_name: hdict
