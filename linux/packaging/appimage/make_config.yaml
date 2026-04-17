@@ -1,0 +1,6 @@
+display_name: hdict
+icon: assets/hdict_logo.png
+generic_name: Hindi Dictionary
+categories:
+  - Utility
+startup_notify: true

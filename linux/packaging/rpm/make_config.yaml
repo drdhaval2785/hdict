@@ -1,0 +1,8 @@
+icon: assets/hdict_logo.png
+summary: Hindi Dictionary App
+vendor: Dhaval
+license: MIT
+url: https://github.com/drdhaval2785/hdict
+display_name: hdict
+categories:
+  - Utility

@@ -1,0 +1,11 @@
+display_name: hdict
+package_name: hdict
+maintainer:
+  name: Dhaval
+  email: drdhaval2785@gmail.com
+priority: optional
+section: x11
+essential: false
+icon: assets/hdict_logo.png
+categories:
+  - Utility
