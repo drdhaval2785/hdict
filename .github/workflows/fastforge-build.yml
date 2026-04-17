@@ -31,11 +31,22 @@ jobs:
       - name: Install FastForge
         run: dart pub global activate fastforge
 
+      - name: Decode keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > android/upload-keystore.jks
+        shell: bash
+
       - name: Build Android APK
         run: flutter build apk --release
 
       - name: Build Android AAB
         run: flutter build appbundle --release
+
+      - name: Clean up keystore
+        run: rm -f android/upload-keystore.jks
 
       - name: Copy artifacts
         run: |
