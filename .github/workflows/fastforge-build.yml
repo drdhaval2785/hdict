@@ -163,34 +163,36 @@ jobs:
 
       - name: Flatten and Clean Artifacts
         run: |
-          VERSION=${{ needs.get-version.outputs.version }}
-          # Move all generated files (AppImage, zsync, deb, rpm, etc.) to the root of dist/
-          find dist -type f -exec mv -t dist/ {} +
-          # Remove now-empty directories
-          find dist -type d -empty -delete
+          # Move all files from subdirectories to the root of dist/
+          # This handles cases where fastforge creates versioned subdirectories
+          mkdir -p dist_tmp
+          find dist -type f -exec mv {} dist_tmp/ \;
+          rm -rf dist
+          mv dist_tmp dist
         shell: bash
 
       - name: Rename Artifacts for Release
         run: |
           VERSION=${{ needs.get-version.outputs.version }}
           cd dist
-          # Use globbing to find files since exact name might vary by architecture/fastforge settings
-          # Rename AppImage
-          APP=$(ls hdict*.AppImage | head -n 1)
-          if [ -n "$APP" ]; then
-            mv "$APP" "hdict-$VERSION-linux.AppImage"
-          fi
-          # Rename zsync
-          ZSYNC=$(ls hdict*.AppImage.zsync | head -n 1)
-          if [ -n "$ZSYNC" ]; then
-            mv "$ZSYNC" "hdict-$VERSION-linux.AppImage.zsync"
-          fi
-          # Rename deb, rpm, pacman, zip if they exist
+          # Enable nullglob so globs that don't match expand to nothing instead of causing errors
+          shopt -s nullglob
+          
+          # Rename AppImage and its zsync
+          # We look for files matching hdict* (from fastforge) and rename to the standard release pattern
+          for f in hdict*.AppImage; do
+             mv "$f" "hdict-$VERSION-linux.AppImage"
+          done
+          
+          for f in hdict*.AppImage.zsync; do
+             mv "$f" "hdict-$VERSION-linux.AppImage.zsync"
+          done
+          
+          # Rename other packages
           for ext in deb rpm pacman zip; do
-            FILE=$(ls hdict*.$ext | head -n 1)
-            if [ -n "$FILE" ]; then
-              mv "$FILE" "hdict-$VERSION-linux.$ext"
-            fi
+            for f in hdict*.$ext; do
+              mv "$f" "hdict-$VERSION-linux.$ext"
+            done
           done
         shell: bash
 
