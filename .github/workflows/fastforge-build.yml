@@ -60,7 +60,7 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          echo "$KEYSTORE_BASE64" | base64 -d > android/upload-keystore.jks
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
           # Write key.properties so Gradle's signingConfig can find all values.
           # This file is gitignored and must be generated in CI from secrets.
           printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=upload-keystore.jks\n' \
@@ -76,7 +76,7 @@ jobs:
 
       - name: Clean up signing files
         run: |
-          rm -f android/upload-keystore.jks
+          rm -f android/app/upload-keystore.jks
           rm -f android/key.properties
 
       - name: Copy and rename artifacts
@@ -130,23 +130,27 @@ jobs:
         run: |
           wget -O appimagetool "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
           chmod +x appimagetool
-          sudo mv appimagetool /usr/local/bin/
+          # Extract the AppImage tool to bypass FUSE requirements on runner
+          ./appimagetool --appimage-extract
+          sudo mv squashfs-root /opt/appimagetool
+          sudo ln -s /opt/appimagetool/AppRun /usr/local/bin/appimagetool
 
       - name: Build Linux
         run: |
           VERSION=${{ needs.get-version.outputs.version }}
           fastforge package --platform=linux --targets=appimage,deb,rpm,zip,pacman
           
-          # Extract and re-pack AppImage with update info to enable delta updates
+          # Use find to locate the AppImage as the exact filename might differ (e.g. arch suffixes)
           APPIMAGE=$(find dist -name "*.AppImage" | head -n 1)
           
           if [ -f "$APPIMAGE" ]; then
             echo "Found AppImage at $APPIMAGE. Re-packing with update info..."
             chmod +x "$APPIMAGE"
+            # Bypass FUSE using extract-and-run environment variable
+            export APPIMAGE_EXTRACT_AND_RUN=1
             ./"$APPIMAGE" --appimage-extract
             
-            # Use appimagetool to build it again with update information
-            # This will also generate the .zsync file automatically
+            # Use the extracted appimagetool binary
             appimagetool -u "gh-releases-zsync|drdhaval2785|hdict|latest|hdict-*-linux.AppImage.zsync" \
               squashfs-root/ \
               "$APPIMAGE"
@@ -170,18 +174,22 @@ jobs:
         run: |
           VERSION=${{ needs.get-version.outputs.version }}
           cd dist
-          # Rename AppImage to include linux suffix
-          if [ -f "hdict-$VERSION.AppImage" ]; then
-            mv "hdict-$VERSION.AppImage" "hdict-$VERSION-linux.AppImage"
+          # Use globbing to find files since exact name might vary by architecture/fastforge settings
+          # Rename AppImage
+          APP=$(ls hdict*.AppImage | head -n 1)
+          if [ -n "$APP" ]; then
+            mv "$APP" "hdict-$VERSION-linux.AppImage"
           fi
           # Rename zsync
-          if [ -f "hdict-$VERSION.AppImage.zsync" ]; then
-            mv "hdict-$VERSION.AppImage.zsync" "hdict-$VERSION-linux.AppImage.zsync"
+          ZSYNC=$(ls hdict*.AppImage.zsync | head -n 1)
+          if [ -n "$ZSYNC" ]; then
+            mv "$ZSYNC" "hdict-$VERSION-linux.AppImage.zsync"
           fi
           # Rename deb, rpm, pacman, zip if they exist
           for ext in deb rpm pacman zip; do
-            if [ -f "hdict-$VERSION.$ext" ]; then
-              mv "hdict-$VERSION.$ext" "hdict-$VERSION-linux.$ext"
+            FILE=$(ls hdict*.$ext | head -n 1)
+            if [ -n "$FILE" ]; then
+              mv "$FILE" "hdict-$VERSION-linux.$ext"
             fi
           done
         shell: bash
