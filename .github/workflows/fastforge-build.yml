@@ -57,8 +57,18 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           echo "$KEYSTORE_BASE64" | base64 -d > android/upload-keystore.jks
+          # Write key.properties so Gradle's signingConfig can find all values.
+          # This file is gitignored and must be generated in CI from secrets.
+          cat > android/key.properties <<EOF
+          storePassword=$KEYSTORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=upload-keystore.jks
+          EOF
         shell: bash
 
       - name: Build Android APK
@@ -67,8 +77,10 @@ jobs:
       - name: Build Android AAB
         run: flutter build appbundle --release --flavor play
 
-      - name: Clean up keystore
-        run: rm -f android/upload-keystore.jks
+      - name: Clean up signing files
+        run: |
+          rm -f android/upload-keystore.jks
+          rm -f android/key.properties
 
       - name: Copy and rename artifacts
         run: |
