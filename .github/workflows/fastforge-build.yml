@@ -20,6 +20,8 @@ jobs:
         id: version
         run: |
           VERSION=$(grep "^version:" pubspec.yaml | cut -d' ' -f2)
+          # Remove build number suffix (e.g., +40) from version
+          VERSION=${VERSION%%+*}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "release_tag=v$VERSION" >> $GITHUB_OUTPUT
 
