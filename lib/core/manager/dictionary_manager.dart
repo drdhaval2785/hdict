@@ -728,6 +728,10 @@ Future<void> _indexEntry(_IndexArgs args) async {
       await dictReader?.close();
     } catch (_) {}
     await dbHelper.endBatchInsert();
+    // Close the DB cleanly before exiting so sqflite_common_ffi's shared
+    // FFI worker is not left in a corrupt state (prevents SQLITE_MISUSE on
+    // the main isolate after the spawned isolate terminates).
+    await dbHelper.closeDatabase();
 
     // Clear parser and source references
     // Exit isolate immediately to free all memory
@@ -910,6 +914,10 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
     hDebugPrint(
       '[MEMORY] _indexMdictEntry COMPLETE - dictId=${args.dictId}, indexed=$indexed',
     );
+    // Close the DB cleanly before exiting so sqflite_common_ffi's shared
+    // FFI worker is not left in a corrupt state (prevents SQLITE_MISUSE on
+    // the main isolate after the spawned isolate terminates).
+    await dbHelper.closeDatabase();
     Isolate.exit();
   } catch (e, s) {
     await dbHelper.endBatchInsert();
@@ -1107,6 +1115,10 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
     hDebugPrint(
       '[MEMORY] _indexSlobEntry COMPLETE - dictId=${args.dictId}, headwordCount=$headwordCount',
     );
+    // Close the DB cleanly before exiting so sqflite_common_ffi's shared
+    // FFI worker is not left in a corrupt state (prevents SQLITE_MISUSE on
+    // the main isolate after the spawned isolate terminates).
+    await dbHelper.closeDatabase();
     Isolate.exit();
   } catch (e, s) {
     await dbHelper.endBatchInsert();
@@ -1304,6 +1316,10 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
     hDebugPrint(
       '[MEMORY] _indexDictdEntry COMPLETE - dictId=${args.dictId}, headwordCount=$headwordCount',
     );
+    // Close the DB cleanly before exiting so sqflite_common_ffi's shared
+    // FFI worker is not left in a corrupt state (prevents SQLITE_MISUSE on
+    // the main isolate after the spawned isolate terminates).
+    await dbHelper.closeDatabase();
     Isolate.exit();
   } catch (e, s) {
     await dbHelper.endBatchInsert();

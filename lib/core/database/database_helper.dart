@@ -105,14 +105,44 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) {
-      hDebugPrint(
-        'DatabaseHelper: database getter - returning cached instance',
-      );
-      return _database!;
+      // Guard against a stale reference left behind when a spawned indexing
+      // isolate closed the underlying connection before calling Isolate.exit().
+      // sqflite_common_ffi marks the Database object as not-open in that case.
+      if (!_database!.isOpen) {
+        hDebugPrint(
+          'DatabaseHelper: database getter - cached instance is closed, re-opening',
+        );
+        _database = null;
+        _fts5Available = null;
+      } else {
+        hDebugPrint(
+          'DatabaseHelper: database getter - returning cached instance',
+        );
+        return _database!;
+      }
     }
     hDebugPrint('DatabaseHelper: database getter - initializing new database');
     _database = await _initDatabase();
     return _database!;
+  }
+
+  /// Closes the database and clears the cached reference.
+  ///
+  /// **Must be called in spawned indexing isolates before [Isolate.exit()].**
+  /// Without this, `sqflite_common_ffi`'s shared FFI worker may be left in an
+  /// inconsistent state, causing SQLITE_MISUSE (error 21) on the main isolate.
+  Future<void> closeDatabase() async {
+    if (_database != null) {
+      try {
+        await _database!.close();
+        hDebugPrint('DatabaseHelper: database closed cleanly');
+      } catch (e) {
+        hDebugPrint('DatabaseHelper: error closing database: $e');
+      } finally {
+        _database = null;
+        _fts5Available = null;
+      }
+    }
   }
 
   // For testing only — also probes FTS5 availability on the injected DB.
