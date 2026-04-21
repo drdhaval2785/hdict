@@ -5,7 +5,6 @@ import 'package:flutter_7zip/flutter_7zip.dart';
 import 'package:path/path.dart' as p;
 import 'package:hdict/core/utils/logger.dart';
 
-/// A validated, importable dictionary found during folder scanning.
 class DiscoveredDict {
   /// Path to the primary anchor file (e.g. `.ifo`, `.mdx`, `.slob`, `.index`).
   final String path;
@@ -22,9 +21,13 @@ class DiscoveredDict {
   /// Holds mapped URIs for all constituent files when using Android SAF.
   final Map<String, String>? safUris;
 
+  /// The display name (usually filename without extension).
+  final String? name;
+
   const DiscoveredDict({
     required this.path,
     required this.format,
+    this.name,
     this.companionPath,
     this.parentFolderName,
     this.safUris,
@@ -33,6 +36,7 @@ class DiscoveredDict {
   Map<String, dynamic> toMap() => {
         'path': path,
         'format': format,
+        'name': name,
         'companionPath': companionPath,
         'parentFolderName': parentFolderName,
         'safUris': safUris,
@@ -41,6 +45,7 @@ class DiscoveredDict {
   static DiscoveredDict fromMap(Map<String, dynamic> map) => DiscoveredDict(
         path: map['path'] as String,
         format: map['format'] as String,
+        name: map['name'] as String?,
         companionPath: map['companionPath'] as String?,
         parentFolderName: map['parentFolderName'] as String?,
         safUris: map['safUris'] != null
@@ -312,6 +317,7 @@ Future<FolderScanResult> scanFolderForDictionaries(
         discovered.add(DiscoveredDict(
           path: path,
           format: 'stardict',
+          name: p.basenameWithoutExtension(basePath),
           parentFolderName: parentName,
         ));
       } else {
@@ -329,6 +335,7 @@ Future<FolderScanResult> scanFolderForDictionaries(
       discovered.add(DiscoveredDict(
         path: path,
         format: 'mdict',
+        name: p.basenameWithoutExtension(path),
         parentFolderName: parentName,
       ));
     }
@@ -338,6 +345,7 @@ Future<FolderScanResult> scanFolderForDictionaries(
       discovered.add(DiscoveredDict(
         path: path,
         format: 'slob',
+        name: p.basenameWithoutExtension(path),
         parentFolderName: parentName,
       ));
     }
@@ -351,6 +359,7 @@ Future<FolderScanResult> scanFolderForDictionaries(
         discovered.add(DiscoveredDict(
           path: path,
           format: 'dictd',
+          name: p.basenameWithoutExtension(basePath),
           companionPath: dictFile,
           parentFolderName: parentName,
         ));

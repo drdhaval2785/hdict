@@ -1469,6 +1469,18 @@ Future<void> _importEntry(_ImportArgs args) async {
 /// Manages high-level dictionary operations: importing, downloading, and enabling/disabling dictionaries.
 class DictionaryManager {
   final DatabaseHelper _dbHelper;
+
+  String _getDisplayNameFromPath(String path) {
+    if (path.startsWith('content://')) {
+      try {
+        return p.basenameWithoutExtension(Uri.decodeComponent(path));
+      } catch (e) {
+        return p.basenameWithoutExtension(path);
+      }
+    }
+    return p.basenameWithoutExtension(path);
+  }
+
   final http.Client _client;
 
   static DictionaryManager? _instance;
@@ -2116,7 +2128,7 @@ class DictionaryManager {
           if (progress.error == 'ALREADY_EXISTS') {
             alreadyExistsList.add(
               progress.dictionaryName ??
-                  p.basenameWithoutExtension(primaryPath),
+                  _getDisplayNameFromPath(primaryPath),
             );
             break;
           }
@@ -2854,6 +2866,7 @@ class DictionaryManager {
               DiscoveredDict(
                 path: path,
                 format: 'stardict',
+                name: baseName,
                 parentFolderName: parentName,
                 safUris: {
                   'tree': treeUri,
@@ -2890,6 +2903,7 @@ class DictionaryManager {
             DiscoveredDict(
               path: path,
               format: 'mdict',
+              name: mdxBaseName,
               parentFolderName: parentName,
               safUris: {
                 'tree': treeUri,
@@ -2905,6 +2919,7 @@ class DictionaryManager {
             DiscoveredDict(
               path: path,
               format: 'slob',
+              name: name.substring(0, name.length - 5),
               parentFolderName: parentName,
               safUris: {'tree': treeUri},
             ),
@@ -2927,6 +2942,7 @@ class DictionaryManager {
               DiscoveredDict(
                 path: path,
                 format: 'dictd',
+                name: baseName,
                 companionPath: dictPath,
                 parentFolderName: parentName,
                 safUris: {'tree': treeUri},
@@ -3071,7 +3087,10 @@ class DictionaryManager {
 
       for (final item in scanResult.discovered) {
         currentLinked++;
-        final name = p.basenameWithoutExtension(item.path);
+        final name = item.name ??
+            (item.path.startsWith('content://')
+                ? p.basenameWithoutExtension(Uri.decodeComponent(item.path))
+                : p.basenameWithoutExtension(item.path));
         final lowerName = name.toLowerCase();
 
         // Check if path or name already in library
@@ -3411,7 +3430,7 @@ class DictionaryManager {
         await ifoSource.close();
       }
       final bookName =
-          ifoParser.bookName ?? p.basenameWithoutExtension(ifoPath);
+          ifoParser.bookName ?? _getDisplayNameFromPath(ifoPath);
 
       // Create bookmark for the parent folder to allow access to all sibling files (.idx, .dict, etc.)
       // For SAF, we use the tree URI if available to allow listing siblings later.
@@ -3561,7 +3580,7 @@ class DictionaryManager {
             );
       await reader.open();
       // MDict book name usually comes from the header or filename
-      final bookName = p.basenameWithoutExtension(mdxPath);
+      final bookName = _getDisplayNameFromPath(mdxPath);
 
       final checksum = await _calculateChecksum(mdxPath);
       final existing = await _dbHelper.getDictionaryByChecksum(checksum);
@@ -3643,7 +3662,7 @@ class DictionaryManager {
       final slobLabel = reader.bookName;
       final bookName = slobLabel.isNotEmpty
           ? slobLabel
-          : p.basenameWithoutExtension(slobPath);
+          : _getDisplayNameFromPath(slobPath);
 
       hDebugPrint(
         '[Slob Link] file=$slobPath, internal_label="$slobLabel", bookName="$bookName"',
@@ -3722,7 +3741,7 @@ class DictionaryManager {
       final String? bookmark = await BookmarkManager.createBookmark(folderPath);
       if (bookmark == null) throw Exception('Failed to create bookmark');
 
-      final bookName = p.basenameWithoutExtension(indexPath);
+      final bookName = _getDisplayNameFromPath(indexPath);
       final checksum = await _calculateChecksum(indexPath);
       final existing = await _dbHelper.getDictionaryByChecksum(checksum);
       if (existing != null) {
@@ -4638,7 +4657,7 @@ class DictionaryManager {
       }
 
       // Use the filename (without extension) as a fallback book name
-      final bookName = p.basenameWithoutExtension(mdxPath);
+      final bookName = _getDisplayNameFromPath(mdxPath);
 
       yield ImportProgress(
         message: 'Copying to permanent storage...',
@@ -4827,8 +4846,7 @@ class DictionaryManager {
         return;
       }
 
-      final bookName = p
-          .basenameWithoutExtension(indexPath)
+      final bookName = _getDisplayNameFromPath(indexPath)
           .replaceAll(RegExp(r'\.dict$'), '');
 
       yield ImportProgress(
@@ -4977,7 +4995,7 @@ class DictionaryManager {
 
       final bookName = reader.bookName.isNotEmpty
           ? reader.bookName
-          : p.basenameWithoutExtension(slobPath);
+          : _getDisplayNameFromPath(slobPath);
 
       hDebugPrint(
         '[Slob Import] file=$slobPath, internal_label="${reader.bookName}", bookName="$bookName"',
