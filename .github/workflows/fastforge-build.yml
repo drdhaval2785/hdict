@@ -3,6 +3,9 @@ name: FastForge Build
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   get-version:
     runs-on: ubuntu-latest
