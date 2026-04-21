@@ -63,12 +63,9 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 -d > android/upload-keystore.jks
           # Write key.properties so Gradle's signingConfig can find all values.
           # This file is gitignored and must be generated in CI from secrets.
-          cat > android/key.properties <<EOF
-          storePassword=$KEYSTORE_PASSWORD
-          keyPassword=$KEY_PASSWORD
-          keyAlias=$KEY_ALIAS
-          storeFile=upload-keystore.jks
-          EOF
+          printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=upload-keystore.jks\n' \
+            "$KEYSTORE_PASSWORD" "$KEY_PASSWORD" "$KEY_ALIAS" \
+            > android/key.properties
         shell: bash
 
       - name: Build Android APK
