@@ -5066,6 +5066,9 @@ class DictionaryManager {
         }
       }
 
+      // Small delay to allow DB to settle after background isolate import completes
+      await Future.delayed(const Duration(milliseconds: 50));
+
       final sampleWords = await _dbHelper.getSampleWords(dictId);
 
       yield ImportProgress(

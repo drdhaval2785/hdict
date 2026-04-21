@@ -153,6 +153,8 @@ class DatabaseHelper {
       path,
       version:
           34, // Version 34: Add word_normalized column for diacritic-insensitive search
+      singleInstance:
+          false, // Allow multiple connections (needed for background isolate imports on Windows/FFI)
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         hDebugPrint(
