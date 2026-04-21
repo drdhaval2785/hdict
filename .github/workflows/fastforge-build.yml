@@ -4,9 +4,26 @@ on:
   workflow_dispatch:
 
 jobs:
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release_tag: ${{ steps.version.outputs.release_tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get app version
+        id: version
+        run: |
+          VERSION=$(grep "^version:" pubspec.yaml | cut -d' ' -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "release_tag=v$VERSION" >> $GITHUB_OUTPUT
+
   build-android:
     runs-on: ubuntu-latest
     continue-on-error: true
+    needs: get-version
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -39,12 +56,6 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 -d > android/upload-keystore.jks
         shell: bash
 
-      - name: Get app version
-        id: version
-        run: |
-          VERSION=$(grep "^version:" pubspec.yaml | cut -d' ' -f2)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
       - name: Build Android APK
         run: flutter build apk --release --flavor play
 
@@ -56,7 +67,7 @@ jobs:
 
       - name: Copy and rename artifacts
         run: |
-          VERSION=${{ steps.version.outputs.version }}
+          VERSION=${{ needs.get-version.outputs.version }}
           mkdir -p dist
           cp build/app/outputs/flutter-apk/app-play-release.apk dist/hdict-$VERSION-android.apk
           cp build/app/outputs/bundle/playRelease/app-play-release.aab dist/hdict-$VERSION-android.aab
@@ -71,6 +82,7 @@ jobs:
   build-linux:
     runs-on: ubuntu-latest
     continue-on-error: true
+    needs: get-version
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -106,20 +118,12 @@ jobs:
           chmod +x appimagetool
           sudo mv appimagetool /usr/local/bin/
 
-      - name: Get app version
-        id: version
-        run: |
-          VERSION=$(grep "^version:" pubspec.yaml | cut -d' ' -f2)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-        shell: bash
-
       - name: Build Linux
         run: |
+          VERSION=${{ needs.get-version.outputs.version }}
           fastforge package --platform=linux --targets=appimage,deb,rpm,zip,pacman
           
           # Extract and re-pack AppImage with update info to enable delta updates
-          VERSION=${{ steps.version.outputs.version }}
-          # Find the generated AppImage (FastForge puts it in a version-named subdir in dist)
           APPIMAGE=$(find dist -name "*.AppImage" | head -n 1)
           
           if [ -f "$APPIMAGE" ]; then
@@ -139,15 +143,33 @@ jobs:
             echo "Warning: AppImage not found for re-packing."
           fi
 
-
       - name: Flatten and Clean Artifacts
         run: |
-          VERSION=${{ steps.version.outputs.version }}
+          VERSION=${{ needs.get-version.outputs.version }}
           # Move all generated files (AppImage, zsync, deb, rpm, etc.) to the root of dist/
-          # This ensures they are easily accessible and not nested in subfolders
           find dist -type f -exec mv -t dist/ {} +
           # Remove now-empty directories
           find dist -type d -empty -delete
+        shell: bash
+
+      - name: Rename Artifacts for Release
+        run: |
+          VERSION=${{ needs.get-version.outputs.version }}
+          cd dist
+          # Rename AppImage to include linux suffix
+          if [ -f "hdict-$VERSION.AppImage" ]; then
+            mv "hdict-$VERSION.AppImage" "hdict-$VERSION-linux.AppImage"
+          fi
+          # Rename zsync
+          if [ -f "hdict-$VERSION.AppImage.zsync" ]; then
+            mv "hdict-$VERSION.AppImage.zsync" "hdict-$VERSION-linux.zsync"
+          fi
+          # Rename deb, rpm, pacman, zip if they exist
+          for ext in deb rpm pacman zip; do
+            if [ -f "hdict-$VERSION.$ext" ]; then
+              mv "hdict-$VERSION.$ext" "hdict-$VERSION-linux.$ext"
+            fi
+          done
         shell: bash
 
       - name: Upload artifacts
@@ -160,6 +182,7 @@ jobs:
   build-windows:
     runs-on: windows-latest
     continue-on-error: true
+    needs: get-version
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -180,13 +203,6 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
-
-      - name: Get app version
-        id: version
-        run: |
-          VERSION=$(grep "^version:" pubspec.yaml | cut -d' ' -f2)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-        shell: bash
 
       - name: Build Windows EXE
         run: flutter build windows --release
@@ -212,7 +228,7 @@ jobs:
           Remove-Item -Recurse -Force sqlite.zip, sqlite_temp
           
           # 4. Zip the entire application bundle
-          $version = "${{ steps.version.outputs.version }}"
+          $version = "${{ needs.get-version.outputs.version }}"
           Set-Location -Path $buildDir
           7z a -tzip "hdict-$version-windows.zip" *
           
@@ -228,3 +244,61 @@ jobs:
           name: windows-builds
           path: dist-windows/*.zip
           retention-days: 7
+
+  create-release:
+    needs: [get-version, build-linux, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-builds
+          path: linux-artifacts
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-builds
+          path: windows-artifacts
+
+      - name: Sanitize and Rename Artifacts
+        run: |
+          VERSION=${{ needs.get-version.outputs.version }}
+          mkdir -p release-artifacts
+          cd release-artifacts
+
+          # Linux artifacts (AppImage with zsync)
+          if [ -f ../linux-artifacts/hdict-$VERSION-linux.AppImage ]; then
+            cp ../linux-artifacts/hdict-$VERSION-linux.AppImage ./hdict-$VERSION-linux.AppImage
+          fi
+          if [ -f ../linux-artifacts/hdict-$VERSION-linux.AppImage.zsync ]; then
+            cp ../linux-artifacts/hdict-$VERSION-linux.AppImage.zsync ./hdict-$VERSION-linux.zsync
+          fi
+
+          # Linux packages (deb, rpm, pacman)
+          for ext in deb rpm pacman; do
+            file=$(find ../linux-artifacts -name "*.$ext" | head -n 1)
+            if [ -n "$file" ]; then
+              cp "$file" ./hdict-$VERSION-linux.$ext
+            fi
+          done
+
+          # Linux zip
+          if [ -f ../linux-artifacts/hdict-$VERSION-linux.zip ]; then
+            cp ../linux-artifacts/hdict-$VERSION-linux.zip ./hdict-$VERSION-linux.zip
+          fi
+
+          # Windows zip
+          if [ -f ../windows-artifacts/hdict-$VERSION-windows.zip ]; then
+            cp ../windows-artifacts/hdict-$VERSION-windows.zip ./hdict-$VERSION-windows.zip
+          fi
+        shell: bash
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.get-version.outputs.release_tag }}
+          name: ${{ needs.get-version.outputs.release_tag }}
+          files: release-artifacts/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
