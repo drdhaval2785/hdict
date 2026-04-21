@@ -147,7 +147,7 @@ jobs:
             
             # Use appimagetool to build it again with update information
             # This will also generate the .zsync file automatically
-            appimagetool -u "gh-releases-zsync|drdhaval2785|hdict|latest|hdict-*-x86_64.AppImage.zsync" \
+            appimagetool -u "gh-releases-zsync|drdhaval2785|hdict|latest|hdict-*-linux.AppImage.zsync" \
               squashfs-root/ \
               "$APPIMAGE"
               
@@ -176,7 +176,7 @@ jobs:
           fi
           # Rename zsync
           if [ -f "hdict-$VERSION.AppImage.zsync" ]; then
-            mv "hdict-$VERSION.AppImage.zsync" "hdict-$VERSION-linux.zsync"
+            mv "hdict-$VERSION.AppImage.zsync" "hdict-$VERSION-linux.AppImage.zsync"
           fi
           # Rename deb, rpm, pacman, zip if they exist
           for ext in deb rpm pacman zip; do
@@ -286,7 +286,7 @@ jobs:
             cp ../linux-artifacts/hdict-$VERSION-linux.AppImage ./hdict-$VERSION-linux.AppImage
           fi
           if [ -f ../linux-artifacts/hdict-$VERSION-linux.AppImage.zsync ]; then
-            cp ../linux-artifacts/hdict-$VERSION-linux.AppImage.zsync ./hdict-$VERSION-linux.zsync
+            cp ../linux-artifacts/hdict-$VERSION-linux.AppImage.zsync ./hdict-$VERSION-linux.AppImage.zsync
           fi
 
           # Linux packages (deb, rpm, pacman)
