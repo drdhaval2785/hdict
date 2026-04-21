@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.17] - 2026-04-21
+
+### Added
+
+- **FastForge Integration**: Implemented a comprehensive packaging workflow using FastForge for multi-platform distribution (AppImage, DEB, RPM, Windows ZIP, and more).
+- **Table Support**: Enhanced definition rendering with `flutter_html_table` to properly display structured data in dictionary entries.
+- **MDict CSS Support**: Added support for external CSS files in MDict dictionaries, significantly improving visual rendering.
+- **AppImage Delta Updates**: Integrated `zsync` metadata into Linux builds to enable fast, differential updates for AppImage users.
+- **Rename Dictionary**: Added the ability to rename imported dictionaries in the Manage Dictionaries screen.
+- **Self-contained Windows Build**: The build process now automatically bundles `sqlite3.dll`, ensuring the app runs on Windows without external dependencies.
+
+### Fixed
+
+- **Windows SQLITE_MISUSE (Error 21)**: Fixed a critical bug where indexing isolates would crash the shared SQLite worker on Windows, preventing discovery of new dictionaries until restart.
+- **Android Filename Decoding**: Fixed an issue where imported dictionaries on Android would display URL-encoded file paths (e.g., %20) instead of their actual names.
+- **GitHub Actions Android Signing**: Fixed a CI failure where release builds were missing the required `key.properties` configuration.
+- **Wiktionary Formatting**: Cleaned up excessive whitespace in Wiktionary definitions for a more compact and readable display.
+- **F-Droid Build Stability**: Improved F-Droid build logic by refining dependency handling and metadata references.
+
+### Changed
+
+- **Privacy Policy**: Updated the privacy policy for better clarity.
+- **Dependency Cleanup**: Removed `in_app_review` package to streamline the app and comply with F-Droid requirements.
+
 ## [1.5.16] - 2026-04-14
 
 ### Added
