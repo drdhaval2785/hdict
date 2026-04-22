@@ -5,7 +5,7 @@ import 'package:dictzip_reader/dictzip_reader.dart' as dz;
 /// Adapts a [dz.RandomAccessSource] to be used where a [dd.RandomAccessSource] is expected.
 /// This is necessary because both dictd_reader and dictzip_reader define their own 
 /// RandomAccessSource interfaces which, while identical, are not type-compatible in Dart.
-class DictdSourceAdapter implements dd.RandomAccessSource {
+class DictdSourceAdapter implements dd.RandomAccessSource, dz.RandomAccessSource {
   final dz.RandomAccessSource source;
 
   DictdSourceAdapter(this.source);
