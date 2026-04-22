@@ -137,29 +137,8 @@ jobs:
 
       - name: Build Linux
         run: |
-          VERSION=${{ needs.get-version.outputs.version }}
           fastforge package --platform=linux --targets=appimage,deb,rpm,zip,pacman
-          
-          # Use find to locate the AppImage as the exact filename might differ (e.g. arch suffixes)
-          APPIMAGE=$(find dist -name "*.AppImage" | head -n 1)
-          
-          if [ -f "$APPIMAGE" ]; then
-            echo "Found AppImage at $APPIMAGE. Re-packing with update info..."
-            chmod +x "$APPIMAGE"
-            # Bypass FUSE using extract-and-run environment variable
-            export APPIMAGE_EXTRACT_AND_RUN=1
-            ./"$APPIMAGE" --appimage-extract
-            
-            # Use the extracted appimagetool binary
-            appimagetool -u "gh-releases-zsync|drdhaval2785|hdict|latest|hdict-*-linux.AppImage.zsync" \
-              squashfs-root/ \
-              "$APPIMAGE"
-              
-            # Clean up extracted dir
-            rm -rf squashfs-root
-          else
-            echo "Warning: AppImage not found for re-packing."
-          fi
+        shell: bash
 
       - name: Flatten and Clean Artifacts
         run: |
@@ -178,28 +157,29 @@ jobs:
           # Enable nullglob so globs that don't match expand to nothing instead of causing errors
           shopt -s nullglob
           
-          # Rename AppImage and its zsync
-          # We look for files matching hdict* (from fastforge) and rename to the standard release pattern
+          # Rename AppImage (if not already named correctly)
           for f in hdict*.AppImage; do
-             mv "$f" "hdict-$VERSION-linux.AppImage"
-          done
-          
-          for f in hdict*.AppImage.zsync; do
-             mv "$f" "hdict-$VERSION-linux.AppImage.zsync"
+             if [ "$f" != "hdict-$VERSION-linux.AppImage" ]; then
+               mv "$f" "hdict-$VERSION-linux.AppImage"
+             fi
           done
           
           # Rename other packages
           for ext in deb rpm zip; do
             for f in hdict*.$ext; do
-              mv "$f" "hdict-$VERSION-linux.$ext"
+               if [ "$f" != "hdict-$VERSION-linux.$ext" ]; then
+                 mv "$f" "hdict-$VERSION-linux.$ext"
+               fi
             done
           done
           
-          # Rename Arch Linux packages (handling standard extensions)
+          # Rename Arch Linux packages
           for f in hdict*.pkg.tar.*; do
             if [ -f "$f" ]; then
               EXT="${f##*.pkg.tar.}"
-              mv "$f" "hdict-$VERSION-linux.pkg.tar.$EXT"
+              if [ "$f" != "hdict-$VERSION-linux.pkg.tar.$EXT" ]; then
+                mv "$f" "hdict-$VERSION-linux.pkg.tar.$EXT"
+              fi
             fi
           done
           # Also handle legacy .pacman extension if produced
@@ -208,6 +188,31 @@ jobs:
               mv "$f" "hdict-$VERSION-linux.pkg.tar.zst"
             fi
           done
+        shell: bash
+
+      - name: Re-pack AppImage with Update Info
+        run: |
+          VERSION=${{ needs.get-version.outputs.version }}
+          cd dist
+          APPIMAGE="hdict-$VERSION-linux.AppImage"
+          
+          if [ -f "$APPIMAGE" ]; then
+            echo "Found AppImage at $APPIMAGE. Re-packing with update info..."
+            chmod +x "$APPIMAGE"
+            # Bypass FUSE using extract-and-run environment variable
+            export APPIMAGE_EXTRACT_AND_RUN=1
+            ./"$APPIMAGE" --appimage-extract
+            
+            # Use the extracted appimagetool binary
+            appimagetool -u "gh-releases-zsync|drdhaval2785|hdict|latest|hdict-*-linux.AppImage.zsync" \
+              squashfs-root/ \
+              "$APPIMAGE"
+              
+            # Clean up extracted dir
+            rm -rf squashfs-root
+          else
+            echo "Warning: AppImage $APPIMAGE not found for re-packing."
+          fi
         shell: bash
 
       - name: Upload artifacts
@@ -309,48 +314,18 @@ jobs:
         run: |
           VERSION=${{ needs.get-version.outputs.version }}
           mkdir -p release-artifacts
-          cd release-artifacts
+          
+          # Use shopt nullglob to avoid errors if a pattern matches nothing
+          shopt -s nullglob
 
-          # Linux artifacts (AppImage with zsync)
-          if [ -f ../linux-artifacts/hdict-$VERSION-linux.AppImage ]; then
-            cp ../linux-artifacts/hdict-$VERSION-linux.AppImage ./hdict-$VERSION-linux.AppImage
-          fi
-          if [ -f ../linux-artifacts/hdict-$VERSION-linux.AppImage.zsync ]; then
-            cp ../linux-artifacts/hdict-$VERSION-linux.AppImage.zsync ./hdict-$VERSION-linux.AppImage.zsync
-          fi
+          # Copy everything from artifact download locations to the release folder
+          # This is much more robust than individual cp commands
+          cp linux-artifacts/* release-artifacts/ 2>/dev/null || true
+          cp android-artifacts/* release-artifacts/ 2>/dev/null || true
+          cp windows-artifacts/* release-artifacts/ 2>/dev/null || true
 
-          # Linux packages (deb, rpm)
-          for ext in deb rpm; do
-            file=$(find ../linux-artifacts -name "*.$ext" | head -n 1)
-            if [ -n "$file" ]; then
-              cp "$file" ./hdict-$VERSION-linux.$ext
-            fi
-          done
-
-          # Arch Linux package (pacman)
-          pacman_file=$(find ../linux-artifacts -name "*.pkg.tar.*" | head -n 1)
-          if [ -n "$pacman_file" ]; then
-            ext="${pacman_file##*.pkg.tar.}"
-            cp "$pacman_file" ./hdict-$VERSION-linux.pkg.tar.$ext
-          fi
-
-          # Linux zip
-          if [ -f ../linux-artifacts/hdict-$VERSION-linux.zip ]; then
-            cp ../linux-artifacts/hdict-$VERSION-linux.zip ./hdict-$VERSION-linux.zip
-          fi
-
-          # Android artifacts
-          if [ -f ../android-artifacts/hdict-$VERSION-android.apk ]; then
-            cp ../android-artifacts/hdict-$VERSION-android.apk ./hdict-$VERSION-android.apk
-          fi
-          if [ -f ../android-artifacts/hdict-$VERSION-android.aab ]; then
-            cp ../android-artifacts/hdict-$VERSION-android.aab ./hdict-$VERSION-android.aab
-          fi
-
-          # Windows zip
-          if [ -f ../windows-artifacts/hdict-$VERSION-windows.zip ]; then
-            cp ../windows-artifacts/hdict-$VERSION-windows.zip ./hdict-$VERSION-windows.zip
-          fi
+          # Double check if any critical artifacts are missing and log it
+          ls -R release-artifacts/
         shell: bash
 
       - name: Create GitHub Release
