@@ -189,10 +189,24 @@ jobs:
           done
           
           # Rename other packages
-          for ext in deb rpm pacman zip; do
+          for ext in deb rpm zip; do
             for f in hdict*.$ext; do
               mv "$f" "hdict-$VERSION-linux.$ext"
             done
+          done
+          
+          # Rename Arch Linux packages (handling standard extensions)
+          for f in hdict*.pkg.tar.*; do
+            if [ -f "$f" ]; then
+              EXT="${f##*.pkg.tar.}"
+              mv "$f" "hdict-$VERSION-linux.pkg.tar.$EXT"
+            fi
+          done
+          # Also handle legacy .pacman extension if produced
+          for f in hdict*.pacman; do
+            if [ -f "$f" ]; then
+              mv "$f" "hdict-$VERSION-linux.pkg.tar.zst"
+            fi
           done
         shell: bash
 
@@ -299,13 +313,20 @@ jobs:
             cp ../linux-artifacts/hdict-$VERSION-linux.AppImage.zsync ./hdict-$VERSION-linux.AppImage.zsync
           fi
 
-          # Linux packages (deb, rpm, pacman)
-          for ext in deb rpm pacman; do
+          # Linux packages (deb, rpm)
+          for ext in deb rpm; do
             file=$(find ../linux-artifacts -name "*.$ext" | head -n 1)
             if [ -n "$file" ]; then
               cp "$file" ./hdict-$VERSION-linux.$ext
             fi
           done
+
+          # Arch Linux package (pacman)
+          pacman_file=$(find ../linux-artifacts -name "*.pkg.tar.*" | head -n 1)
+          if [ -n "$pacman_file" ]; then
+            ext="${pacman_file##*.pkg.tar.}"
+            cp "$pacman_file" ./hdict-$VERSION-linux.pkg.tar.$ext
+          fi
 
           # Linux zip
           if [ -f ../linux-artifacts/hdict-$VERSION-linux.zip ]; then
