@@ -284,7 +284,7 @@ jobs:
           retention-days: 7
 
   create-release:
-    needs: [get-version, build-linux, build-windows]
+    needs: [get-version, build-android, build-linux, build-windows]
     runs-on: ubuntu-latest
     steps:
       - name: Download Linux artifacts
@@ -292,6 +292,12 @@ jobs:
         with:
           name: linux-builds
           path: linux-artifacts
+
+      - name: Download Android artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: android-builds
+          path: android-artifacts
 
       - name: Download Windows artifacts
         uses: actions/download-artifact@v4
@@ -331,6 +337,14 @@ jobs:
           # Linux zip
           if [ -f ../linux-artifacts/hdict-$VERSION-linux.zip ]; then
             cp ../linux-artifacts/hdict-$VERSION-linux.zip ./hdict-$VERSION-linux.zip
+          fi
+
+          # Android artifacts
+          if [ -f ../android-artifacts/hdict-$VERSION-android.apk ]; then
+            cp ../android-artifacts/hdict-$VERSION-android.apk ./hdict-$VERSION-android.apk
+          fi
+          if [ -f ../android-artifacts/hdict-$VERSION-android.aab ]; then
+            cp ../android-artifacts/hdict-$VERSION-android.aab ./hdict-$VERSION-android.aab
           fi
 
           # Windows zip
