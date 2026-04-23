@@ -152,6 +152,10 @@ jobs:
           mkdir -p $PKG_DIR/usr/share/icons/hicolor/256x256/apps
           
           # 2. Copy build output (flutter build was run by fastforge)
+          if [ ! -d "build/linux/x64/release/bundle" ]; then
+            echo "Error: Flutter build output not found in build/linux/x64/release/bundle"
+            exit 1
+          fi
           cp -r build/linux/x64/release/bundle/* $PKG_DIR/usr/share/hdict/
           
           # 3. Create symlink to binary
@@ -198,7 +202,8 @@ jobs:
           # 8. Create the final package and move to dist folder
           FINAL_NAME="hdict-$VERSION-linux.pkg.tar.zst"
           mkdir -p dist
-          (cd $PKG_DIR && bsdtar --uid 0 --gid 0 -cnf - .PKGINFO .MTREE usr) | zstd -c > "dist/$FINAL_NAME"
+          # NOTE: Removed -n flag to allow recursion into usr/ directory
+          (cd $PKG_DIR && bsdtar --uid 0 --gid 0 -cf - .PKGINFO .MTREE usr) | zstd -c > "dist/$FINAL_NAME"
           
           rm -rf $PKG_DIR
         shell: bash
