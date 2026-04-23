@@ -97,6 +97,7 @@ class DatabaseHelper {
       // On Android, sqflite_common_ffi + sqlite3 (3.x+) provides a bundled
       // SQLite compiled with FTS5 support, bypassing the device's system SQLite
       // which may lack FTS5 on older Android versions.
+      // (Native Assets feature of the sqlite3 package handles library loading).
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
     }
