@@ -173,19 +173,38 @@ jobs:
             done
           done
           
-          # Rename Arch Linux packages
-          for f in hdict*.pkg.tar.*; do
+          # Handle Arch Linux packages with metadata fixups and proper zstd compression
+          shopt -s nullglob
+          for f in hdict*.pacman hdict*.pkg.tar.*; do
             if [ -f "$f" ]; then
-              EXT="${f##*.pkg.tar.}"
-              if [ "$f" != "hdict-$VERSION-linux.pkg.tar.$EXT" ]; then
-                mv "$f" "hdict-$VERSION-linux.pkg.tar.$EXT"
+              if [[ "$f" == "hdict-$VERSION-linux.pkg.tar.zst" ]]; then
+                 continue
               fi
-            fi
-          done
-          # Also handle legacy .pacman extension if produced
-          for f in hdict*.pacman; do
-            if [ -f "$f" ]; then
-              mv "$f" "hdict-$VERSION-linux.pkg.tar.zst"
+              echo "Processing and fixing Arch Linux package: $f"
+              rm -rf temp_pacman
+              mkdir -p temp_pacman
+              bsdtar -xf "$f" -C temp_pacman
+              
+              # Fix .PKGINFO metadata:
+              # 1. Remove parentheses around values (e.g. arch=(x86_64) -> arch=x86_64)
+              # 2. Fix version (replace + with _)
+              # 3. Use standard "key = value" format
+              sed -i 's/(\([^)]*\))/\1/g' temp_pacman/.PKGINFO
+              sed -i "s/pkgver=\([^+]*\)+/pkgver=\1_/g" temp_pacman/.PKGINFO
+              sed -i 's/=/ = /g' temp_pacman/.PKGINFO
+              
+              # Regenerate .MTREE to reflect metadata changes
+              (cd temp_pacman && bsdtar -czf .MTREE --format=mtree --options="!all,use-set,type,uid,gid,mode,time,size,md5,sha256,link" .PKGINFO .INSTALL usr)
+              
+              # Re-pack with proper zstd compression (modern Arch Linux standard)
+              FINAL_NAME="hdict-$VERSION-linux.pkg.tar.zst"
+              (cd temp_pacman && bsdtar --uid 0 --gid 0 -cnf - .PKGINFO .INSTALL .MTREE usr) | zstd -c > "$FINAL_NAME"
+              
+              rm -rf temp_pacman
+              # Clean up the original if it was different
+              if [ "$f" != "$FINAL_NAME" ]; then
+                rm "$f"
+              fi
             fi
           done
         shell: bash
