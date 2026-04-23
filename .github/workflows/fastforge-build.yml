@@ -173,37 +173,22 @@ jobs:
             done
           done
           
-          # Handle Arch Linux packages with metadata fixups and proper zstd compression
+          # Handle Arch Linux packages (Rename to .pkg.tar.xz to match XZ compression)
           shopt -s nullglob
           for f in hdict*.pacman hdict*.pkg.tar.*; do
             if [ -f "$f" ]; then
-              if [[ "$f" == "hdict-$VERSION-linux.pkg.tar.zst" ]]; then
-                 continue
+              EXT="${f##*.}"
+              # If it's already a tarball, keep its compression ext, otherwise default to xz
+              if [[ "$f" == *.pkg.tar.* ]]; then
+                TARGET_EXT="pkg.tar.${f##*.pkg.tar.}"
+              else
+                TARGET_EXT="pkg.tar.xz"
               fi
-              echo "Processing and fixing Arch Linux package: $f"
-              rm -rf temp_pacman
-              mkdir -p temp_pacman
-              bsdtar -xf "$f" -C temp_pacman
               
-              # Fix .PKGINFO metadata:
-              # 1. Remove parentheses around values (e.g. arch=(x86_64) -> arch=x86_64)
-              # 2. Fix version (replace + with _)
-              # 3. Use standard "key = value" format
-              sed -i 's/(\([^)]*\))/\1/g' temp_pacman/.PKGINFO
-              sed -i "s/pkgver=\([^+]*\)+/pkgver=\1_/g" temp_pacman/.PKGINFO
-              sed -i 's/=/ = /g' temp_pacman/.PKGINFO
-              
-              # Regenerate .MTREE to reflect metadata changes
-              (cd temp_pacman && bsdtar -czf .MTREE --format=mtree --options="!all,use-set,type,uid,gid,mode,time,size,md5,sha256,link" .PKGINFO .INSTALL usr)
-              
-              # Re-pack with proper zstd compression (modern Arch Linux standard)
-              FINAL_NAME="hdict-$VERSION-linux.pkg.tar.zst"
-              (cd temp_pacman && bsdtar --uid 0 --gid 0 -cnf - .PKGINFO .INSTALL .MTREE usr) | zstd -c > "$FINAL_NAME"
-              
-              rm -rf temp_pacman
-              # Clean up the original if it was different
+              FINAL_NAME="hdict-$VERSION-linux.$TARGET_EXT"
               if [ "$f" != "$FINAL_NAME" ]; then
-                rm "$f"
+                echo "Renaming $f to $FINAL_NAME"
+                mv "$f" "$FINAL_NAME"
               fi
             fi
           done
