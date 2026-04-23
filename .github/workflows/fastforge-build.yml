@@ -124,7 +124,7 @@ jobs:
       - name: Install Linux build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build libgtk-3-dev liblzma-dev libstdc++-12-dev locate rpm patchelf libarchive-tools
+          sudo apt-get install -y clang cmake ninja-build libgtk-3-dev liblzma-dev libstdc++-12-dev locate rpm patchelf libarchive-tools zstd
 
       - name: Install appimagetool
         run: |
@@ -135,9 +135,72 @@ jobs:
           sudo mv squashfs-root /opt/appimagetool
           sudo ln -s /opt/appimagetool/AppRun /usr/local/bin/appimagetool
 
-      - name: Build Linux
+      - name: Build Linux (Partial)
         run: |
-          fastforge package --platform=linux --targets=appimage,deb,rpm,zip,pacman
+          # We exclude pacman from fastforge because we build it natively below
+          fastforge package --platform=linux --targets=appimage,deb,rpm,zip
+        shell: bash
+
+      - name: Build Native Pacman Package
+        run: |
+          VERSION=${{ needs.get-version.outputs.version }}
+          # 1. Prepare packaging directory
+          PKG_DIR="pkg_pacman"
+          mkdir -p $PKG_DIR/usr/bin
+          mkdir -p $PKG_DIR/usr/share/hdict
+          mkdir -p $PKG_DIR/usr/share/applications
+          mkdir -p $PKG_DIR/usr/share/icons/hicolor/256x256/apps
+          
+          # 2. Copy build output (flutter build was run by fastforge)
+          cp -r build/linux/x64/release/bundle/* $PKG_DIR/usr/share/hdict/
+          
+          # 3. Create symlink to binary
+          ln -s /usr/share/hdict/hdict $PKG_DIR/usr/bin/hdict
+          
+          # 4. Create Desktop entry
+          (
+            echo "[Desktop Entry]"
+            echo "Name=hdict"
+            echo "GenericName=Dictionary Reader"
+            echo "Comment=Dictionary Reader App for StarDict, Dictd, Slob and Mdict dictionaries"
+            echo "Exec=hdict %U"
+            echo "Icon=hdict"
+            echo "Terminal=false"
+            echo "Type=Application"
+            echo "Categories=Utility;"
+            echo "StartupNotify=true"
+          ) > $PKG_DIR/usr/share/applications/hdict.desktop
+
+          # 5. Copy Icon
+          cp assets/hdict_logo.png $PKG_DIR/usr/share/icons/hicolor/256x256/apps/hdict.png
+          
+          # 6. Generate .PKGINFO
+          PKG_VER=$(echo $VERSION | sed 's/+/./g')
+          PKG_SIZE=$(du -sk $PKG_DIR | cut -f1)
+          
+          (
+            echo "pkgname = hdict"
+            echo "pkgver = $PKG_VER"
+            echo "pkgdesc = Dictionary Reader App for StarDict, Dictd, Slob and Mdict dictionaries"
+            echo "url = https://github.com/drdhaval2785/hdict"
+            echo "builddate = $(date +%s)"
+            echo "packager = Dr. Dhaval Patel <drdhaval2785@gmail.com>"
+            echo "size = $((PKG_SIZE * 1024))"
+            echo "arch = x86_64"
+            echo "license = GPL3"
+            echo "depend = gtk3"
+            echo "depend = libx11"
+          ) > $PKG_DIR/.PKGINFO
+
+          # 7. Generate .MTREE
+          (cd $PKG_DIR && bsdtar -czf .MTREE --format=mtree --options="!all,use-set,type,uid,gid,mode,time,size,md5,sha256,link" .PKGINFO usr)
+          
+          # 8. Create the final package and move to dist folder
+          FINAL_NAME="hdict-$VERSION-linux.pkg.tar.zst"
+          mkdir -p dist
+          (cd $PKG_DIR && bsdtar --uid 0 --gid 0 -cnf - .PKGINFO .MTREE usr) | zstd -c > "dist/$FINAL_NAME"
+          
+          rm -rf $PKG_DIR
         shell: bash
 
       - name: Flatten and Clean Artifacts
@@ -171,26 +234,6 @@ jobs:
                  mv "$f" "hdict-$VERSION-linux.$ext"
                fi
             done
-          done
-          
-          # Handle Arch Linux packages (Rename to .pkg.tar.xz to match XZ compression)
-          shopt -s nullglob
-          for f in hdict*.pacman hdict*.pkg.tar.*; do
-            if [ -f "$f" ]; then
-              EXT="${f##*.}"
-              # If it's already a tarball, keep its compression ext, otherwise default to xz
-              if [[ "$f" == *.pkg.tar.* ]]; then
-                TARGET_EXT="pkg.tar.${f##*.pkg.tar.}"
-              else
-                TARGET_EXT="pkg.tar.xz"
-              fi
-              
-              FINAL_NAME="hdict-$VERSION-linux.$TARGET_EXT"
-              if [ "$f" != "$FINAL_NAME" ]; then
-                echo "Renaming $f to $FINAL_NAME"
-                mv "$f" "$FINAL_NAME"
-              fi
-            fi
           done
         shell: bash
 
