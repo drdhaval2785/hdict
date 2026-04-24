@@ -795,9 +795,13 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
     int startId = await dbHelper.startBatchInsert();
     await dbHelper.enableBulkInsertMode();
 
-    // Fetch all keys via prefix search with empty prefix
-    final allKeys = await reader.prefixSearch('', limit: 500000);
-    final totalKeys = allKeys.length;
+    // Fix 1: Use getAllWordLocations() to get REAL block-level offsets for every
+    // word in a single O(N log B) pass — no per-word file seeks needed.
+    // The resulting (recordBlockOffset, compressedSize, startOffset, endOffset)
+    // are stored in the DB so that fetchDefinition can call lookupDirect()
+    // instead of the slow locate() + readOneMdx() chain.
+    final allLocations = await reader.getAllWordLocations();
+    final totalKeys = allLocations.length;
 
     hDebugPrint('[MEMORY] _indexMdictEntry: totalKeys=$totalKeys');
 
@@ -815,20 +819,33 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
       'MDict: batchSize=$batchSize, useBatching=$useBatching, populateFts5=$populateFts5 (indexDefinitions=${args.indexDefinitions})',
     );
 
-    for (final entry in allKeys) {
-      final word = entry.$1;
-      final offset = entry.$2;
+    for (final loc in allLocations) {
+      final word             = loc.$1;
+      final recordBlockOffset = loc.$2;
+      final compressedSize   = loc.$3;
+      final startOffset      = loc.$4;
+      final endOffset        = loc.$5;
+
       String content = '';
       if (args.indexDefinitions) {
-        content = await reader.lookup(word) ?? '';
+        // Use the fast direct-read path instead of expensive locate().
+        content = await reader.lookupDirect(
+          word: word,
+          recordBlockOffset: recordBlockOffset,
+          compressedSize: compressedSize,
+          startOffset: startOffset,
+          endOffset: endOffset,
+        ) ?? '';
       }
 
       batch.add({
-        'word': word,
-        'content': content,
-        'dict_id': args.dictId,
-        'offset': offset,
-        'length': 0,
+        'word':         word,
+        'content':      content,
+        'dict_id':      args.dictId,
+        'offset':       recordBlockOffset,  // real file position (was always 0)
+        'length':       compressedSize,     // compressed block size (was always 0)
+        'mdict_start':  startOffset,
+        'mdict_end':    endOffset,
       });
       indexed++;
       if (args.indexDefinitions && content.isNotEmpty) {
@@ -5162,13 +5179,31 @@ class DictionaryManager {
           if (reader is DictReader && !reader.isDz) {
             res = await reader.readAtIndex(offset, length);
           } else if (reader is MdictReader) {
-            hDebugPrint(
-              'DictionaryManager.fetchDefinition: Calling MdictReader.lookup for "$word" (offset=$offset, length=$length)',
-            );
-            res = await reader.lookup(word);
-            hDebugPrint(
-              'DictionaryManager.fetchDefinition: MdictReader.lookup returned: ${res != null ? "${res.length} chars" : "null"}',
-            );
+            final int? mdictStart = dictRecord['mdict_start'] as int?;
+            final int? mdictEnd   = dictRecord['mdict_end']   as int?;
+            if (mdictStart != null && mdictEnd != null) {
+              // Fix 1 fast path: use stored block coordinates from DB.
+              hDebugPrint(
+                'DictionaryManager.fetchDefinition (new): lookupDirect "$word" '
+                'blockOffset=$offset cs=$length start=$mdictStart end=$mdictEnd',
+              );
+              res = await reader.lookupDirect(
+                word: word,
+                recordBlockOffset: offset,
+                compressedSize: length,
+                startOffset: mdictStart,
+                endOffset: mdictEnd,
+              );
+            } else {
+              // Legacy fallback: dict was indexed before v35 migration.
+              hDebugPrint(
+                'DictionaryManager.fetchDefinition: Calling MdictReader.lookup for "$word" (offset=$offset, length=$length)',
+              );
+              res = await reader.lookup(word);
+              hDebugPrint(
+                'DictionaryManager.fetchDefinition: MdictReader.lookup returned: ${res != null ? "${res.length} chars" : "null"}',
+              );
+            }
           } else if (reader is SlobReader) {
             res = await reader.getBlobContentById(offset);
           } else if (reader is DictdReader) {
@@ -5185,13 +5220,31 @@ class DictionaryManager {
           final ioWatch = HPerf.start('fetchDef_IO[$format]');
           String? res;
           if (cached is MdictReader) {
-            hDebugPrint(
-              'DictionaryManager.fetchDefinition (cached): Calling MdictReader.lookup for "$word"',
-            );
-            res = await cached.lookup(word);
-            hDebugPrint(
-              'DictionaryManager.fetchDefinition (cached): MdictReader.lookup returned: ${res != null ? "${res.length} chars" : "null"}',
-            );
+            final int? mdictStart = dictRecord['mdict_start'] as int?;
+            final int? mdictEnd   = dictRecord['mdict_end']   as int?;
+            if (mdictStart != null && mdictEnd != null) {
+              // Fix 1 fast path: use stored block coordinates from DB.
+              hDebugPrint(
+                'DictionaryManager.fetchDefinition (cached): lookupDirect "$word" '
+                'blockOffset=$offset cs=$length start=$mdictStart end=$mdictEnd',
+              );
+              res = await cached.lookupDirect(
+                word: word,
+                recordBlockOffset: offset,
+                compressedSize: length,
+                startOffset: mdictStart,
+                endOffset: mdictEnd,
+              );
+            } else {
+              // Legacy fallback.
+              hDebugPrint(
+                'DictionaryManager.fetchDefinition (cached): Calling MdictReader.lookup for "$word"',
+              );
+              res = await cached.lookup(word);
+              hDebugPrint(
+                'DictionaryManager.fetchDefinition (cached): MdictReader.lookup returned: ${res != null ? "${res.length} chars" : "null"}',
+              );
+            }
           } else if (cached is SlobReader) {
             res = await cached.getBlobContentById(offset);
           } else if (cached is DictdReader) {
@@ -5406,11 +5459,34 @@ class DictionaryManager {
                   .toList();
               fetched = await reader.getBlobsContentByIds(ids);
             } else if (reader is MdictReader) {
-              fetched = [];
-              for (final req in missingRequests) {
-                final word = req['word'] as String;
-                final result = await reader.lookup(word);
-                fetched.add(result);
+              // Fix 4: sort requests by recordBlockOffset so consecutive lookups
+              // share the same decompressed block via the LRU cache (Fix 3).
+              final sortedWithIdx = missingRequests.asMap().entries.toList()
+                ..sort((a, b) =>
+                    ((a.value['offset'] as int?) ?? 0)
+                        .compareTo((b.value['offset'] as int?) ?? 0));
+
+              fetched = List<String?>.filled(missingRequests.length, null);
+              for (final item in sortedWithIdx) {
+                final req = item.value;
+                final reqWord        = req['word'] as String? ?? '';
+                final reqOffset      = (req['offset'] as int?) ?? 0;
+                final reqLength      = (req['length'] as int?) ?? 0;
+                final reqMdictStart  = req['mdict_start'] as int?;
+                final reqMdictEnd    = req['mdict_end']   as int?;
+                String? r;
+                if (reqMdictStart != null && reqMdictEnd != null) {
+                  r = await reader.lookupDirect(
+                    word: reqWord,
+                    recordBlockOffset: reqOffset,
+                    compressedSize: reqLength,
+                    startOffset: reqMdictStart,
+                    endOffset: reqMdictEnd,
+                  );
+                } else {
+                  r = await reader.lookup(reqWord);
+                }
+                fetched[item.key] = r;
               }
             } else {
               fetched = List.filled(missingRequests.length, null);

@@ -45,9 +45,12 @@ void main() {
         CREATE TABLE word_metadata(
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           word TEXT,
+          word_normalized TEXT,
           dict_id INTEGER,
           offset INTEGER,
-          length INTEGER
+          length INTEGER,
+          mdict_start INTEGER,
+          mdict_end INTEGER
         )
       ''');
       await db.execute(
