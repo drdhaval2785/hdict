@@ -1,4 +1,3 @@
-import "dart:collection";
 import "dart:convert";
 import "dart:io";
 import "dart:isolate";
@@ -68,18 +67,6 @@ class DictReader {
 
   void Function()? _onHeaderRead;
   void Function()? _onRecordBlockInfoRead;
-
-  // ── Fix 2: pre-computed cumulative size arrays for O(log B) block lookup ──
-  /// Cumulative INCLUSIVE decompressed sizes: _cumDecomp[i] = sum of
-  /// decompressedSize for blocks 0..i (inclusive).
-  List<int>? _cumulativeDecompressedSizes;
-  /// File byte offset of the START of each compressed record block.
-  List<int>? _cumulativeBlockFileOffsets;
-
-  // ── Fix 3: LRU block decompression cache ──
-  /// Key: file offset of compressed block, Value: decompressed bytes.
-  final LinkedHashMap<int, List<int>> _blockCache = LinkedHashMap<int, List<int>>();
-  static const int _maxBlockCacheEntries = 8;
 
   /// [_path] File path
   DictReader(this._path) {
@@ -176,8 +163,6 @@ class DictReader {
       if (readRecordBlockInfo) {
         _recordBlockInfoList = initData.recordBlockInfoList;
         _totalDecompressedSize = initData.totalDecompressedSize;
-        // Fix 2: build fast lookup structures now that block info is loaded.
-        _buildCumulativeSizes();
 
         if (_onRecordBlockInfoRead != null) {
           _onRecordBlockInfoRead!();
@@ -238,8 +223,6 @@ class DictReader {
     _recordBlockInfoList =
         importedData['recordBlockInfoList'] as List<(int, int)>?;
     _totalDecompressedSize = importedData['totalDecompressedSize'];
-    // Fix 2: rebuild cumulative size arrays after import.
-    _buildCumulativeSizes();
   }
 
   /// Imports cache data from a JSON string.
@@ -370,67 +353,45 @@ class DictReader {
     return data;
   }
 
-  // ── Fix 3: LRU block decompression cache ────────────────────────────────────
-
-  /// Returns the decompressed bytes of the record block at [fileOffset],
-  /// reading and decompressing from the underlying source only on a cache miss.
-  ///
-  /// The LRU cache avoids redundant zlib decompression when the same block is
-  /// accessed for multiple consecutive word lookups (common when definitions from
-  /// the same alphabetical range are requested together).
-  Future<List<int>> _getCachedBlock(
-    int fileOffset,
-    int compressedSize,
-  ) async {
-    // Cache hit: move to MRU position and return.
-    if (_blockCache.containsKey(fileOffset)) {
-      final cached = _blockCache.remove(fileOffset)!;
-      _blockCache[fileOffset] = cached;
-      return cached;
-    }
-    // Cache miss: read + decompress.
-    final compressed = await _readBytes(fileOffset, compressedSize);
-    final decompressed = _decodeBlock(compressed.toList());
-    // Evict LRU entry if cache is full.
-    if (_blockCache.length >= _maxBlockCacheEntries) {
-      _blockCache.remove(_blockCache.keys.first);
-    }
-    _blockCache[fileOffset] = decompressed;
-    return decompressed;
-  }
-
   /// Only reads a mdd file's one record.
   ///
   /// [recordOffsetInfo] is obtained from [readWithOffset].
   /// Returns `List<int>`.
   Future<List<int>> readOneMdd(RecordOffsetInfo recordOffsetInfo) async {
-    final recordBlock = await _getCachedBlock(
-      recordOffsetInfo.recordBlockOffset,
-      recordOffsetInfo.compressedSize,
+    final f = _f!;
+    await f.setPosition(recordOffsetInfo.recordBlockOffset);
+
+    final recordBlock = _decodeBlock(
+      await f.read(recordOffsetInfo.compressedSize),
     );
-    return recordBlock.sublist(
+    final data = recordBlock.sublist(
       recordOffsetInfo.startOffset,
       recordOffsetInfo.endOffset,
     );
+
+    return data;
   }
 
   /// Only reads a mdx file's one record.
   ///
   /// [recordOffsetInfo] is obtained from [readWithOffset].
   /// Returns `String` if file format is mdx.
-  /// Uses the LRU block cache (Fix 3) to avoid re-decompressing the same
-  /// compressed block when multiple consecutive lookups fall in the same block.
+  /// Returns `List<int>` if file format is mdd.
   Future<String> readOneMdx(RecordOffsetInfo recordOffsetInfo) async {
-    final recordBlock = await _getCachedBlock(
-      recordOffsetInfo.recordBlockOffset,
-      recordOffsetInfo.compressedSize,
+    final f = _f!;
+    await f.setPosition(recordOffsetInfo.recordBlockOffset);
+
+    final recordBlock = _decodeBlock(
+      await f.read(recordOffsetInfo.compressedSize),
     );
-    return _treatRecordMdxData(
+    final data = _treatRecordMdxData(
       recordBlock.sublist(
         recordOffsetInfo.startOffset,
         recordOffsetInfo.endOffset,
       ),
     );
+
+    return data;
   }
 
   /// Reads records from an MDD file and returns a stream of [MddRecord] objects.
@@ -490,107 +451,9 @@ class DictReader {
     });
   }
 
-  // ── Fix 2: cumulative size helpers ──────────────────────────────────────────
-
-  /// Pre-computes cumulative decompressed size array and block file offsets.
-  /// Must be called after [_recordBlockInfoList] is populated.
-  void _buildCumulativeSizes() {
-    final blocks = _recordBlockInfoList;
-    if (blocks == null || blocks.isEmpty) return;
-
-    // File offset of the very first compressed record block (after the
-    // 4-number record header + the block-info table).
-    final int firstBlockOffset =
-        _recordBlockOffset + _numberWidth * 4 + blocks.length * _numberWidth * 2;
-
-    _cumulativeDecompressedSizes = List<int>.filled(blocks.length, 0);
-    _cumulativeBlockFileOffsets = List<int>.filled(blocks.length, 0);
-
-    int cumDecomp = 0;
-    int cumComp = 0;
-    for (int i = 0; i < blocks.length; i++) {
-      _cumulativeBlockFileOffsets![i] = firstBlockOffset + cumComp;
-      cumDecomp += blocks[i].$2; // decompressedSize (inclusive up to block i)
-      _cumulativeDecompressedSizes![i] = cumDecomp;
-      cumComp += blocks[i].$1; // compressedSize
-    }
-  }
-
-  /// Resolves [recordStart] (byte position in concatenated decompressed stream)
-  /// to a [RecordOffsetInfo] using O(log B) binary search.
-  ///
-  /// [keyIndex] is the index of this entry in [_keyList] (used to determine the
-  /// record end from the next key's recordStart).
-  RecordOffsetInfo? _locateByRecordStart(
-    int recordStart,
-    String keyText,
-    int keyIndex,
-  ) {
-    final blocks = _recordBlockInfoList;
-    final cumDecomp = _cumulativeDecompressedSizes;
-    final blockOffsets = _cumulativeBlockFileOffsets;
-    if (blocks == null || cumDecomp == null || blockOffsets == null) return null;
-
-    // Determine where this record ends in the decompressed stream.
-    final int actualRecordEnd = (keyIndex < _keyList.length - 1)
-        ? _keyList[keyIndex + 1].$1
-        : _totalDecompressedSize!;
-
-    // Binary search: find the first block b where cumDecomp[b] > recordStart.
-    // (i.e., the block whose decompressed range includes recordStart)
-    int lo = 0, hi = cumDecomp.length;
-    while (lo < hi) {
-      final mid = (lo + hi) >> 1;
-      if (cumDecomp[mid] > recordStart) {
-        hi = mid;
-      } else {
-        lo = mid + 1;
-      }
-    }
-    final b = lo;
-    if (b >= blocks.length) return null;
-
-    final accumulatedBefore = b > 0 ? cumDecomp[b - 1] : 0;
-    final compressedSize = blocks[b].$1;
-    final decompressedSize = blocks[b].$2;
-
-    final startOffset = recordStart - accumulatedBefore;
-    var endOffset = actualRecordEnd - accumulatedBefore;
-    if (endOffset > decompressedSize) endOffset = decompressedSize;
-
-    return RecordOffsetInfo(
-      keyText,
-      blockOffsets[b],
-      startOffset,
-      endOffset,
-      compressedSize,
-    );
-  }
-
-  // ── Fix 1 support: iterate all entries with their real file positions ───────
-
-  /// Returns all (word, [RecordOffsetInfo]) pairs in O(N log B) time.
-  ///
-  /// Called during import indexing so the DB can store the real block offset,
-  /// enabling direct O(1) definition lookup without re-running [locate].
-  Future<List<(String, RecordOffsetInfo)>> getAllWordLocations() async {
-    if (_cumulativeDecompressedSizes == null) _buildCumulativeSizes();
-    final result = <(String, RecordOffsetInfo)>[];
-    for (int i = 0; i < _keyList.length; i++) {
-      final (recordStart, keyText) = _keyList[i];
-      final info = _locateByRecordStart(recordStart, keyText, i);
-      if (info != null) result.add((keyText, info));
-    }
-    return result;
-  }
-
-  // ── Locating a single key ────────────────────────────────────────────────────
-
   /// Locates the position information of a key (word).
   ///
-  /// Uses O(log N) binary search in the key list followed by O(log B) binary
-  /// search in the cumulative block sizes (Fix 2), replacing the former O(B)
-  /// linear scan.
+  /// This method can be used to get the content of a key after initialization.
   /// Returns `null` if the key is not found.
   Future<RecordOffsetInfo?> locate(String key) async {
     final keyIndex = binarySearch(_keyList, (
@@ -598,18 +461,58 @@ class DictReader {
       key,
     ), compare: (a, b) => a.$2.compareTo(b.$2));
 
-    if (keyIndex < 0) return null;
+    if (keyIndex < 0) {
+      return null;
+    }
 
     final recordStart = _keyList[keyIndex].$1;
-    return _locateByRecordStart(recordStart, key, keyIndex);
+    final recordEnd = (keyIndex < _keyList.length - 1)
+        ? _keyList[keyIndex + 1].$1
+        : -1; // -1 indicates the last record
+
+    final actualRecordEnd = (recordEnd == -1)
+        ? _totalDecompressedSize!
+        : recordEnd;
+
+    // Locate the correct block
+    int accumulatedDecompressedSize = 0;
+    // The file offset of the first record block.
+    var recordBlockFileOffset = _recordBlockOffset + _numberWidth * 4;
+    recordBlockFileOffset += _recordBlockInfoList!.length * _numberWidth * 2;
+
+    for (final blockInfo in _recordBlockInfoList!) {
+      final compressedSize = blockInfo.$1;
+      final decompressedSize = blockInfo.$2;
+
+      if (recordStart < accumulatedDecompressedSize + decompressedSize) {
+        final startOffset = recordStart - accumulatedDecompressedSize;
+        var endOffset = actualRecordEnd - accumulatedDecompressedSize;
+        if (endOffset > decompressedSize) {
+          endOffset = decompressedSize;
+        }
+        return RecordOffsetInfo(
+          key,
+          recordBlockFileOffset,
+          startOffset,
+          endOffset,
+          compressedSize,
+        );
+      }
+
+      accumulatedDecompressedSize += decompressedSize;
+      recordBlockFileOffset += compressedSize;
+    }
+
+    return null; // Should not happen if key is in _keyList
   }
 
   /// Locates the position information of all occurrences of a key (word).
   ///
-  /// Uses O(log B) binary search per match (Fix 2).
+  /// This method can be used to get the content of a key after initialization.
   /// Returns an empty list if the key is not found.
   Future<List<RecordOffsetInfo>> locateAll(String key) async {
     final results = <RecordOffsetInfo>[];
+    // Use lowerBound to find the first potential match.
     var keyIndex = lowerBound(_keyList, (
       0,
       key,
@@ -619,10 +522,48 @@ class DictReader {
       return [];
     }
 
+    // Iterate through all keys that match
     while (keyIndex < _keyList.length && _keyList[keyIndex].$2 == key) {
       final recordStart = _keyList[keyIndex].$1;
-      final info = _locateByRecordStart(recordStart, key, keyIndex);
-      if (info != null) results.add(info);
+      final recordEnd = (keyIndex < _keyList.length - 1)
+          ? _keyList[keyIndex + 1].$1
+          : -1; // -1 indicates the last record
+
+      final actualRecordEnd = (recordEnd == -1)
+          ? _totalDecompressedSize!
+          : recordEnd;
+
+      // Locate the correct block
+      int accumulatedDecompressedSize = 0;
+      // The file offset of the first record block.
+      var recordBlockFileOffset = _recordBlockOffset + _numberWidth * 4;
+      recordBlockFileOffset += _recordBlockInfoList!.length * _numberWidth * 2;
+
+      for (final blockInfo in _recordBlockInfoList!) {
+        final compressedSize = blockInfo.$1;
+        final decompressedSize = blockInfo.$2;
+
+        if (recordStart < accumulatedDecompressedSize + decompressedSize) {
+          final startOffset = recordStart - accumulatedDecompressedSize;
+          var endOffset = actualRecordEnd - accumulatedDecompressedSize;
+          if (endOffset > decompressedSize) {
+            endOffset = decompressedSize;
+          }
+          results.add(
+            RecordOffsetInfo(
+              key,
+              recordBlockFileOffset,
+              startOffset,
+              endOffset,
+              compressedSize,
+            ),
+          );
+          break; // Found the block for this key, move to the next key
+        }
+
+        accumulatedDecompressedSize += decompressedSize;
+        recordBlockFileOffset += compressedSize;
+      }
       keyIndex++;
     }
 

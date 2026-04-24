@@ -529,7 +529,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
               .length;
         }
 
-        if (dbBatch.length >= batchSize) {
+        if (useBatching && dbBatch.length >= batchSize) {
           hDebugPrint(
             '[MEMORY] _indexEntry: Before batchInsertWords - dbBatch.length=${dbBatch.length}, wordOffsets.length=${wordOffsets.length}',
           );
@@ -558,8 +558,8 @@ Future<void> _indexEntry(_IndexArgs args) async {
           );
           _logMemoryUsage('After batch insert');
 
-          // Yield to event loop for GC and to allow other isolates to access DB
-          await Future.delayed(const Duration(milliseconds: 10));
+          // Yield to event loop for GC
+          await Future.delayed(Duration.zero);
 
           sendPort.send(
             ImportProgress(
@@ -628,7 +628,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
             });
             headwordCount++;
           }
-          if (synBatch.length >= batchSize) {
+          if (useBatching && synBatch.length >= batchSize) {
             final result = await dbHelper.batchInsertWords(
               args.dictId,
               synBatch,
@@ -640,8 +640,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
             totalDuplicates += result.duplicateCount;
             synBatch.clear();
             _logMemoryUsage('After syn batch insert');
-            // Yield to event loop for GC and to allow other isolates to access DB
-            await Future.delayed(const Duration(milliseconds: 10));
+            await Future.delayed(Duration.zero);
             sendPort.send(
               ImportProgress(
                 message:
@@ -796,13 +795,9 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
     int startId = await dbHelper.startBatchInsert();
     await dbHelper.enableBulkInsertMode();
 
-    // Fix 1: Use getAllWordLocations() to get REAL block-level offsets for every
-    // word in a single O(N log B) pass — no per-word file seeks needed.
-    // The resulting (recordBlockOffset, compressedSize, startOffset, endOffset)
-    // are stored in the DB so that fetchDefinition can call lookupDirect()
-    // instead of the slow locate() + readOneMdx() chain.
-    final allLocations = await reader.getAllWordLocations();
-    final totalKeys = allLocations.length;
+    // Fetch all keys via prefix search with empty prefix
+    final allKeys = await reader.prefixSearch('', limit: 500000);
+    final totalKeys = allKeys.length;
 
     hDebugPrint('[MEMORY] _indexMdictEntry: totalKeys=$totalKeys');
 
@@ -813,41 +808,27 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
 
     // Single insert mode when not indexing definitions (faster)
     // FTS5 indexing is deferred when not indexing definitions
-    // Always use batching to prevent massive monolithic transactions that lock the DB.
-    final bool useBatching = true;
+    final bool useBatching = args.indexDefinitions;
     final bool populateFts5 = args.indexDefinitions;
     final int batchSize = _getAdaptiveBatchSize();
     hDebugPrint(
       'MDict: batchSize=$batchSize, useBatching=$useBatching, populateFts5=$populateFts5 (indexDefinitions=${args.indexDefinitions})',
     );
 
-    for (final loc in allLocations) {
-      final word             = loc.$1;
-      final recordBlockOffset = loc.$2;
-      final compressedSize   = loc.$3;
-      final startOffset      = loc.$4;
-      final endOffset        = loc.$5;
-
+    for (final entry in allKeys) {
+      final word = entry.$1;
+      final offset = entry.$2;
       String content = '';
       if (args.indexDefinitions) {
-        // Use the fast direct-read path instead of expensive locate().
-        content = await reader.lookupDirect(
-          word: word,
-          recordBlockOffset: recordBlockOffset,
-          compressedSize: compressedSize,
-          startOffset: startOffset,
-          endOffset: endOffset,
-        ) ?? '';
+        content = await reader.lookup(word) ?? '';
       }
 
       batch.add({
-        'word':         word,
-        'content':      content,
-        'dict_id':      args.dictId,
-        'offset':       recordBlockOffset,  // real file position (was always 0)
-        'length':       compressedSize,     // compressed block size (was always 0)
-        'mdict_start':  startOffset,
-        'mdict_end':    endOffset,
+        'word': word,
+        'content': content,
+        'dict_id': args.dictId,
+        'offset': offset,
+        'length': 0,
       });
       indexed++;
       if (args.indexDefinitions && content.isNotEmpty) {
@@ -857,7 +838,7 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
             .length;
       }
 
-      if (batch.length >= batchSize) {
+      if (useBatching && batch.length >= batchSize) {
         final result = await dbHelper.batchInsertWords(
           args.dictId,
           batch,
@@ -869,8 +850,8 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
         totalDuplicates += result.duplicateCount;
         batch.clear();
 
-        // Yield to event loop for GC and to allow other isolates to access DB
-        await Future.delayed(const Duration(milliseconds: 10));
+        // Yield to event loop for GC
+        await Future.delayed(Duration.zero);
 
         sendPort.send(
           ImportProgress(
@@ -999,8 +980,7 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
 
     // Single insert mode when not indexing definitions (faster)
     // FTS5 indexing is deferred when not indexing definitions
-    // Always use batching to prevent massive monolithic transactions that lock the DB.
-    final bool useBatching = true;
+    final bool useBatching = args.indexDefinitions;
     final bool populateFts5 = args.indexDefinitions;
     List<Map<String, dynamic>> dbBatch = [];
 
@@ -1038,7 +1018,7 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
               .length;
         }
 
-        if (dbBatch.length >= batchSize) {
+        if (useBatching && dbBatch.length >= batchSize) {
           final result = await dbHelper.batchInsertWords(
             args.dictId,
             dbBatch,
@@ -1050,8 +1030,8 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
           totalDuplicates += result.duplicateCount;
           dbBatch.clear();
 
-          // Yield to event loop for GC and to allow other isolates to access DB
-          await Future.delayed(const Duration(milliseconds: 10));
+          // Yield to event loop for GC
+          await Future.delayed(Duration.zero);
 
           sendPort.send(
             ImportProgress(
@@ -1069,7 +1049,7 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
       }
 
       // Yield to event loop for GC between read batches
-      await Future.delayed(const Duration(milliseconds: 10));
+      await Future.delayed(Duration.zero);
 
       // Send progress after every read-batch (ensures UI updates even when
       // dbBatch hasn't filled yet, e.g. small dictionaries).
@@ -1202,7 +1182,7 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
     await dbHelper.enableBulkInsertMode();
 
     final int batchSize = _getAdaptiveBatchSize();
-    final bool useBatching = true;
+    final bool useBatching = args.indexDefinitions;
     final bool populateFts5 = args.indexDefinitions;
     List<Map<String, dynamic>> dbBatch = [];
 
@@ -1253,7 +1233,7 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
               .length;
         }
 
-        if (dbBatch.length >= batchSize) {
+        if (useBatching && dbBatch.length >= batchSize) {
           final result = await dbHelper.batchInsertWords(
             args.dictId,
             dbBatch,
@@ -1265,8 +1245,8 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
           totalDuplicates += result.duplicateCount;
           dbBatch.clear();
 
-          // Yield to event loop for GC and to allow other isolates to access DB
-          await Future.delayed(const Duration(milliseconds: 10));
+          // Yield to event loop for GC
+          await Future.delayed(Duration.zero);
 
           sendPort.send(
             ImportProgress(
@@ -5182,31 +5162,13 @@ class DictionaryManager {
           if (reader is DictReader && !reader.isDz) {
             res = await reader.readAtIndex(offset, length);
           } else if (reader is MdictReader) {
-            final int? mdictStart = dictRecord['mdict_start'] as int?;
-            final int? mdictEnd   = dictRecord['mdict_end']   as int?;
-            if (mdictStart != null && mdictEnd != null) {
-              // Fix 1 fast path: use stored block coordinates from DB.
-              hDebugPrint(
-                'DictionaryManager.fetchDefinition (new): lookupDirect "$word" '
-                'blockOffset=$offset cs=$length start=$mdictStart end=$mdictEnd',
-              );
-              res = await reader.lookupDirect(
-                word: word,
-                recordBlockOffset: offset,
-                compressedSize: length,
-                startOffset: mdictStart,
-                endOffset: mdictEnd,
-              );
-            } else {
-              // Legacy fallback: dict was indexed before v35 migration.
-              hDebugPrint(
-                'DictionaryManager.fetchDefinition: Calling MdictReader.lookup for "$word" (offset=$offset, length=$length)',
-              );
-              res = await reader.lookup(word);
-              hDebugPrint(
-                'DictionaryManager.fetchDefinition: MdictReader.lookup returned: ${res != null ? "${res.length} chars" : "null"}',
-              );
-            }
+            hDebugPrint(
+              'DictionaryManager.fetchDefinition: Calling MdictReader.lookup for "$word" (offset=$offset, length=$length)',
+            );
+            res = await reader.lookup(word);
+            hDebugPrint(
+              'DictionaryManager.fetchDefinition: MdictReader.lookup returned: ${res != null ? "${res.length} chars" : "null"}',
+            );
           } else if (reader is SlobReader) {
             res = await reader.getBlobContentById(offset);
           } else if (reader is DictdReader) {
@@ -5223,31 +5185,13 @@ class DictionaryManager {
           final ioWatch = HPerf.start('fetchDef_IO[$format]');
           String? res;
           if (cached is MdictReader) {
-            final int? mdictStart = dictRecord['mdict_start'] as int?;
-            final int? mdictEnd   = dictRecord['mdict_end']   as int?;
-            if (mdictStart != null && mdictEnd != null) {
-              // Fix 1 fast path: use stored block coordinates from DB.
-              hDebugPrint(
-                'DictionaryManager.fetchDefinition (cached): lookupDirect "$word" '
-                'blockOffset=$offset cs=$length start=$mdictStart end=$mdictEnd',
-              );
-              res = await cached.lookupDirect(
-                word: word,
-                recordBlockOffset: offset,
-                compressedSize: length,
-                startOffset: mdictStart,
-                endOffset: mdictEnd,
-              );
-            } else {
-              // Legacy fallback.
-              hDebugPrint(
-                'DictionaryManager.fetchDefinition (cached): Calling MdictReader.lookup for "$word"',
-              );
-              res = await cached.lookup(word);
-              hDebugPrint(
-                'DictionaryManager.fetchDefinition (cached): MdictReader.lookup returned: ${res != null ? "${res.length} chars" : "null"}',
-              );
-            }
+            hDebugPrint(
+              'DictionaryManager.fetchDefinition (cached): Calling MdictReader.lookup for "$word"',
+            );
+            res = await cached.lookup(word);
+            hDebugPrint(
+              'DictionaryManager.fetchDefinition (cached): MdictReader.lookup returned: ${res != null ? "${res.length} chars" : "null"}',
+            );
           } else if (cached is SlobReader) {
             res = await cached.getBlobContentById(offset);
           } else if (cached is DictdReader) {
@@ -5462,34 +5406,11 @@ class DictionaryManager {
                   .toList();
               fetched = await reader.getBlobsContentByIds(ids);
             } else if (reader is MdictReader) {
-              // Fix 4: sort requests by recordBlockOffset so consecutive lookups
-              // share the same decompressed block via the LRU cache (Fix 3).
-              final sortedWithIdx = missingRequests.asMap().entries.toList()
-                ..sort((a, b) =>
-                    ((a.value['offset'] as int?) ?? 0)
-                        .compareTo((b.value['offset'] as int?) ?? 0));
-
-              fetched = List<String?>.filled(missingRequests.length, null);
-              for (final item in sortedWithIdx) {
-                final req = item.value;
-                final reqWord        = req['word'] as String? ?? '';
-                final reqOffset      = (req['offset'] as int?) ?? 0;
-                final reqLength      = (req['length'] as int?) ?? 0;
-                final reqMdictStart  = req['mdict_start'] as int?;
-                final reqMdictEnd    = req['mdict_end']   as int?;
-                String? r;
-                if (reqMdictStart != null && reqMdictEnd != null) {
-                  r = await reader.lookupDirect(
-                    word: reqWord,
-                    recordBlockOffset: reqOffset,
-                    compressedSize: reqLength,
-                    startOffset: reqMdictStart,
-                    endOffset: reqMdictEnd,
-                  );
-                } else {
-                  r = await reader.lookup(reqWord);
-                }
-                fetched[item.key] = r;
+              fetched = [];
+              for (final req in missingRequests) {
+                final word = req['word'] as String;
+                final result = await reader.lookup(word);
+                fetched.add(result);
               }
             } else {
               fetched = List.filled(missingRequests.length, null);

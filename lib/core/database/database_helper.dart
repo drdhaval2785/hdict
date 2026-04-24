@@ -183,7 +183,7 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       version:
-          35, // Version 35: Add mdict_start/mdict_end columns for fast MDict block lookup
+          34, // Version 34: Add word_normalized column for diacritic-insensitive search
       singleInstance:
           false, // Allow multiple connections (needed for background isolate imports on Windows/FFI)
       onCreate: _onCreate,
@@ -205,9 +205,8 @@ class DatabaseHelper {
           await db.rawQuery('PRAGMA journal_mode = WAL;');
           await db.rawQuery('PRAGMA synchronous = NORMAL;');
           await db.rawQuery('PRAGMA cache_size = -64000');
-          await db.rawQuery('PRAGMA busy_timeout = 30000'); // 30s max wait for transient locks
           hDebugPrint(
-            'DatabaseHelper: Performance PRAGMAs applied (WAL mode, 64MB cache, 30s timeout)',
+            'DatabaseHelper: Performance PRAGMAs applied (WAL mode, 64MB cache)',
           );
         } catch (e) {
           hDebugPrint(
@@ -329,9 +328,7 @@ class DatabaseHelper {
             word_normalized TEXT,
             dict_id INTEGER,
             offset INTEGER,
-            length INTEGER,
-            mdict_start INTEGER,
-            mdict_end INTEGER
+            length INTEGER
           )
         ''');
         await db.execute(
@@ -1032,51 +1029,21 @@ class DatabaseHelper {
       } catch (e) {
         hDebugPrint('Migration error (version 33): $e');
       }
-    }
 
-    // Version 34: Add word_normalized column for diacritic-insensitive search
-    if (oldVersion < 34) {
-      try {
-        hDebugPrint('DatabaseHelper: Running migration to version 34');
-        await db.execute(
-          'ALTER TABLE word_metadata ADD COLUMN word_normalized TEXT',
-        );
-        await db.execute(
-          'CREATE INDEX IF NOT EXISTS idx_word_normalized ON word_metadata(word_normalized)',
-        );
-        hDebugPrint('DatabaseHelper: Migration to version 34 completed');
-      } catch (e) {
-        hDebugPrint('Migration error (version 34): $e');
-      }
-    }
-
-    // Version 35: Add mdict_start / mdict_end columns for fast MDict block lookup
-    if (oldVersion < 35) {
-      try {
-        hDebugPrint('DatabaseHelper: Running migration to version 35');
-        final tableInfo35 = await db.rawQuery(
-          "PRAGMA table_info('word_metadata')",
-        );
-        final existingCols35 =
-            tableInfo35.map((r) => r['name'] as String).toSet();
-        if (!existingCols35.contains('mdict_start')) {
+      // Version 34: Add word_normalized column for diacritic-insensitive search
+      if (oldVersion < 34) {
+        try {
+          hDebugPrint('DatabaseHelper: Running migration to version 34');
           await db.execute(
-            'ALTER TABLE word_metadata ADD COLUMN mdict_start INTEGER',
+            'ALTER TABLE word_metadata ADD COLUMN word_normalized TEXT',
           );
-        }
-        if (!existingCols35.contains('mdict_end')) {
           await db.execute(
-            'ALTER TABLE word_metadata ADD COLUMN mdict_end INTEGER',
+            'CREATE INDEX IF NOT EXISTS idx_word_normalized ON word_metadata(word_normalized)',
           );
+          hDebugPrint('DatabaseHelper: Migration to version 34 completed');
+        } catch (e) {
+          hDebugPrint('Migration error (version 34): $e');
         }
-        // NOTE: We intentionally do NOT reset word_count here.
-        // fetchDefinition already falls back to lookup() when mdict_start/end
-        // are NULL, so existing indexed entries remain usable. Forcing a
-        // re-index would cause background write-lock contention that blocks
-        // all search queries for many seconds.
-        hDebugPrint('DatabaseHelper: Migration to version 35 completed');
-      } catch (e) {
-        hDebugPrint('Migration error (version 35): $e');
       }
     }
   } // end _onUpgrade
@@ -1911,16 +1878,13 @@ class DatabaseHelper {
         final metaBatch = txn.batch();
         for (final word in words) {
           final originalWord = word['word'] as String? ?? '';
-          final insertMap = <String, dynamic>{
+          metaBatch.insert('word_metadata', {
             'word': originalWord,
             'word_normalized': removeDiacritics(originalWord),
             'dict_id': dictId,
             'offset': word['offset'],
             'length': word['length'],
-          };
-          if (word['mdict_start'] != null) insertMap['mdict_start'] = word['mdict_start'];
-          if (word['mdict_end'] != null)   insertMap['mdict_end']   = word['mdict_end'];
-          metaBatch.insert('word_metadata', insertMap);
+          });
         }
 
         List<Object?> metaResults;
@@ -1935,15 +1899,12 @@ class DatabaseHelper {
             final retryBatch = txn.batch();
             for (final word in words) {
               final originalWord = word['word'] as String? ?? '';
-              final retryMap = <String, dynamic>{
+              retryBatch.insert('word_metadata', {
                 'word': originalWord,
                 'dict_id': dictId,
                 'offset': word['offset'],
                 'length': word['length'],
-              };
-              if (word['mdict_start'] != null) retryMap['mdict_start'] = word['mdict_start'];
-              if (word['mdict_end'] != null)   retryMap['mdict_end']   = word['mdict_end'];
-              retryBatch.insert('word_metadata', retryMap);
+              });
             }
             metaResults = await retryBatch.commit(noResult: false);
           } else {
@@ -1989,16 +1950,13 @@ class DatabaseHelper {
         final metaBatch = txn.batch();
         for (final word in words) {
           final originalWord = word['word'] as String? ?? '';
-          final insertMap2 = <String, dynamic>{
+          metaBatch.insert('word_metadata', {
             'word': originalWord,
             'word_normalized': removeDiacritics(originalWord),
             'dict_id': dictId,
             'offset': word['offset'],
             'length': word['length'],
-          };
-          if (word['mdict_start'] != null) insertMap2['mdict_start'] = word['mdict_start'];
-          if (word['mdict_end'] != null)   insertMap2['mdict_end']   = word['mdict_end'];
-          metaBatch.insert('word_metadata', insertMap2);
+          });
         }
 
         List<Object?> metaResults;
@@ -2012,15 +1970,12 @@ class DatabaseHelper {
             final retryBatch = txn.batch();
             for (final word in words) {
               final originalWord = word['word'] as String? ?? '';
-              final retryMap2 = <String, dynamic>{
+              retryBatch.insert('word_metadata', {
                 'word': originalWord,
                 'dict_id': dictId,
                 'offset': word['offset'],
                 'length': word['length'],
-              };
-              if (word['mdict_start'] != null) retryMap2['mdict_start'] = word['mdict_start'];
-              if (word['mdict_end'] != null)   retryMap2['mdict_end']   = word['mdict_end'];
-              retryBatch.insert('word_metadata', retryMap2);
+              });
             }
             metaResults = await retryBatch.commit(noResult: false);
           } else {
@@ -2053,16 +2008,13 @@ class DatabaseHelper {
         final batch = txn.batch();
         for (final word in words) {
           final originalWord = word['word'] as String? ?? '';
-          final insertMap3 = <String, dynamic>{
+          batch.insert('word_metadata', {
             'word': originalWord,
             'word_normalized': removeDiacritics(originalWord),
             'dict_id': dictId,
             'offset': word['offset'],
             'length': word['length'],
-          };
-          if (word['mdict_start'] != null) insertMap3['mdict_start'] = word['mdict_start'];
-          if (word['mdict_end'] != null)   insertMap3['mdict_end']   = word['mdict_end'];
-          batch.insert('word_metadata', insertMap3);
+          });
         }
 
         try {
@@ -2075,15 +2027,12 @@ class DatabaseHelper {
             final retryBatch = txn.batch();
             for (final word in words) {
               final originalWord = word['word'] as String? ?? '';
-              final retryMap3 = <String, dynamic>{
+              retryBatch.insert('word_metadata', {
                 'word': originalWord,
                 'dict_id': dictId,
                 'offset': word['offset'],
                 'length': word['length'],
-              };
-              if (word['mdict_start'] != null) retryMap3['mdict_start'] = word['mdict_start'];
-              if (word['mdict_end'] != null)   retryMap3['mdict_end']   = word['mdict_end'];
-              retryBatch.insert('word_metadata', retryMap3);
+              });
             }
             await retryBatch.commit(noResult: true);
           } else {
@@ -2492,7 +2441,7 @@ class DatabaseHelper {
 
       final String sql =
           '''
-        SELECT m.word, m.dict_id, m.offset, m.length, m.mdict_start, m.mdict_end
+        SELECT m.word, m.dict_id, m.offset, m.length 
         $fromClause
         WHERE ${whereClauses.join(' AND ')}
         ORDER BY $orderBy
@@ -2529,7 +2478,7 @@ class DatabaseHelper {
     }
   }
 
-  /// Single-query dictionary search using separate queries per dictionary for maximum index efficiency
+  /// Single-query dictionary search using IN clause and composite index
   Future<List<Map<String, dynamic>>> _searchWordsSequential({
     String? headwordQuery,
     required SearchMode headwordMode,
@@ -2578,6 +2527,7 @@ class DatabaseHelper {
 
       if (columnHasData) {
         columnName = 'word_normalized';
+        // Normalize the search query too for diacritic-insensitive search
         final normalizedHq = removeDiacritics(hq);
         final translatedNormalizedHq = _translateWildcards(normalizedHq);
 
@@ -2592,6 +2542,7 @@ class DatabaseHelper {
           likePattern = normalizedHq;
         }
       } else {
+        // Fallback: use word column with normalized query (diacritic feature unavailable)
         columnName = 'word';
         final normalizedHq = removeDiacritics(hq);
         final translatedNormalizedHq = _translateWildcards(normalizedHq);
@@ -2606,6 +2557,9 @@ class DatabaseHelper {
           operator = '=';
           likePattern = normalizedHq;
         }
+        hDebugPrint(
+          'DatabaseHelper: word_normalized has no data, using fallback with word column',
+        );
       }
     } else {
       columnName = 'word';
@@ -2621,37 +2575,27 @@ class DatabaseHelper {
       }
     }
 
-    // 2. Query EACH dictionary separately. This is MUCH faster for SQLite's composite index
-    // (dict_id, word) because it avoids the internal complexities of the IN clause optimizer
-    // and range scans across multiple dictionaries in a single query.
-    final List<Map<String, dynamic>> allResults = [];
-    final stopwatch = Stopwatch()..start();
-
-    // Cap at 1000 for all dicts combined if searching multiple, or just limit if searching one
-    final int fetchLimitPerDict = dicts.length == 1 ? limit : 200;
-
-    for (final dict in dicts) {
-      final int dId = dict['id'] as int;
-      final results = await db.rawQuery(
-        'SELECT word, dict_id, offset, length, mdict_start, mdict_end FROM word_metadata WHERE dict_id = ? AND $columnName $operator ? LIMIT ?',
-        [dId, likePattern, fetchLimitPerDict],
-      );
-
-      allResults.addAll(results);
-
-      // If we have plenty of matches already from high-priority dictionaries, stop early
-      if (allResults.length >= limit * 2) break;
-    }
-
-    // 3. Convert to mutable list and sort in Dart by display_order, then dict_id, then word (case-insensitive)
-    final results = List<Map<String, dynamic>>.from(allResults);
-
-    // Build dict_id -> display_order map for sorting
+    // 2. Build dict_id -> display_order map for sorting
     final Map<int, int> dictDisplayOrder = {};
     for (final dict in dicts) {
       dictDisplayOrder[dict['id'] as int] = dict['display_order'] as int? ?? 0;
     }
 
+    // 3. Single query WITHOUT ORDER BY - let SQLite just grab matching rows fast
+    // Cap at 10000 to avoid huge result sets
+    final dictIds = dicts.map((d) => d['id'] as int).toList();
+    final dictIdList = dictIds.join(',');
+    const cap = 10000;
+
+    var results = await db.rawQuery(
+      'SELECT word, dict_id, offset, length FROM word_metadata WHERE dict_id IN ($dictIdList) AND $columnName $operator ? LIMIT ?',
+      [likePattern, cap],
+    );
+
+    // Convert to mutable list (needed for Web/some platforms)
+    results = List<Map<String, dynamic>>.from(results);
+
+    // 4. Sort in Dart by display_order, then dict_id, then word (case-insensitive)
     results.sort((a, b) {
       final aDictId = a['dict_id'] as int;
       final bDictId = b['dict_id'] as int;
@@ -2666,13 +2610,13 @@ class DatabaseHelper {
       return aWord.compareTo(bWord);
     });
 
+    // 5. Apply final limit
     final trimmedResults = results.take(limit).toList();
-    stopwatch.stop();
 
     _log(
-      'SEQUENTIAL_PER_DICT [$operator]',
-      'Queried ${dicts.length} dicts separately in ${stopwatch.elapsedMilliseconds}ms',
-      [likePattern, '${trimmedResults.length}/${allResults.length}'],
+      'SINGLE_QUERY_NO_ORDER [$operator]',
+      'Single query over ${dicts.length} dicts, sorted in Dart',
+      [likePattern, '${trimmedResults.length}/$cap'],
       trimmedResults,
     );
     return trimmedResults;

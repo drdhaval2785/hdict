@@ -430,7 +430,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // which would make the chips disappear and swallow the tap.
   SuggestionTarget _activeSuggestionTarget = SuggestionTarget.none;
 
-  final Debouncer _quickSearchDebouncer = Debouncer(milliseconds: 300);
+  final Debouncer _quickSearchDebouncer = Debouncer(milliseconds: 150);
 
   bool _hasDictionaries = false;
   bool _checkingDicts = true;
@@ -744,19 +744,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           }
         }
       } else if (headword.isNotEmpty) {
-        // Yield to the event loop so that any other _performSearch calls
-        // that were queued in rapid succession can also increment
-        // _searchGeneration. After yielding, stale generations can be
-        // detected before touching the database at all.
-        await Future.delayed(Duration.zero);
-        if (searchGen != _searchGeneration) {
-          hDebugPrint(
-            'HomeScreen._performSearch: gen=$searchGen is stale (pre-DB check), aborting',
-          );
-          if (mounted) setState(() => _isLoading = false);
-          return;
-        }
-
         // Headword only search
         results = await _dbHelper.searchWords(
           headwordQuery: headword,
