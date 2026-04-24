@@ -342,6 +342,133 @@ jobs:
           path: dist-windows/*.zip
           retention-days: 7
 
+  publish-ppa:
+    needs: [get-version, build-linux]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-builds
+          path: dist
+
+      - name: Install Debian packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y devscripts debhelper dput dpkg-dev
+
+      - name: Import GPG Key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.LAUNCHPAD_GPG_PRIVATE_KEY }}
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --import --batch
+          KEY_ID=$(gpg --list-secret-keys --with-colons | grep "^sec" | head -n 1 | cut -d: -f5)
+          echo "GPG_KEY_ID=$KEY_ID" >> $GITHUB_ENV
+
+      - name: Publish to PPA
+        env:
+          GPG_PASSPHRASE: ${{ secrets.LAUNCHPAD_GPG_PASSPHRASE }}
+          VERSION: ${{ needs.get-version.outputs.version }}
+        run: |
+          # 1. Extract the built files from the .deb to get the structure
+          DEB_FILE=$(ls dist/hdict-*-linux.deb | head -n 1)
+          if [ -z "$DEB_FILE" ]; then 
+            echo "Error: No .deb file found in dist/"
+            ls dist/
+            exit 1
+          fi
+          echo "Using $DEB_FILE for PPA preparation"
+          mkdir -p extracted
+          dpkg-deb -x "$DEB_FILE" extracted/
+          
+          # Remove some debian-specific metadata that might be in the .deb
+          rm -rf extracted/DEBIAN
+          
+          for DISTRO in focal jammy noble; do
+            echo "::group::Preparing package for $DISTRO"
+            
+            # Debian source directory must be <pkg>-<version>
+            PKG_DIR="hdict-$VERSION"
+            mkdir -p "$PKG_DIR"
+            
+            # Copy all files from the extracted .deb into the source dir
+            cp -r extracted/* "$PKG_DIR/"
+            
+            # Create the debian/ directory
+            mkdir -p "$PKG_DIR/debian"
+            mkdir -p "$PKG_DIR/debian/source"
+            echo "3.0 (quilt)" > "$PKG_DIR/debian/source/format"
+            echo "13" > "$PKG_DIR/debian/compat"
+            
+            # Control file
+            cat <<EOF | sed 's/^            //' > "$PKG_DIR/debian/control"
+            Source: hdict
+            Section: utils
+            Priority: optional
+            Maintainer: Dr. Dhaval Patel <drdhaval2785@gmail.com>
+            Build-Depends: debhelper-compat (= 13)
+            Standards-Version: 4.5.0
+            Homepage: https://github.com/drdhaval2785/hdict
+
+            Package: hdict
+            Architecture: any
+            Depends: \${shlibs:Depends}, \${misc:Depends}, libgtk-3-0, libx11-6, liblzma5
+            Description: Dictionary Reader App for StarDict, Dictd, Slob and Mdict dictionaries
+             Dictionary Reader App supporting various popular formats with high performance.
+            EOF
+
+            # Changelog
+            cat <<EOF | sed 's/^            //' > "$PKG_DIR/debian/changelog"
+            hdict ($VERSION-1~$DISTRO) $DISTRO; urgency=low
+
+              * Automated PPA build for $DISTRO.
+
+             -- Dr. Dhaval Patel <drdhaval2785@gmail.com>  $(date -R)
+            EOF
+
+            # Rules file
+            cat <<EOF | sed 's/^            //' > "$PKG_DIR/debian/rules"
+            #!/usr/bin/make -f
+            %:
+            	dh \$@
+
+            override_dh_auto_build:
+            	# Pre-compiled binaries
+
+            override_dh_auto_install:
+            	mkdir -p \$(CURDIR)/debian/hdict
+            	cp -r \$(CURDIR)/usr \$(CURDIR)/debian/hdict/
+            EOF
+            chmod +x "$PKG_DIR/debian/rules"
+
+            # Create the orig.tar.gz
+            tar -czf "hdict_$VERSION.orig.tar.gz" --exclude=debian "$PKG_DIR"
+            
+            # Build the source package
+            cd "$PKG_DIR"
+            debuild -S -sa -k$GPG_KEY_ID --gpg-options="--batch --passphrase $GPG_PASSPHRASE --pinentry-mode loopback"
+            cd ..
+            
+            # Upload to Launchpad
+            CHANGES_FILE="hdict_${VERSION}-1~${DISTRO}_source.changes"
+            if [ -f "$CHANGES_FILE" ]; then
+              dput ppa:drdhaval2785/hdict "$CHANGES_FILE"
+            else
+              echo "Error: Changes file $CHANGES_FILE not found"
+              ls -l
+              exit 1
+            fi
+            
+            # Clean up for next distro
+            rm -rf "$PKG_DIR" hdict_${VERSION}*
+            
+            echo "::endgroup::"
+          done
+
   create-release:
     needs: [get-version, build-android, build-linux, build-windows]
     runs-on: ubuntu-latest
