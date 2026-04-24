@@ -1031,51 +1031,51 @@ class DatabaseHelper {
       } catch (e) {
         hDebugPrint('Migration error (version 33): $e');
       }
+    }
 
-      // Version 34: Add word_normalized column for diacritic-insensitive search
-      if (oldVersion < 34) {
-        try {
-          hDebugPrint('DatabaseHelper: Running migration to version 34');
-          await db.execute(
-            'ALTER TABLE word_metadata ADD COLUMN word_normalized TEXT',
-          );
-          await db.execute(
-            'CREATE INDEX IF NOT EXISTS idx_word_normalized ON word_metadata(word_normalized)',
-          );
-          hDebugPrint('DatabaseHelper: Migration to version 34 completed');
-        } catch (e) {
-          hDebugPrint('Migration error (version 34): $e');
-        }
+    // Version 34: Add word_normalized column for diacritic-insensitive search
+    if (oldVersion < 34) {
+      try {
+        hDebugPrint('DatabaseHelper: Running migration to version 34');
+        await db.execute(
+          'ALTER TABLE word_metadata ADD COLUMN word_normalized TEXT',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_word_normalized ON word_metadata(word_normalized)',
+        );
+        hDebugPrint('DatabaseHelper: Migration to version 34 completed');
+      } catch (e) {
+        hDebugPrint('Migration error (version 34): $e');
       }
+    }
 
-      // Version 35: Add mdict_start / mdict_end columns for fast MDict block lookup
-      if (oldVersion < 35) {
-        try {
-          hDebugPrint('DatabaseHelper: Running migration to version 35');
-          final tableInfo35 = await db.rawQuery(
-            "PRAGMA table_info('word_metadata')",
-          );
-          final existingCols35 =
-              tableInfo35.map((r) => r['name'] as String).toSet();
-          if (!existingCols35.contains('mdict_start')) {
-            await db.execute(
-              'ALTER TABLE word_metadata ADD COLUMN mdict_start INTEGER',
-            );
-          }
-          if (!existingCols35.contains('mdict_end')) {
-            await db.execute(
-              'ALTER TABLE word_metadata ADD COLUMN mdict_end INTEGER',
-            );
-          }
-          // Reset MDict word counts so those dictionaries will be re-indexed
-          // and the new columns get populated with real block offsets.
+    // Version 35: Add mdict_start / mdict_end columns for fast MDict block lookup
+    if (oldVersion < 35) {
+      try {
+        hDebugPrint('DatabaseHelper: Running migration to version 35');
+        final tableInfo35 = await db.rawQuery(
+          "PRAGMA table_info('word_metadata')",
+        );
+        final existingCols35 =
+            tableInfo35.map((r) => r['name'] as String).toSet();
+        if (!existingCols35.contains('mdict_start')) {
           await db.execute(
-            "UPDATE dictionaries SET word_count = 0 WHERE format = 'mdict'",
+            'ALTER TABLE word_metadata ADD COLUMN mdict_start INTEGER',
           );
-          hDebugPrint('DatabaseHelper: Migration to version 35 completed');
-        } catch (e) {
-          hDebugPrint('Migration error (version 35): $e');
         }
+        if (!existingCols35.contains('mdict_end')) {
+          await db.execute(
+            'ALTER TABLE word_metadata ADD COLUMN mdict_end INTEGER',
+          );
+        }
+        // Reset MDict word counts so those dictionaries will be re-indexed
+        // and the new columns get populated with real block offsets.
+        await db.execute(
+          "UPDATE dictionaries SET word_count = 0 WHERE format = 'mdict'",
+        );
+        hDebugPrint('DatabaseHelper: Migration to version 35 completed');
+      } catch (e) {
+        hDebugPrint('Migration error (version 35): $e');
       }
     }
   } // end _onUpgrade
