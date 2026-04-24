@@ -183,7 +183,7 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       version:
-          35, // Version 35: Add mdict_start/mdict_end columns for fast MDict block lookup
+          36, // Version 36: Restore MDict word_counts wrongly zeroed by v35 migration
       singleInstance:
           false, // Allow multiple connections (needed for background isolate imports on Windows/FFI)
       onCreate: _onCreate,
@@ -205,7 +205,7 @@ class DatabaseHelper {
           await db.rawQuery('PRAGMA journal_mode = WAL;');
           await db.rawQuery('PRAGMA synchronous = NORMAL;');
           await db.rawQuery('PRAGMA cache_size = -64000');
-          await db.rawQuery('PRAGMA busy_timeout = 30000'); // 30 seconds wait for locks
+          await db.rawQuery('PRAGMA busy_timeout = 5000'); // 5s max wait for transient locks
           hDebugPrint(
             'DatabaseHelper: Performance PRAGMAs applied (WAL mode, 64MB cache, 30s timeout)',
           );
@@ -1069,14 +1069,35 @@ class DatabaseHelper {
             'ALTER TABLE word_metadata ADD COLUMN mdict_end INTEGER',
           );
         }
-        // Reset MDict word counts so those dictionaries will be re-indexed
-        // and the new columns get populated with real block offsets.
-        await db.execute(
-          "UPDATE dictionaries SET word_count = 0 WHERE format = 'mdict'",
-        );
+        // NOTE: We intentionally do NOT reset word_count here.
+        // fetchDefinition already falls back to lookup() when mdict_start/end
+        // are NULL, so existing indexed entries remain usable. Forcing a
+        // re-index would cause background write-lock contention that blocks
+        // all search queries for many seconds.
         hDebugPrint('DatabaseHelper: Migration to version 35 completed');
       } catch (e) {
         hDebugPrint('Migration error (version 35): $e');
+      }
+    }
+    if (oldVersion < 36) {
+      try {
+        hDebugPrint(
+          'DatabaseHelper: Running migration to version 36 - restoring MDict word counts',
+        );
+        // v35 migration incorrectly reset word_count=0 for all MDict dicts,
+        // which triggered unnecessary background re-indexing causing severe
+        // DB write-lock contention during searches. Restore counts from
+        // actual rows already present in word_metadata.
+        await db.execute('''
+          UPDATE dictionaries
+          SET word_count = (
+            SELECT COUNT(*) FROM word_metadata WHERE dict_id = dictionaries.id
+          )
+          WHERE format = 'mdict' AND word_count = 0
+        ''');
+        hDebugPrint('DatabaseHelper: Migration to version 36 completed');
+      } catch (e) {
+        hDebugPrint('Migration error (version 36): $e');
       }
     }
   } // end _onUpgrade
