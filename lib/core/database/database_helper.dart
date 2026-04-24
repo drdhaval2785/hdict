@@ -205,8 +205,9 @@ class DatabaseHelper {
           await db.rawQuery('PRAGMA journal_mode = WAL;');
           await db.rawQuery('PRAGMA synchronous = NORMAL;');
           await db.rawQuery('PRAGMA cache_size = -64000');
+          await db.rawQuery('PRAGMA busy_timeout = 30000'); // 30 seconds wait for locks
           hDebugPrint(
-            'DatabaseHelper: Performance PRAGMAs applied (WAL mode, 64MB cache)',
+            'DatabaseHelper: Performance PRAGMAs applied (WAL mode, 64MB cache, 30s timeout)',
           );
         } catch (e) {
           hDebugPrint(

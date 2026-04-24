@@ -529,7 +529,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
               .length;
         }
 
-        if (useBatching && dbBatch.length >= batchSize) {
+        if (dbBatch.length >= batchSize) {
           hDebugPrint(
             '[MEMORY] _indexEntry: Before batchInsertWords - dbBatch.length=${dbBatch.length}, wordOffsets.length=${wordOffsets.length}',
           );
@@ -558,8 +558,8 @@ Future<void> _indexEntry(_IndexArgs args) async {
           );
           _logMemoryUsage('After batch insert');
 
-          // Yield to event loop for GC
-          await Future.delayed(Duration.zero);
+          // Yield to event loop for GC and to allow other isolates to access DB
+          await Future.delayed(const Duration(milliseconds: 10));
 
           sendPort.send(
             ImportProgress(
@@ -628,7 +628,7 @@ Future<void> _indexEntry(_IndexArgs args) async {
             });
             headwordCount++;
           }
-          if (useBatching && synBatch.length >= batchSize) {
+          if (synBatch.length >= batchSize) {
             final result = await dbHelper.batchInsertWords(
               args.dictId,
               synBatch,
@@ -640,7 +640,8 @@ Future<void> _indexEntry(_IndexArgs args) async {
             totalDuplicates += result.duplicateCount;
             synBatch.clear();
             _logMemoryUsage('After syn batch insert');
-            await Future.delayed(Duration.zero);
+            // Yield to event loop for GC and to allow other isolates to access DB
+            await Future.delayed(const Duration(milliseconds: 10));
             sendPort.send(
               ImportProgress(
                 message:
@@ -812,7 +813,8 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
 
     // Single insert mode when not indexing definitions (faster)
     // FTS5 indexing is deferred when not indexing definitions
-    final bool useBatching = args.indexDefinitions;
+    // Always use batching to prevent massive monolithic transactions that lock the DB.
+    final bool useBatching = true;
     final bool populateFts5 = args.indexDefinitions;
     final int batchSize = _getAdaptiveBatchSize();
     hDebugPrint(
@@ -855,7 +857,7 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
             .length;
       }
 
-      if (useBatching && batch.length >= batchSize) {
+      if (batch.length >= batchSize) {
         final result = await dbHelper.batchInsertWords(
           args.dictId,
           batch,
@@ -867,8 +869,8 @@ Future<void> _indexMdictEntry(_IndexMdictArgs args) async {
         totalDuplicates += result.duplicateCount;
         batch.clear();
 
-        // Yield to event loop for GC
-        await Future.delayed(Duration.zero);
+        // Yield to event loop for GC and to allow other isolates to access DB
+        await Future.delayed(const Duration(milliseconds: 10));
 
         sendPort.send(
           ImportProgress(
@@ -997,7 +999,8 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
 
     // Single insert mode when not indexing definitions (faster)
     // FTS5 indexing is deferred when not indexing definitions
-    final bool useBatching = args.indexDefinitions;
+    // Always use batching to prevent massive monolithic transactions that lock the DB.
+    final bool useBatching = true;
     final bool populateFts5 = args.indexDefinitions;
     List<Map<String, dynamic>> dbBatch = [];
 
@@ -1035,7 +1038,7 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
               .length;
         }
 
-        if (useBatching && dbBatch.length >= batchSize) {
+        if (dbBatch.length >= batchSize) {
           final result = await dbHelper.batchInsertWords(
             args.dictId,
             dbBatch,
@@ -1047,8 +1050,8 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
           totalDuplicates += result.duplicateCount;
           dbBatch.clear();
 
-          // Yield to event loop for GC
-          await Future.delayed(Duration.zero);
+          // Yield to event loop for GC and to allow other isolates to access DB
+          await Future.delayed(const Duration(milliseconds: 10));
 
           sendPort.send(
             ImportProgress(
@@ -1066,7 +1069,7 @@ Future<void> _indexSlobEntry(_IndexSlobArgs args) async {
       }
 
       // Yield to event loop for GC between read batches
-      await Future.delayed(Duration.zero);
+      await Future.delayed(const Duration(milliseconds: 10));
 
       // Send progress after every read-batch (ensures UI updates even when
       // dbBatch hasn't filled yet, e.g. small dictionaries).
@@ -1199,7 +1202,7 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
     await dbHelper.enableBulkInsertMode();
 
     final int batchSize = _getAdaptiveBatchSize();
-    final bool useBatching = args.indexDefinitions;
+    final bool useBatching = true;
     final bool populateFts5 = args.indexDefinitions;
     List<Map<String, dynamic>> dbBatch = [];
 
@@ -1250,7 +1253,7 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
               .length;
         }
 
-        if (useBatching && dbBatch.length >= batchSize) {
+        if (dbBatch.length >= batchSize) {
           final result = await dbHelper.batchInsertWords(
             args.dictId,
             dbBatch,
@@ -1262,8 +1265,8 @@ Future<void> _indexDictdEntry(_IndexDictdArgs args) async {
           totalDuplicates += result.duplicateCount;
           dbBatch.clear();
 
-          // Yield to event loop for GC
-          await Future.delayed(Duration.zero);
+          // Yield to event loop for GC and to allow other isolates to access DB
+          await Future.delayed(const Duration(milliseconds: 10));
 
           sendPort.send(
             ImportProgress(
