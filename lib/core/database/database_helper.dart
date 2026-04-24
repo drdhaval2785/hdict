@@ -183,7 +183,7 @@ class DatabaseHelper {
     return await openDatabase(
       path,
       version:
-          36, // Version 36: Restore MDict word_counts wrongly zeroed by v35 migration
+          35, // Version 35: Add mdict_start/mdict_end columns for fast MDict block lookup
       singleInstance:
           false, // Allow multiple connections (needed for background isolate imports on Windows/FFI)
       onCreate: _onCreate,
@@ -1077,27 +1077,6 @@ class DatabaseHelper {
         hDebugPrint('DatabaseHelper: Migration to version 35 completed');
       } catch (e) {
         hDebugPrint('Migration error (version 35): $e');
-      }
-    }
-    if (oldVersion < 36) {
-      try {
-        hDebugPrint(
-          'DatabaseHelper: Running migration to version 36 - restoring MDict word counts',
-        );
-        // v35 migration incorrectly reset word_count=0 for all MDict dicts,
-        // which triggered unnecessary background re-indexing causing severe
-        // DB write-lock contention during searches. Restore counts from
-        // actual rows already present in word_metadata.
-        await db.execute('''
-          UPDATE dictionaries
-          SET word_count = (
-            SELECT COUNT(*) FROM word_metadata WHERE dict_id = dictionaries.id
-          )
-          WHERE format = 'mdict' AND word_count = 0
-        ''');
-        hDebugPrint('DatabaseHelper: Migration to version 36 completed');
-      } catch (e) {
-        hDebugPrint('Migration error (version 36): $e');
       }
     }
   } // end _onUpgrade
