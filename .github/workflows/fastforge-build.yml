@@ -362,12 +362,20 @@ jobs:
           sudo apt-get install -y devscripts debhelper dput dpkg-dev
 
       - name: Import GPG Key
-        env:
-          GPG_PRIVATE_KEY: ${{ secrets.LAUNCHPAD_GPG_PRIVATE_KEY }}
         run: |
-          echo "$GPG_PRIVATE_KEY" | gpg --import --batch
+          if [ -z "${{ secrets.LAUNCHPAD_GPG_PRIVATE_KEY }}" ]; then
+            echo "Error: LAUNCHPAD_GPG_PRIVATE_KEY secret is missing or empty."
+            exit 1
+          fi
+          echo "${{ secrets.LAUNCHPAD_GPG_PRIVATE_KEY }}" > private.key
+          gpg --import --batch private.key
           KEY_ID=$(gpg --list-secret-keys --with-colons | grep "^sec" | head -n 1 | cut -d: -f5)
+          if [ -z "$KEY_ID" ]; then
+            echo "Error: No secret key found after import."
+            exit 1
+          fi
           echo "GPG_KEY_ID=$KEY_ID" >> $GITHUB_ENV
+          rm private.key
 
       - name: Publish to PPA
         env:
