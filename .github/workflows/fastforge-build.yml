@@ -410,7 +410,6 @@ jobs:
             mkdir -p "$PKG_DIR/debian"
             mkdir -p "$PKG_DIR/debian/source"
             echo "3.0 (quilt)" > "$PKG_DIR/debian/source/format"
-            echo "13" > "$PKG_DIR/debian/compat"
             
             # Control file
             (
