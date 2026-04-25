@@ -359,7 +359,7 @@ jobs:
       - name: Install Debian packaging tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y devscripts debhelper dput dpkg-dev
+          sudo apt-get install -y devscripts debhelper dput dpkg-dev build-essential
 
       - name: Import GPG Key
         run: |
@@ -457,9 +457,9 @@ jobs:
             # Create the orig.tar.gz
             tar -czf "hdict_$VERSION.orig.tar.gz" --exclude=debian "$PKG_DIR"
             
-            # Build the source package (unsigned first)
+            # Build the source package (unsigned first, -d to skip dependencies)
             cd "$PKG_DIR"
-            debuild -S -sa -us -uc
+            debuild -S -sa -us -uc -d
             cd ..
 
             # Sign the changes file using debsign
