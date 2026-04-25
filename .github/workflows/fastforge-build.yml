@@ -382,6 +382,14 @@ jobs:
           GPG_PASSPHRASE: ${{ secrets.LAUNCHPAD_GPG_PASSPHRASE }}
           VERSION: ${{ needs.get-version.outputs.version }}
         run: |
+          # Setup GPG Wrapper for debsign
+          cat << 'EOF' > gpg-wrapper.sh
+          #!/bin/bash
+          gpg --batch --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" "$@"
+          EOF
+          chmod +x gpg-wrapper.sh
+          export SIGN_CMD="$(pwd)/gpg-wrapper.sh"
+
           # 1. Extract the built files from the .deb to get the structure
           DEB_FILE=$(ls dist/hdict-*-linux.deb | head -n 1)
           if [ -z "$DEB_FILE" ]; then 
@@ -399,8 +407,9 @@ jobs:
           for DISTRO in focal jammy noble; do
             echo "::group::Preparing package for $DISTRO"
             
-            # Debian source directory must be <pkg>-<version>
-            PKG_DIR="hdict-$VERSION"
+            # Generate version string (e.g. 1.5.17~focal)
+            VERSION_STR="${VERSION}~${DISTRO}"
+            PKG_DIR="hdict-${VERSION_STR}"
             mkdir -p "$PKG_DIR"
             
             # Copy all files from the extracted .deb into the source dir
@@ -409,7 +418,9 @@ jobs:
             # Create the debian/ directory
             mkdir -p "$PKG_DIR/debian"
             mkdir -p "$PKG_DIR/debian/source"
-            echo "3.0 (quilt)" > "$PKG_DIR/debian/source/format"
+            
+            # 3.0 (native) format solves the "binary files changed" error
+            echo "3.0 (native)" > "$PKG_DIR/debian/source/format"
             
             # Control file
             (
@@ -422,15 +433,17 @@ jobs:
               echo "Homepage: https://github.com/drdhaval2785/hdict"
               echo ""
               echo "Package: hdict"
-              echo "Architecture: any"
-              echo "Depends: \${shlibs:Depends}, \${misc:Depends}, libgtk-3-0, libx11-6, liblzma5"
+              # Architecture MUST be amd64 since we are packaging pre-compiled x86_64 binaries
+              echo "Architecture: amd64"
+              # Hardcode base dependencies (skipping dynamic shlibdeps checks)
+              echo "Depends: \${misc:Depends}, libgtk-3-0, libglib2.0-0, libx11-6, liblzma5, libc6, libstdc++6"
               echo "Description: Dictionary Reader App for StarDict, Dictd, Slob and Mdict dictionaries"
               echo " Dictionary Reader App supporting various popular formats with high performance."
             ) > "$PKG_DIR/debian/control"
 
             # Changelog
             (
-              echo "hdict ($VERSION-1~$DISTRO) $DISTRO; urgency=low"
+              echo "hdict ($VERSION_STR) $DISTRO; urgency=low"
               echo ""
               echo "  * Automated PPA build for $DISTRO."
               echo ""
@@ -441,8 +454,13 @@ jobs:
             (
               echo "#!/usr/bin/make -f"
               echo "%:"
-              # Note: Use echo -e with \t to ensure a real Tab character in the Makefile
               echo -e "\tdh \$@"
+              echo ""
+              echo "override_dh_strip:"
+              echo -e "\t# Do not strip pre-compiled binaries"
+              echo ""
+              echo "override_dh_shlibdeps:"
+              echo -e "\t# Skip shlibdeps checks to prevent version mismatch errors"
               echo ""
               echo "override_dh_auto_build:"
               echo -e "\t# Pre-compiled binaries"
@@ -453,17 +471,14 @@ jobs:
             ) > "$PKG_DIR/debian/rules"
             chmod +x "$PKG_DIR/debian/rules"
 
-            # Create the orig.tar.gz
-            tar -czf "hdict_$VERSION.orig.tar.gz" --exclude=debian "$PKG_DIR"
-            
             # Build the source package (unsigned first, -d to skip dependencies, no lintian)
             cd "$PKG_DIR"
-            debuild -S -sa -us -uc -d --no-lintian
+            debuild --no-lintian -S -sa -us -uc -d
             cd ..
 
-            # Sign the changes file using debsign
-            CHANGES_FILE="hdict_${VERSION}-1~${DISTRO}_source.changes"
-            debsign -k$GPG_KEY_ID -p"gpg --batch --passphrase $GPG_PASSPHRASE --pinentry-mode loopback" "$CHANGES_FILE"
+            # Sign the changes file using debsign and the custom wrapper
+            CHANGES_FILE="hdict_${VERSION_STR}_source.changes"
+            debsign -k$GPG_KEY_ID -p"$SIGN_CMD" "$CHANGES_FILE"
             
             # Upload to Launchpad
             if [ -f "$CHANGES_FILE" ]; then
@@ -475,7 +490,7 @@ jobs:
             fi
             
             # Clean up for next distro
-            rm -rf "$PKG_DIR" hdict_${VERSION}*
+            rm -rf "$PKG_DIR" hdict_${VERSION_STR}*
             
             echo "::endgroup::"
           done
