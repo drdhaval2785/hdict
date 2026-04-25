@@ -413,44 +413,45 @@ jobs:
             echo "13" > "$PKG_DIR/debian/compat"
             
             # Control file
-            cat <<EOF | sed 's/^            //' > "$PKG_DIR/debian/control"
-            Source: hdict
-            Section: utils
-            Priority: optional
-            Maintainer: Dr. Dhaval Patel <drdhaval2785@gmail.com>
-            Build-Depends: debhelper-compat (= 13)
-            Standards-Version: 4.5.0
-            Homepage: https://github.com/drdhaval2785/hdict
-
-            Package: hdict
-            Architecture: any
-            Depends: \${shlibs:Depends}, \${misc:Depends}, libgtk-3-0, libx11-6, liblzma5
-            Description: Dictionary Reader App for StarDict, Dictd, Slob and Mdict dictionaries
-             Dictionary Reader App supporting various popular formats with high performance.
-            EOF
+            (
+              echo "Source: hdict"
+              echo "Section: utils"
+              echo "Priority: optional"
+              echo "Maintainer: Dr. Dhaval Patel <drdhaval2785@gmail.com>"
+              echo "Build-Depends: debhelper-compat (= 13)"
+              echo "Standards-Version: 4.5.0"
+              echo "Homepage: https://github.com/drdhaval2785/hdict"
+              echo ""
+              echo "Package: hdict"
+              echo "Architecture: any"
+              echo "Depends: \${shlibs:Depends}, \${misc:Depends}, libgtk-3-0, libx11-6, liblzma5"
+              echo "Description: Dictionary Reader App for StarDict, Dictd, Slob and Mdict dictionaries"
+              echo " Dictionary Reader App supporting various popular formats with high performance."
+            ) > "$PKG_DIR/debian/control"
 
             # Changelog
-            cat <<EOF | sed 's/^            //' > "$PKG_DIR/debian/changelog"
-            hdict ($VERSION-1~$DISTRO) $DISTRO; urgency=low
-
-              * Automated PPA build for $DISTRO.
-
-             -- Dr. Dhaval Patel <drdhaval2785@gmail.com>  $(date -R)
-            EOF
+            (
+              echo "hdict ($VERSION-1~$DISTRO) $DISTRO; urgency=low"
+              echo ""
+              echo "  * Automated PPA build for $DISTRO."
+              echo ""
+              echo " -- Dr. Dhaval Patel <drdhaval2785@gmail.com>  $(date -R)"
+            ) > "$PKG_DIR/debian/changelog"
 
             # Rules file
-            cat <<EOF | sed 's/^            //' > "$PKG_DIR/debian/rules"
-            #!/usr/bin/make -f
-            %:
-            	dh \$@
-
-            override_dh_auto_build:
-            	# Pre-compiled binaries
-
-            override_dh_auto_install:
-            	mkdir -p \$(CURDIR)/debian/hdict
-            	cp -r \$(CURDIR)/usr \$(CURDIR)/debian/hdict/
-            EOF
+            (
+              echo "#!/usr/bin/make -f"
+              echo "%:"
+              # Note: Use echo -e with \t to ensure a real Tab character in the Makefile
+              echo -e "\tdh \$@"
+              echo ""
+              echo "override_dh_auto_build:"
+              echo -e "\t# Pre-compiled binaries"
+              echo ""
+              echo "override_dh_auto_install:"
+              echo -e "\tmkdir -p \$(CURDIR)/debian/hdict"
+              echo -e "\tcp -r \$(CURDIR)/usr \$(CURDIR)/debian/hdict/"
+            ) > "$PKG_DIR/debian/rules"
             chmod +x "$PKG_DIR/debian/rules"
 
             # Create the orig.tar.gz
