@@ -457,13 +457,16 @@ jobs:
             # Create the orig.tar.gz
             tar -czf "hdict_$VERSION.orig.tar.gz" --exclude=debian "$PKG_DIR"
             
-            # Build the source package
+            # Build the source package (unsigned first)
             cd "$PKG_DIR"
-            debuild -S -sa -k$GPG_KEY_ID --gpg-options="--batch --passphrase $GPG_PASSPHRASE --pinentry-mode loopback"
+            debuild -S -sa -us -uc
             cd ..
+
+            # Sign the changes file using debsign
+            CHANGES_FILE="hdict_${VERSION}-1~${DISTRO}_source.changes"
+            debsign -k$GPG_KEY_ID --gpg-options="--batch --passphrase $GPG_PASSPHRASE --pinentry-mode loopback" "$CHANGES_FILE"
             
             # Upload to Launchpad
-            CHANGES_FILE="hdict_${VERSION}-1~${DISTRO}_source.changes"
             if [ -f "$CHANGES_FILE" ]; then
               dput ppa:drdhaval2785/hdict "$CHANGES_FILE"
             else
