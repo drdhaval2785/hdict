@@ -13,47 +13,9 @@ RepoType: git
 Repo: https://github.com/drdhaval2785/hdict
 
 Builds:
-  - versionName: 1.5.16
-    versionCode: 40
-    commit: 4119c96dfe1c2712217877a38d79f2ba096efcfb
-    output: build/app/outputs/flutter-apk/app-fdroid-release.apk
-    srclibs:
-      - flutter@3.41.6
-    rm:
-      - ios
-      - linux
-      - macos
-      - web
-      - windows
-      - snap
-    prebuild:
-      - sed -i -e '/org.gradle.java.home/d' android/gradle.properties
-      - sed -i -e '/^[[:space:]]*in_app_review:/d' pubspec.yaml
-      - sed -i -e '/in_app_review/,/version:/d' pubspec.lock
-      - sed -i -e '/import.*in_app_review.dart/d' lib/features/home/home_screen.dart
-      - sed -i -e 's/InAppReview/dynamic/g' lib/features/home/home_screen.dart
-      - sed -i -e 's/dynamic.instance/null/g' lib/features/home/home_screen.dart
-      - sed -i -e 's/await inAppReview.isAvailable()/false/g' lib/features/home/home_screen.dart
-      - mkdir -p lib/core/utils
-      - echo "import 'package:flutter/material.dart';" > lib/core/utils/review_helper.dart
-      - echo "import 'package:hdict/features/settings/settings_provider.dart';" >>
-        lib/core/utils/review_helper.dart
-      - echo "class ReviewHelper {" >> lib/core/utils/review_helper.dart
-      - echo "  static Future<void> maybeRequestReview(BuildContext context, SettingsProvider
-        settings) async {}" >> lib/core/utils/review_helper.dart
-      - echo "}" >> lib/core/utils/review_helper.dart
-      - export PUB_CACHE=$(pwd)/.pub-cache
-      - $$flutter$$/bin/flutter config --no-analytics
-      - $$flutter$$/bin/flutter pub get
-    scandelete:
-      - .pub-cache
-    build:
-      - export PUB_CACHE=$(pwd)/.pub-cache
-      - $$flutter$$/bin/flutter build apk --flavor fdroid --release --build-number=40 --build-name=1.5.16
-
   - versionName: 1.5.17
     versionCode: 41
-    commit: 1e272e9eb9a2351f9705e53707fdaaeac7d51f7c
+    commit: 8cb04df3b75c7153969b4c9314dce4245cbcc947
     output: build/app/outputs/flutter-apk/app-fdroid-release.apk
     srclibs:
       - flutter@3.41.6
@@ -87,7 +49,7 @@ Builds:
       - .pub-cache
     build:
       - export PUB_CACHE=$(pwd)/.pub-cache
-      - $$flutter$$/bin/flutter build apk --flavor fdroid --release --build-number=41 --build-name=1.5.17
+      - $$flutter$$/bin/flutter build apk --flavor fdroid --release
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
