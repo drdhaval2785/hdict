@@ -1,34 +1,44 @@
-hdict is a high-performance, feature-rich dictionary application built with Flutter. Optimized for speed, highly customizable, and designed for a premium user experience across all platforms.
+<p>hdict is a high-performance, feature-rich dictionary application built with Flutter. Optimized for speed, highly customizable, and designed for a premium user experience across all platforms.</p>
 
-## Key Features
+<h2>Key Features</h2>
 
-### Advanced & Fast Search
-- Multi-Dictionary Search: Display results from multiple dictionaries simultaneously in a tabbed interface.
-- Wildcard & Prefix Search: Supports wildcard operators like * and ? as well as prefix search for powerful lookups.
-- Definition Search: Dive deeper by searching for words directly within definitions.
-- Lightning Fast Lookup: Powered by optimized queries using SQLite FTS5, batch processing, and database vacuuming.
-- Deduplication: Automatically detects and skips duplicate dictionaries using MD5 checksums.
+<h3>Advanced &amp; Fast Search</h3>
+<ul>
+<li>Multi-Dictionary Search: Display results from multiple dictionaries simultaneously in a tabbed interface.</li>
+<li>Wildcard &amp; Prefix Search: Supports wildcard operators like * and ? as well as prefix search for powerful lookups.</li>
+<li>Definition Search: Dive deeper by searching for words directly within definitions.</li>
+<li>Lightning Fast Lookup: Powered by optimized queries using SQLite FTS5, batch processing, and database vacuuming.</li>
+<li>Deduplication: Automatically detects and skips duplicate dictionaries using MD5 checksums.</li>
+</ul>
 
-### Universal Word Lookup & Native Tap-to-Search
-- Tap-on-Meaning: Every word in a definition is interactive using native hit-testing. Tap any word to instantly look it up.
-- Language Agnostic: Built with Unicode support for English, Hindi, Vietnamese, and any other languages.
-- Nested Lookups: Lookup results open in a full-width bottom popup.
+<h3>Universal Word Lookup &amp; Native Tap-to-Search</h3>
+<ul>
+<li>Tap-on-Meaning: Every word in a definition is interactive using native hit-testing. Tap any word to instantly look it up.</li>
+<li>Language Agnostic: Built with Unicode support for English, Hindi, Vietnamese, and any other languages.</li>
+<li>Nested Lookups: Lookup results open in a full-width bottom popup.</li>
+</ul>
 
-### Massive Dictionary Support
-- Browse and download from around 1800 FreeDict dictionaries organized by language.
-- Supports StarDict (.dict/.dict.dz, .idx, .ifo), MDict (.mdx, .mdd), Slob (.slob), and DICTD formats.
-- Archive extracting: Native ingestion of .zip, .tar.gz, .tar.xz, .bz2, and .7z formats.
+<h3>Massive Dictionary Support</h3>
+<ul>
+<li>Browse and download from around 1800 FreeDict dictionaries organized by language.</li>
+<li>Supports StarDict (.dict/.dict.dz, .idx, .ifo), MDict (.mdx, .mdd), Slob (.slob), and DICTD formats.</li>
+<li>Archive extracting: Native ingestion of .zip, .tar.gz, .tar.xz, .bz2, and .7z formats.</li>
+</ul>
 
-### Flash Cards & Learning
-- Truly Random Quizzes: Pull random words from selected dictionaries.
-- Adjustable Results: Mark words as correct or incorrect during review.
-- Score History: Track progress over time.
+<h3>Flash Cards &amp; Learning</h3>
+<ul>
+<li>Truly Random Quizzes: Pull random words from selected dictionaries.</li>
+<li>Adjustable Results: Mark words as correct or incorrect during review.</li>
+<li>Score History: Track progress over time.</li>
+</ul>
 
-### Deep Customization
-- Modern Aesthetics: Dynamic light/dark mode support.
-- Custom Theme: Set colors for background, headings, and body text.
-- Typography: Choose fonts and adjust sizes.
+<h3>Deep Customization</h3>
+<ul>
+<li>Modern Aesthetics: Dynamic light/dark mode support.</li>
+<li>Custom Theme: Set colors for background, headings, and body text.</li>
+<li>Typography: Choose fonts and adjust sizes.</li>
+</ul>
 
-## License
+<h2>License</h2>
 
-This project is licensed under GNU General Public License v3.0 (GPL v3.0).
+<p>This project is licensed under GNU General Public License v3.0 (GPL v3.0).</p>
